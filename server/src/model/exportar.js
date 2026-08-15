@@ -177,10 +177,41 @@ export const CONJUNTOS = {
   },
 };
 
-export function listarConjuntos(usuarioPodeVer) {
+export function listarConjuntos(usuarioPodeVer, flt) {
   return Object.entries(CONJUNTOS)
     .filter(([, c]) => usuarioPodeVer(c.tela))
-    .map(([id, c]) => ({ id, titulo: c.titulo, descricao: c.descricao, tela: c.tela }));
+    .map(([id, c]) => {
+      const colunas = c.colunas();
+      // a contagem já sai aqui: o usuário precisa saber o tamanho antes de baixar
+      let linhas = null;
+      try {
+        linhas = c.linhas(flt).length;
+      } catch { /* se falhar, a tela mostra a amostra sob demanda */ }
+      return {
+        id,
+        titulo: c.titulo,
+        descricao: c.descricao,
+        tela: c.tela,
+        linhas,
+        colunas: colunas.length,
+        campos: colunas.map((col) => col.titulo),
+      };
+    });
+}
+
+/** Primeiras linhas do conjunto, já formatadas como sairão no arquivo. */
+export function gerarAmostra(id, flt, limite = 8) {
+  const conjunto = CONJUNTOS[id];
+  if (!conjunto) throw new Error(`Conjunto desconhecido: ${id}`);
+  const lim = Math.min(Math.max(Number(limite) || 8, 1), 50);
+  const colunas = conjunto.colunas();
+  const todas = conjunto.linhas(flt);
+  return {
+    colunas: colunas.map((c) => c.titulo),
+    linhas: todas.slice(0, lim).map((l) => colunas.map((c) => c.valor(l))),
+    total: todas.length,
+    exibindo: Math.min(lim, todas.length),
+  };
 }
 
 export function gerarCSV(id, flt) {

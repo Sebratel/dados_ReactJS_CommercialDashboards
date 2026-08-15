@@ -10,7 +10,7 @@ import { refreshAll, refreshGroup } from '../etl/refresh.js';
 import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import { podeVerTela } from '../auth/access.js';
-import { CONJUNTOS, gerarCSV, listarConjuntos } from '../model/exportar.js';
+import { CONJUNTOS, gerarAmostra, gerarCSV, listarConjuntos } from '../model/exportar.js';
 
 export const api = Router();
 
@@ -239,7 +239,21 @@ api.get('/premiacoes', auth('premiacoes'), (req, res) => {
 /** Conjuntos que o usuário pode exportar (respeita o acesso por tela). */
 api.get('/exportacoes', auth(), (req, res) => {
   const podeVer = (tela) => podeVerTela(req.usuario, tela);
-  res.json(withMeta({ conjuntos: listarConjuntos(podeVer) }));
+  res.json(withMeta({ conjuntos: listarConjuntos(podeVer, parseFilters(req.query)) }));
+});
+
+/** Amostra do conjunto — as primeiras linhas, como sairão no arquivo. */
+api.get('/exportar/:id/amostra', auth(), (req, res) => {
+  const conjunto = CONJUNTOS[req.params.id];
+  if (!conjunto) return res.status(404).json({ error: 'Conjunto de dados desconhecido.' });
+  if (!podeVerTela(req.usuario, conjunto.tela)) {
+    return res.status(403).json({ error: 'Você não tem acesso a estes dados.' });
+  }
+  try {
+    return res.json(gerarAmostra(req.params.id, parseFilters(req.query), req.query.limite));
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 });
 
 /** CSV completo do conjunto, com os filtros da tela aplicados. */

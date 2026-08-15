@@ -309,6 +309,11 @@ Duas formas de tirar o dado da tela:
   as telas aplicam. O relatório de primeiros pagamentos, por exemplo, mostra 1.500 linhas
   na tela e exporta as 18.723 do período.
 
+  Cada conjunto mostra **quantas linhas e colunas** o arquivo terá com os filtros atuais, e
+  o botão **ver amostra** abre as 8 primeiras linhas já formatadas como vão sair — ninguém
+  precisa baixar para descobrir o que vem dentro. Conjunto sem registros aparece com o
+  botão desabilitado.
+
 | Conjunto | Tela que controla o acesso |
 |---|---|
 | Vendas (contratos criados) | vendas |

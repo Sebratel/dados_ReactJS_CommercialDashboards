@@ -191,19 +191,56 @@ table.pbi.acl td b { font-size: 13px; }
 /* --- aba de exportações --- */
 .export-lista { display: grid; gap: 9px; }
 .export-item {
-  display: flex; align-items: center; gap: 13px;
-  border: 1px solid var(--pbi-borda); border-radius: 10px; padding: 12px 14px; background: #fff;
+  border: 1px solid var(--pbi-borda); border-radius: 10px; background: #fff; overflow: hidden;
 }
 .export-item:hover { border-color: var(--pbi-primary); }
+.export-item.aberto { border-color: var(--pbi-primary); box-shadow: var(--card-shadow); }
+
+.export-topo { display: flex; align-items: center; gap: 13px; padding: 12px 14px; }
 .export-icone {
   width: 36px; height: 36px; flex: 0 0 auto; border-radius: 9px;
   background: #FCF3F4; color: var(--pbi-primary); display: grid; place-items: center;
 }
 .export-texto { flex: 1; min-width: 0; }
 .export-texto b { display: block; font-size: 13.5px; }
-.export-texto span { display: block; font-size: 11.5px; color: var(--pbi-muted); line-height: 1.45; }
+.export-texto > span { display: block; font-size: 11.5px; color: var(--pbi-muted); line-height: 1.45; }
+
+.export-medidas {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 5px;
+  font-size: 11.5px; color: var(--pbi-ink);
+}
+.export-medidas > span {
+  background: #F6F5F4; border-radius: 999px; padding: 2px 9px;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.export-medidas > span.zero { background: #FDE7E9; color: #b3261e; }
+.export-ver {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: none; background: none; cursor: pointer; padding: 2px 4px;
+  font-family: var(--font); font-size: 11.5px; font-weight: 600; color: var(--pbi-primary);
+}
+.export-ver:hover { text-decoration: underline; }
+
 .export-ok {
   display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
   font-size: 11.5px; font-weight: 600; color: #1AAB40;
 }
-.export-item .cfg-botao { flex: 0 0 auto; }
+.export-topo .cfg-botao { flex: 0 0 auto; }
+
+/* amostra */
+.amostra { border-top: 1px solid var(--pbi-borda); background: #FCFBFA; }
+.amostra .tbl-wrap { max-height: 260px; }
+table.amostra-tabela { font-size: 11.5px; width: max-content; min-width: 100%; }
+table.amostra-tabela th {
+  background: #FCFBFA; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.3px;
+  white-space: nowrap; padding: 7px 10px; cursor: default;
+}
+table.amostra-tabela td {
+  white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis;
+  padding: 5px 10px;
+}
+.amostra-rodape {
+  margin: 0; padding: 8px 14px; font-size: 11.5px; color: var(--pbi-muted);
+  border-top: 1px solid var(--pbi-borda);
+}
+.amostra-vazia { padding: 18px 14px; font-size: 12px; color: var(--pbi-muted); }
