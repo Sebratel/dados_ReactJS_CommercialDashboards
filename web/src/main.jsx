@@ -6,6 +6,7 @@ import App from './App';
 import { SessionProvider } from './auth/session.jsx';
 import './theme.css';
 import './config.css';
+import './preditivo.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

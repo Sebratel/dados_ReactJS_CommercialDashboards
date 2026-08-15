@@ -11,6 +11,8 @@ import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import { podeVerTela } from '../auth/access.js';
 import { CONJUNTOS, gerarAmostra, gerarCSV, listarConjuntos } from '../model/exportar.js';
+import { analisar } from '../model/preditivo.js';
+import { gerarInsights, iaConfigurada } from '../ia/insights.js';
 
 export const api = Router();
 
@@ -276,6 +278,25 @@ api.get('/exportar/:id', auth(), (req, res) => {
     return res.send(csv);
   } catch (err) {
     return res.status(400).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------- PREDITIVO
+/** Indicadores preditivos — tudo calculado estatisticamente, sem IA. */
+api.get('/preditivo', auth('preditivo'), (req, res) => {
+  const analise = analisar(parseFilters(req.query));
+  res.json(withMeta({ ...analise, iaConfigurada: iaConfigurada() }));
+});
+
+/** Leitura da IA sobre os indicadores acima. */
+api.post('/preditivo/insights', auth('preditivo'), async (req, res) => {
+  try {
+    const analise = analisar(parseFilters(req.query));
+    const insights = await gerarInsights(analise);
+    console.log(`[ia] insights gerados para ${req.usuario.email} (${insights.modelo})`);
+    return res.json(insights);
+  } catch (err) {
+    return res.status(err.status || 502).json({ error: err.message });
   }
 });
 

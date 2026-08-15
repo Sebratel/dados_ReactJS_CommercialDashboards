@@ -453,6 +453,8 @@ export function rampagem(flt, granularidade = 'mes') {
 
   // vendedores em rampagem (admitidos há <= 90 dias na data de referência)
   const novatos = [...state.sellersByName.values()]
+    // o RH traz admissões da empresa toda; novato aqui é quem está no comercial
+    .filter((s) => state.teamsByName.has(s.vendedor))
     .filter((s) => s.admissaoReal && s.admissaoReal <= dataRef && s.dataApos90 >= dataRef)
     .map((s) => ({
       vendedor: s.vendedor,

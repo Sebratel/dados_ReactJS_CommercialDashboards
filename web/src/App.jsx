@@ -18,6 +18,7 @@ import Rampagem from './pages/Rampagem';
 import Premiacoes from './pages/Premiacoes';
 import Configuracoes from './pages/Configuracoes';
 import Exportacoes from './pages/Exportacoes';
+import Preditivo from './pages/Preditivo';
 import { Icone } from './components/Icone';
 
 const PAGINAS = [
@@ -30,6 +31,7 @@ const PAGINAS = [
   { id: 'vendas-historico', path: '/vendas-historico', label: 'Vendas - Histórico', el: <VendasHistorico /> },
   { id: 'rampagem', path: '/rampagem', label: 'Rampagem', el: <Rampagem /> },
   { id: 'premiacoes', path: '/premiacoes', label: 'Premiações', el: <Premiacoes /> },
+  { id: 'preditivo', path: '/preditivo', label: 'Análise Preditiva', el: <Preditivo /> },
 ];
 
 function MenuUsuario() {

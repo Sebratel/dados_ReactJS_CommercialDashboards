@@ -452,6 +452,202 @@ function AbaQueries() {
   );
 }
 
+
+// -------------------------------------------------------- provedor de IA
+function AbaIA() {
+  const [estado, setEstado] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [testando, setTestando] = useState(false);
+  const [teste, setTeste] = useState(null);
+  const [modelos, setModelos] = useState([]);
+  const [buscandoModelos, setBuscandoModelos] = useState(false);
+  const [form, setForm] = useState({ tipo: 'anthropic', modelo: '', chave: '', baseUrl: '', maxTokens: 4000 });
+
+  const carregar = useCallback(async () => {
+    try {
+      const d = await apiJson('/ia');
+      setEstado(d);
+      setForm((f) => ({
+        ...f,
+        tipo: d.tipo || 'anthropic',
+        modelo: d.modelo || '',
+        baseUrl: d.baseUrl || '',
+        maxTokens: d.maxTokens || 4000,
+        chave: '',
+      }));
+      setTeste(d.ultimoTeste || null);
+      setErro(null);
+    } catch (e) { setErro(e); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const corpo = {
+        tipo: form.tipo,
+        modelo: form.modelo,
+        baseUrl: form.baseUrl || null,
+        maxTokens: Number(form.maxTokens) || 4000,
+      };
+      if (form.chave.trim()) corpo.chave = form.chave.trim();
+      await apiJson('/ia', { method: 'PUT', body: corpo });
+      await carregar();
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  const buscarModelos = async () => {
+    setBuscandoModelos(true);
+    setErro(null);
+    try {
+      const corpo = { tipo: form.tipo, baseUrl: form.baseUrl || null };
+      if (form.chave.trim()) corpo.chave = form.chave.trim();
+      const d = await apiJson('/ia/modelos', { method: 'POST', body: corpo });
+      setModelos(d.modelos || []);
+    } catch (e) { setErro(e); } finally { setBuscandoModelos(false); }
+  };
+
+  const testar = async () => {
+    setTestando(true);
+    setErro(null);
+    try {
+      setTeste(await apiJson('/ia/testar', { method: 'POST' }));
+    } catch (e) { setErro(e); } finally { setTestando(false); }
+  };
+
+  const remover = async () => {
+    setSalvando(true);
+    try {
+      await apiJson('/ia', { method: 'DELETE' });
+      setModelos([]);
+      setTeste(null);
+      await carregar();
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  if (!estado && !erro) return <Loading texto="Carregando configuração…" />;
+
+  return (
+    <div className="cfg-bloco">
+      {erro && <Erro erro={erro} />}
+
+      <p className="cfg-nota">
+        A tela de <b>Análise Preditiva</b> calcula os indicadores sozinha, sem IA. O provedor
+        cadastrado aqui é usado só para <b>interpretar</b> esses números e sugerir prioridades —
+        ele nunca recebe nome de cliente, apenas os agregados.
+      </p>
+
+      <div className={`ia-estado ${estado?.configurado ? 'ok' : 'vazio'}`}>
+        <Icone nome={estado?.configurado ? 'ok' : 'alerta'} tamanho={15} />
+        {estado?.configurado ? (
+          <span>
+            Configurado: <b>{estado.tipo}</b> · <code>{estado.modelo}</code> · chave {estado.dica}
+            {estado.origem === 'env' && ' (vindo do .env)'}
+            {estado.atualizadoPor && ` · por ${estado.atualizadoPor}`}
+          </span>
+        ) : (
+          <span>Nenhuma chave cadastrada. A tela preditiva funciona, mas sem a leitura da IA.</span>
+        )}
+      </div>
+
+      <div className="ia-form">
+        <div className="cfg-form">
+          <label>
+            <span>Provedor</span>
+            <select value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value }); setModelos([]); }}>
+              {(estado?.tipos || []).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Chave de API {estado?.configurado && '(em branco mantém a atual)'}</span>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder={estado?.configurado ? `mantém ${estado.dica}` : 'cole a chave aqui'}
+              value={form.chave}
+              onChange={(e) => setForm({ ...form, chave: e.target.value })}
+            />
+          </label>
+        </div>
+
+        <div className="cfg-form">
+          <label>
+            <span>Modelo</span>
+            {modelos.length ? (
+              <select value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })}>
+                <option value="">selecione…</option>
+                {modelos.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            ) : (
+              <input
+                type="text"
+                placeholder="ex.: claude-sonnet-5"
+                value={form.modelo}
+                onChange={(e) => setForm({ ...form, modelo: e.target.value })}
+              />
+            )}
+          </label>
+          <button type="button" className="cfg-botao ghost" onClick={buscarModelos} disabled={buscandoModelos}>
+            <Icone nome="atualizar" tamanho={13} className={buscandoModelos ? 'spin' : ''} />
+            {buscandoModelos ? 'buscando…' : 'listar modelos da chave'}
+          </button>
+        </div>
+
+        <div className="cfg-form">
+          <label>
+            <span>URL base (opcional — Groq, OpenRouter, Azure, local)</span>
+            <input
+              type="text"
+              placeholder="deixe vazio para o padrão do provedor"
+              value={form.baseUrl}
+              onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+            />
+          </label>
+          <label>
+            <span>Teto de tokens</span>
+            <input
+              type="number"
+              min="256"
+              max="64000"
+              value={form.maxTokens}
+              onChange={(e) => setForm({ ...form, maxTokens: e.target.value })}
+            />
+          </label>
+        </div>
+
+        <div className="ia-acoes">
+          <button type="button" className="cfg-botao" onClick={salvar} disabled={salvando}>
+            <Icone nome="ok" tamanho={13} /> Salvar
+          </button>
+          <button type="button" className="cfg-botao ghost" onClick={testar} disabled={testando || !estado?.configurado}>
+            <Icone nome="play" tamanho={13} /> {testando ? 'testando…' : 'Testar conexão'}
+          </button>
+          {estado?.origem === 'tela' && (
+            <button type="button" className="cfg-botao ghost" onClick={remover} disabled={salvando}>
+              <Icone nome="fechar" tamanho={13} /> Remover chave
+            </button>
+          )}
+          {teste && (
+            <span className={`ia-teste ${teste.ok ? 'ok' : 'falha'}`}>
+              {teste.ok
+                ? `conexão ok em ${teste.ms} ms — resposta: "${teste.amostra}"`
+                : `falhou: ${teste.erro}`}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <ul className="cfg-legenda">
+        <li>A chave é gravada <b>cifrada</b> (AES-256-GCM) e nunca volta numa resposta da API — só os quatro últimos caracteres.</li>
+        <li><b>OpenAI e compatíveis</b> cobre Groq, OpenRouter, Azure OpenAI, Together e servidores locais: muda só a URL base.</li>
+        <li>Defina <code>SECRET_KEY</code> no ambiente para controlar a chave de cifra; sem ela, uma é gerada no volume de dados.</li>
+      </ul>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ página
 export default function Configuracoes() {
   const { ehAdmin, ehDev, usuario } = useSession();
@@ -459,6 +655,7 @@ export default function Configuracoes() {
     ...(ehAdmin ? [
       { id: 'usuarios', label: 'Usuários e papéis', icone: 'pessoas' },
       { id: 'telas', label: 'Acesso por tela', icone: 'tela' },
+      { id: 'ia', label: 'Provedor de IA', icone: 'ia' },
     ] : []),
     ...(ehDev ? [{ id: 'queries', label: 'Queries do sistema', icone: 'banco' }] : []),
   ];
@@ -489,6 +686,7 @@ export default function Configuracoes() {
 
         {aba === 'usuarios' && <AbaUsuarios />}
         {aba === 'telas' && <AbaTelas />}
+        {aba === 'ia' && <AbaIA />}
         {aba === 'queries' && <AbaQueries />}
       </Visual>
     </main>

@@ -5,6 +5,8 @@ import {
   definirPapel, definirTela, listarTelas, listarUsuarios, papelDe, removerUsuario, telasDoUsuario,
 } from '../auth/access.js';
 import { listarQueries, testarQuery } from '../model/catalogo.js';
+import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
+import { ROTULO_TIPO, TIPOS } from '../ia/provedor.js';
 
 export const admin = Router();
 
@@ -80,6 +82,39 @@ admin.post('/queries/:id/test', exigirAuth({ papeis: ['dev'] }), async (req, res
   try {
     const resultado = await testarQuery(req.params.id, req.body?.limite);
     res.json(resultado);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ------------------------------------------------------- provedor de IA
+admin.get('/ia', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  res.json({ ...estadoIA(), tipos: TIPOS.map((t) => ({ id: t, label: ROTULO_TIPO[t] })) });
+});
+
+admin.put('/ia', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    res.json(salvarIA(req.body || {}, req.usuario.email));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+admin.delete('/ia', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  res.json(removerIA());
+});
+
+admin.post('/ia/modelos', exigirAuth({ minPapel: 'admin' }), async (req, res) => {
+  try {
+    res.json({ modelos: await listarModelos(req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+admin.post('/ia/testar', exigirAuth({ minPapel: 'admin' }), async (req, res) => {
+  try {
+    res.json(await testarIA());
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

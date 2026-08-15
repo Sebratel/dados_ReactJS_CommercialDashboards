@@ -291,6 +291,9 @@ marcações de eixo espaçadas.
 | `GET/PUT/DELETE /api/access/users` | papéis (admin) |
 | `GET/PUT /api/access/screens` | acesso por tela (admin) |
 | `GET /api/queries` · `POST /api/queries/:id/test` | catálogo de queries (exclusivo do papel `dev`) |
+| `GET /api/preditivo` | indicadores preditivos (sem IA) |
+| `POST /api/preditivo/insights` | leitura da IA sobre os indicadores |
+| `GET/PUT/DELETE /api/ia` · `POST /api/ia/modelos` · `POST /api/ia/testar` | provedor de IA (admin) |
 
 Todos aceitam os filtros: `de`, `ate`, `vendedor`, `equipe`, `tecnologia`, `situacao`,
 `cidade`, `canal`, `cliente` (listas separadas por vírgula) e `g=mes|dia` (granularidade
@@ -298,7 +301,46 @@ da série dos gráficos de coluna).
 
 ---
 
-## 8. Exportações
+## 8. Análise preditiva
+
+Tela `/preditivo`. **Todo número é calculado estatisticamente sobre a base — nada vem de
+LLM.** A IA entra depois, só para interpretar e priorizar o que o motor apurou; é o que
+garante que nenhum valor exibido possa ser alucinado.
+
+| Indicador | Como é calculado |
+|---|---|
+| **Projeção do mês** | ritmo por dia útil ponderado (domingo 0, sábado 0,5, feriado 0) × dias restantes; a margem sai do desvio do ritmo diário |
+| **Conversão por coorte** | das vendas de cada mês, quantas ativaram e quantas pagaram — só coortes maduras entram na comparação |
+| **Defasagem do funil** | mediana e p90 de dias entre venda→ativação e ativação→1º pagamento |
+| **Carteira em risco** | contratos parados além do p90 de cada etapa, com valor e concentração por vendedor/cidade |
+| **Queda de ritmo** | ritmo dos últimos 14 dias contra os 41 anteriores, ignorando quem tinha menos de 5 vendas na base |
+| **Projeção dos novatos** | ritmo do novato × dias úteis restantes dos 90, comparado à mediana histórica dos veteranos |
+| **Sazonalidade** | média por dia da semana nos últimos 180 dias |
+| **Cancelamento e concentração** | taxa por coorte e participação dos top 5/10/20 vendedores |
+
+Os filtros de vendedor, equipe e tecnologia se aplicam; o de período não, porque cada
+análise tem a sua própria janela.
+
+### Provedor de IA
+
+Cadastrado em **Configurações → Provedor de IA** (só admin). Três dialetos, uma interface:
+
+* **Anthropic** (Claude)
+* **OpenAI e compatíveis** — cobre Groq, OpenRouter, Azure OpenAI, Together e servidores
+  locais: muda só a URL base
+* **Google Gemini**
+
+A tela lista os modelos que **aquela chave** alcança e tem teste de conexão, que separa
+"chave errada" de "modelo inexistente" antes de alguém descobrir no meio de uma análise.
+
+**A chave é gravada cifrada** (AES-256-GCM) em `data/ia.json` e nunca volta numa resposta da
+API — só os quatro últimos caracteres. Defina `SECRET_KEY` no ambiente para controlar a
+chave de cifra; sem ela, uma é gerada no volume de dados. Também é possível configurar por
+`.env` (`AI_PROVIDER`, `ANTHROPIC_API_KEY`, `AI_MODEL`), que serve de semente.
+
+O que vai para o modelo são **apenas os agregados** — nenhum nome de cliente sai da rede.
+
+## 9. Exportações
 
 Duas formas de tirar o dado da tela:
 
@@ -333,7 +375,7 @@ carrega o período (`vendas_2026-01-01_a_2026-08-15.csv`).
 > O download passa por `fetch` com o Bearer e entrega um blob. Link direto (`href`) não
 > leva o header de autenticação e devolveria 401.
 
-## 9. Convenções de interface
+## 10. Convenções de interface
 
 * **Sem emojis.** Todos os ícones são SVG traçado em `web/src/components/Icone.jsx`,
   herdando a cor do texto via `currentColor`. Isso vale inclusive para os títulos que o
