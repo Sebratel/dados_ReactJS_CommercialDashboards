@@ -6,6 +6,9 @@ import {
   removerUsuario, telasDoUsuario,
 } from '../auth/access.js';
 import { listarQueries, testarQuery } from '../model/catalogo.js';
+import { definirJanela, estadoRecarga, janela, marcarRecarga, restaurarJanela } from '../janela.js';
+import { refreshAll } from '../etl/refresh.js';
+import { getState } from '../model/store.js';
 import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
 import { ROTULO_TIPO, TIPOS } from '../ia/provedor.js';
 
@@ -81,6 +84,56 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ----------------------------------------------------- janela de dados
+/**
+ * Recorte histórico da carga. Mudar isso implica reler tudo, então a recarga roda
+ * em segundo plano: a resposta volta na hora e o front acompanha por `recarga`.
+ * Enquanto ela não termina, os dados antigos continuam servindo — ninguém fica
+ * olhando tela vazia por causa de uma mudança de configuração.
+ */
+function recarregar(motivo) {
+  marcarRecarga({ rodando: true, erro: null });
+  refreshAll()
+    .then(() => marcarRecarga({ rodando: false, erro: null, concluidaEm: new Date().toISOString() }))
+    .catch((err) => {
+      console.error(`[janela] recarga após ${motivo} falhou: ${err.message}`);
+      marcarRecarga({ rodando: false, erro: err.message, concluidaEm: new Date().toISOString() });
+    });
+}
+
+admin.get('/janela', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  const s = getState();
+  res.json({
+    ...janela(),
+    recarga: estadoRecarga(),
+    contratos: s.facts?.length ?? 0,
+    carregadoEm: s.builtAt || null,
+  });
+});
+
+admin.put('/janela', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    const antes = janela();
+    const depois = definirJanela(req.body || {}, req.usuario.email);
+    const mudou = antes.since !== depois.since || antes.phoneSince !== depois.phoneSince;
+    if (mudou) {
+      console.log(`[janela] ${req.usuario.email}: ${antes.since} -> ${depois.since} (telefonia ${depois.phoneSince})`);
+      recarregar('alteração da janela');
+    }
+    return res.json({ ...depois, recarga: estadoRecarga(), recarregando: mudou });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+admin.post('/janela/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  const antes = janela();
+  const depois = restaurarJanela();
+  const mudou = antes.since !== depois.since || antes.phoneSince !== depois.phoneSince;
+  if (mudou) recarregar('restauração do .env');
+  return res.json({ ...depois, recarga: estadoRecarga(), recarregando: mudou });
 });
 
 // ------------------------------------------------- catálogo de queries (DEV)

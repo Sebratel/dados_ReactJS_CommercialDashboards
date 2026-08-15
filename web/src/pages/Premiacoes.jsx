@@ -96,6 +96,7 @@ export default function Premiacoes() {
 
       <Visual
         title="Relatório detalhado das premiações dos vendedores com mais de 60 dias de contrato"
+        ia="premiacoes:pagantes"
         sub={data ? `${int(pagantes.length)} vendedores · total ${brl(data.totalPagantes)}` : ''}
         actions={(
           <>
@@ -126,6 +127,7 @@ export default function Premiacoes() {
 
       <Visual
         title="Relatório detalhado das premiações dos vendedores dentro dos 60 dias de contrato"
+        ia="premiacoes:ativos"
         sub={data ? `${int(ativos.length)} vendedores · total ${brl(data.totalAtivos)}` : ''}
         actions={(
           <>

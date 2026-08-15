@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { janela } from './janela.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,9 +42,12 @@ export const config = {
     connectionLimit: num(process.env.DB_MARIA_POOL, 3),
   },
 
-  // Recorte histórico (mesmo do modelo do Power BI)
-  since: process.env.DATA_SINCE || '2024-01-01',
-  phoneSince: process.env.PHONE_SINCE || '2024-11-01',
+  // Recorte histórico (mesmo do modelo do Power BI). Getter, e não valor fixo:
+  // o .env é só a semente, quem manda é o que o admin definiu em Configurações.
+  // Todo ponto que monta SQL lê isto de forma preguiçosa, então a carga seguinte
+  // já usa o recorte novo — sem reiniciar o processo.
+  get since() { return janela().since; },
+  get phoneSince() { return janela().phoneSince; },
 
   // Autenticação (Google) e controle de acesso
   auth: {

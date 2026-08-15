@@ -37,6 +37,7 @@ export default function PrimeiroPagamento() {
       <div className="grid linha-pagto">
         <Visual
           title={`TOTAL PRIMEIRO PAGANTE / ${filtros.g === 'dia' ? 'DIA' : 'MÊS'}`}
+          ia="primeiro-pagamento:serie"
           actions={<Granularidade />}
         >
           {isLoading && !data ? <Loading /> : (
@@ -71,6 +72,7 @@ export default function PrimeiroPagamento() {
 
         <Visual
           title="Planos mais vendidos"
+          ia="primeiro-pagamento:planos"
           flush
           actions={(
             <BotaoExportar onExportar={() => baixar(

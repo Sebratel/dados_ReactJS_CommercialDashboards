@@ -29,6 +29,7 @@ export default function Vendas() {
       <div className="grid linha-principal">
         <Visual
           title={`TOTAL DE VENDAS / ${filtros.g === 'dia' ? 'DIA' : 'MÊS'}`}
+          ia="vendas:serie"
           actions={<Granularidade />}
         >
           {isLoading && !data ? <Loading /> : (
@@ -58,7 +59,7 @@ export default function Vendas() {
           ]} />
         </div>
 
-        <Visual title="TOTAL DE VENDAS / CIDADE">
+        <Visual title="TOTAL DE VENDAS / CIDADE" ia="vendas:porCidade">
           {isLoading && !data ? <Loading /> : (
             <BarrasHorizontais
               data={data?.porCidade || []}
@@ -73,6 +74,7 @@ export default function Vendas() {
       <div className="grid linha-dupla">
         <Visual
           title="VENDAS / VENDEDOR"
+          ia="vendas:porVendedor"
           flush
           className="v-tabela"
           actions={(
@@ -98,6 +100,7 @@ export default function Vendas() {
 
         <Visual
           title="TOTAL DE VENDAS / DIA"
+          ia="vendas:porDia"
           sub={data?.mesAtual ? labelMesLongo(data.mesAtual) : ''}
           className="v-tabela"
         >

@@ -106,6 +106,31 @@ Administradores enxergam todas as telas independentemente do modo. O backend val
 permissão **em cada endpoint** (não é só a navegação que some), e a configuração fica em
 `access.json`, no volume do container.
 
+### Janela de dados
+
+O recorte histórico da carga fica em **Configurações → Janela de dados** (só admin). Ele
+decide até onde o dashboard enxerga: é o que limita a comparação entre meses, as coortes e
+as projeções.
+
+`DATA_SINCE` e `PHONE_SINCE` no `.env` continuam valendo como **semente** — enquanto ninguém
+definir nada na tela, e como destino do botão "voltar ao valor do .env". O que a tela grava
+tem precedência e vive em `janela.json`, no volume de dados. `config.since` é um getter, e
+todos os pontos que montam SQL já o liam de forma preguiçosa, então a carga seguinte usa o
+recorte novo sem reiniciar o processo.
+
+Mudar o recorte dispara uma recarga completa em segundo plano: a tela responde na hora e
+acompanha o progresso, e os dados anteriores continuam servindo até a nova carga terminar.
+
+> **Consultas em voo.** Uma carga completa leva dezenas de segundos. Se o recorte mudar nesse
+> meio-tempo, o resultado que chega é de outro recorte e é **descartado** — a consulta é
+> refeita com o valor novo. Quem pede uma fonte que já está em execução espera a que está
+> rodando em vez de receber um retorno imediato. Sem isso, trocar o recorte durante uma carga
+> respondia "concluído" na hora e o cache acabava com os dados do recorte anterior.
+
+A telefonia tem data própria porque entrou na operação depois do resto; ela não pode ser
+anterior à data inicial da base. A carga incremental (60 dias) também respeita o recorte:
+se ele for mais estreito que a janela incremental, ela é encurtada.
+
 ### Antes do primeiro login
 
 No **Google Cloud Console → Credenciais → ID do cliente OAuth**, inclua em *Origens
@@ -309,6 +334,8 @@ marcações de eixo espaçadas.
 | `GET /api/preditivo` | indicadores preditivos (sem IA) |
 | `POST /api/preditivo/insights` | leitura da IA sobre os indicadores |
 | `GET/PUT/DELETE /api/ia` · `POST /api/ia/modelos` · `POST /api/ia/testar` | provedor de IA (admin) |
+| `GET/PUT /api/janela` · `POST /api/janela/restaurar` | recorte histórico da carga (admin) |
+| `GET /api/insights/visuais` · `POST /api/insights/visual/:id` | leitura de IA de um gráfico |
 
 Todos aceitam os filtros: `de`, `ate`, `vendedor`, `equipe`, `tecnologia`, `situacao`,
 `cidade`, `canal`, `cliente` (listas separadas por vírgula) e `g=mes|dia` (granularidade
@@ -354,6 +381,25 @@ chave de cifra; sem ela, uma é gerada no volume de dados. Também é possível 
 `.env` (`AI_PROVIDER`, `ANTHROPIC_API_KEY`, `AI_MODEL`), que serve de semente.
 
 O que vai para o modelo são **apenas os agregados** — nenhum nome de cliente sai da rede.
+
+### Insights por gráfico
+
+Cada gráfico das telas de Diretoria, Vendas, Ativações, Primeiro Pagamento, Rampagem e
+Premiações tem um botão **Insights** no cabeçalho: 17 visuais ao todo. Ele abre uma gaveta
+lateral com a leitura daquele gráfico — o que salta aos olhos, o que passa despercebido e o
+que os números não respondem.
+
+> **O navegador não envia dados para serem interpretados.** Manda só o ID do visual e os
+> filtros da tela; quem remonta os números é o servidor, pela **mesma função** que alimenta
+> o gráfico (`model/paineis.js`). Duas consequências: a leitura não tem como divergir do que
+> está desenhado, e não adianta adulterar a requisição para a IA "concluir" o que se quiser.
+
+O recorte enviado é também o filtro de privacidade: passa apenas o que o gráfico já mostra,
+agregado, no máximo 11 KB. Nome de cliente e número de contrato não saem — por isso o
+detalhamento do primeiro pagamento não tem botão.
+
+Os insights herdam o ACL da tela dona do visual, e o botão some para quem não é admin
+enquanto não houver provedor cadastrado.
 
 ## 9. Exportações
 

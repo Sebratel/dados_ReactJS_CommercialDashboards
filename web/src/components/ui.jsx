@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { int } from '../format';
 import { Icone } from './Icone';
+import { BotaoInsights } from './InsightsIA';
 
+/**
+ * `ia` recebe o id do visual no catálogo do servidor (ex.: "vendas:serie") e
+ * rende o botão de leitura por IA junto das demais ações do cabeçalho.
+ */
 export function Visual({
-  title, sub, children, flush = false, style, actions, className = 'v-grafico',
+  title, sub, children, flush = false, style, actions, ia, className = 'v-grafico',
 }) {
   return (
     <section className={`visual ${className}`} style={style}>
@@ -12,6 +17,7 @@ export function Visual({
           <span className="titulo">
             <span>{title}</span>
             {actions}
+            {ia && <BotaoInsights visual={ia} titulo={title} />}
           </span>
           {sub && <span className="sub">{sub}</span>}
         </header>

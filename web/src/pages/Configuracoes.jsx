@@ -479,6 +479,138 @@ function AbaQueries() {
 }
 
 
+// ------------------------------------------------------- janela de dados
+function AbaJanela() {
+  const [estado, setEstado] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState({ since: '', phoneSince: '' });
+
+  const carregar = useCallback(async (sincronizarForm = true) => {
+    try {
+      const d = await apiJson('/janela');
+      setEstado(d);
+      if (sincronizarForm) setForm({ since: d.since, phoneSince: d.phoneSince });
+      setErro(null);
+      return d;
+    } catch (e) { setErro(e); return null; }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  // enquanto a recarga roda, acompanha até terminar — é o retorno visível da ação
+  useEffect(() => {
+    if (!estado?.recarga?.rodando) return undefined;
+    const t = setInterval(() => carregar(false), 3000);
+    return () => clearInterval(t);
+  }, [estado?.recarga?.rodando, carregar]);
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      setEstado(await apiJson('/janela', { method: 'PUT', body: form }));
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  const restaurar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const d = await apiJson('/janela/restaurar', { method: 'POST' });
+      setEstado(d);
+      setForm({ since: d.since, phoneSince: d.phoneSince });
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  if (!estado && !erro) return <Loading texto="Carregando janela de dados…" />;
+
+  const alterado = estado && (form.since !== estado.since || form.phoneSince !== estado.phoneSince);
+  const recarga = estado?.recarga || {};
+
+  return (
+    <div className="cfg-bloco">
+      {erro && <Erro erro={erro} />}
+
+      <p className="cfg-nota">
+        Define quanto histórico o dashboard carrega do Voalle. Alcança <b>todas</b> as telas:
+        é ele que limita até onde vão as comparações entre meses, as coortes e as projeções.
+        Ampliar traz mais histórico e deixa a carga completa mais lenta; reduzir acelera, mas
+        encurta a base de comparação.
+      </p>
+
+      <div className="cfg-form">
+        <label>
+          <span>Carregar contratos a partir de</span>
+          <input
+            type="date"
+            value={form.since}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setForm({ ...form, since: e.target.value })}
+          />
+        </label>
+        <label>
+          <span>Ativações de telefonia a partir de</span>
+          <input
+            type="date"
+            value={form.phoneSince}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setForm({ ...form, phoneSince: e.target.value })}
+          />
+        </label>
+      </div>
+
+      <div className="janela-acoes">
+        <button type="button" className="cfg-botao" onClick={salvar} disabled={salvando || !alterado}>
+          <Icone nome="ok" tamanho={13} /> {salvando ? 'salvando…' : 'Salvar e recarregar'}
+        </button>
+        {estado?.origem === 'tela' && (
+          <button type="button" className="cfg-botao ghost" onClick={restaurar} disabled={salvando}>
+            <Icone nome="atualizar" tamanho={13} /> Voltar ao valor do .env
+          </button>
+        )}
+        {alterado && <span className="janela-aviso">A recarga completa leva cerca de 40 segundos.</span>}
+      </div>
+
+      <div className={`janela-estado ${recarga.rodando ? 'rodando' : ''}`}>
+        {recarga.rodando ? (
+          <>
+            <Icone nome="atualizar" tamanho={14} className="spin" />
+            <span>
+              Recarregando a base com o novo recorte. Os dados anteriores continuam no ar até terminar.
+            </span>
+          </>
+        ) : (
+          <>
+            <Icone nome={recarga.erro ? 'alerta' : 'banco'} tamanho={14} />
+            <span>
+              {recarga.erro
+                ? `A última recarga falhou: ${recarga.erro}`
+                : `${int(estado?.contratos || 0)} contratos carregados${estado?.carregadoEm ? ` · ${labelDataHora(estado.carregadoEm)}` : ''}`}
+            </span>
+          </>
+        )}
+      </div>
+
+      <ul className="cfg-legenda">
+        <li>
+          Em vigor: <b>{estado?.since}</b> (telefonia a partir de <b>{estado?.phoneSince}</b>)
+          {estado?.origem === 'env'
+            ? ' — valor de semente, vindo do .env.'
+            : ` — definido na tela${estado?.atualizadoPor ? ` por ${estado.atualizadoPor}` : ''}${estado?.atualizadoEm ? ` em ${labelDataHora(estado.atualizadoEm)}` : ''}.`}
+        </li>
+        <li>
+          <code>DATA_SINCE</code> e <code>PHONE_SINCE</code> no <code>.env</code> continuam valendo
+          como ponto de partida: valem enquanto ninguém definir nada aqui, e o botão acima volta a eles.
+        </li>
+        <li>
+          A telefonia entrou na operação depois do resto, por isso tem data própria — ela não pode
+          ser anterior à data inicial da base.
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 // -------------------------------------------------------- provedor de IA
 function AbaIA() {
   const [estado, setEstado] = useState(null);
@@ -681,6 +813,7 @@ export default function Configuracoes() {
     ...(ehAdmin ? [
       { id: 'usuarios', label: 'Usuários e papéis', icone: 'pessoas' },
       { id: 'telas', label: 'Acesso por tela', icone: 'tela' },
+      { id: 'janela', label: 'Janela de dados', icone: 'relogio' },
       { id: 'ia', label: 'Provedor de IA', icone: 'ia' },
     ] : []),
     ...(ehDev ? [{ id: 'queries', label: 'Queries do sistema', icone: 'banco' }] : []),
@@ -712,6 +845,7 @@ export default function Configuracoes() {
 
         {aba === 'usuarios' && <AbaUsuarios />}
         {aba === 'telas' && <AbaTelas />}
+        {aba === 'janela' && <AbaJanela />}
         {aba === 'ia' && <AbaIA />}
         {aba === 'queries' && <AbaQueries />}
       </Visual>

@@ -15,7 +15,10 @@ import { build, mergeSource, setSource, setSourceError } from '../model/store.js
 function corte() {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - config.incrementalDays);
-  return d.toISOString().slice(0, 10);
+  const janela = d.toISOString().slice(0, 10);
+  // a carga incremental não pode puxar mais histórico do que o recorte permite:
+  // desde que o recorte virou configurável, ele pode ser mais estreito que 60 dias
+  return janela < config.since ? config.since : janela;
 }
 
 const SOURCES = {
@@ -36,8 +39,16 @@ const SOURCES = {
   senior: { grupo: 'dims', alvo: 'senior', run: () => maria.query(SENIOR_SQL) },
 };
 
-const rodando = new Set();
+const rodando = new Map();
 let rebuildTimer = null;
+
+/**
+ * Assinatura do recorte em vigor. Uma consulta de carga completa leva dezenas de
+ * segundos; se o recorte mudar nesse meio-tempo, o resultado que chega é de outro
+ * recorte e não pode entrar no cache — antes disso, a consulta velha terminava
+ * depois da nova e sobrescrevia tudo, com a tela informando sucesso.
+ */
+const assinaturaJanela = () => `${config.since}|${config.phoneSince}`;
 
 function agendarRebuild() {
   if (rebuildTimer) return;
@@ -52,12 +63,15 @@ function agendarRebuild() {
   }, 250);
 }
 
-export async function refreshSource(nome) {
-  const src = SOURCES[nome];
-  if (!src || rodando.has(nome)) return;
-  rodando.add(nome);
+/** Uma passada na fonte. Devolve true se o resultado foi descartado e precisa refazer. */
+async function executar(nome, src) {
+  const janela = assinaturaJanela();
   try {
     const { rows, ms } = await src.run();
+    if (assinaturaJanela() !== janela) {
+      console.log(`[etl] ${nome}: resultado descartado — o recorte mudou durante a consulta`);
+      return true;
+    }
     if (src.incremental) {
       mergeSource(src.alvo, rows, { ms, cutoff: corte() });
       console.log(`[etl] ${nome}: +${rows.length} linhas (janela ${config.incrementalDays}d) em ${ms}ms`);
@@ -66,9 +80,37 @@ export async function refreshSource(nome) {
       console.log(`[etl] ${nome}: ${rows.length} linhas em ${ms}ms`);
     }
     agendarRebuild();
+    return false;
   } catch (err) {
     setSourceError(src.alvo, err);
     console.error(`[etl] ${nome} falhou:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Quem pede uma fonte que já está em execução passa a ESPERAR a que está rodando,
+ * em vez de receber um retorno imediato como se tivesse recarregado. Sem isso, uma
+ * troca de recorte durante uma carga longa respondia "concluído" na hora e o cache
+ * acabava com os dados do recorte anterior.
+ */
+export async function refreshSource(nome) {
+  const src = SOURCES[nome];
+  if (!src) return;
+  const emCurso = rodando.get(nome);
+  if (emCurso) return emCurso;
+
+  const promessa = (async () => {
+    // no máximo 3 voltas: protege contra alterações em sequência virarem laço
+    for (let volta = 0; volta < 3; volta += 1) {
+      if (!await executar(nome, src)) return;
+    }
+    console.warn(`[etl] ${nome}: recorte mudou 3 vezes seguidas, desistindo desta rodada`);
+  })();
+
+  rodando.set(nome, promessa);
+  try {
+    await promessa;
   } finally {
     rodando.delete(nome);
   }

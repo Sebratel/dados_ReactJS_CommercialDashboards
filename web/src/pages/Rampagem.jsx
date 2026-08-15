@@ -37,6 +37,7 @@ export default function Rampagem() {
       <div className="grid linha-principal">
         <Visual
           title="RAMPAGEM NOVATOS ( < 90 dias )"
+          ia="rampagem:serie"
           sub="vendas e ativações dentro dos 90 primeiros dias do vendedor"
           actions={<Granularidade />}
         >
@@ -61,7 +62,7 @@ export default function Rampagem() {
           ]} />
         </div>
 
-        <Visual title="TOTAL DE VENDAS / CIDADE">
+        <Visual title="TOTAL DE VENDAS / CIDADE" ia="rampagem:porCidade">
           {isLoading && !data ? <Loading /> : (
             <BarrasHorizontais
               data={data?.porCidade || []}
@@ -76,6 +77,7 @@ export default function Rampagem() {
       <div className="grid linha-64-36">
         <Visual
           title="VENDAS / VENDEDOR"
+          ia="rampagem:tabela"
           flush
           className="v-tabela"
           actions={(
@@ -96,6 +98,7 @@ export default function Rampagem() {
 
         <Visual
           title="VENDEDOR"
+          ia="rampagem:novatos"
           flush
           className="v-tabela"
           actions={(

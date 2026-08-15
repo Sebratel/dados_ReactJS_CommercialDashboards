@@ -1,0 +1,141 @@
+/* ------------------------------------------------------------------------
+   Leitura de IA por gráfico: botão no cabeçalho do visual + painel lateral.
+
+   O painel é uma gaveta fixa em vez de um bloco dentro do visual: os visuais
+   têm altura calculada para caber uma tela, e injetar texto neles quebraria
+   justamente o encaixe que o layout garante.
+   ------------------------------------------------------------------------ */
+
+.btn-ia {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 21px; padding: 0 7px; margin-left: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12); color: #fff;
+  font: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn-ia:hover { background: rgba(255, 255, 255, 0.24); border-color: rgba(255, 255, 255, 0.6); }
+.btn-ia svg { flex: none; }
+
+/* em cabeçalhos claros (tabelas de premiações) o contraste se inverte */
+.visual.v-claro .btn-ia {
+  border-color: var(--pbi-grid); background: #fff; color: var(--pbi-primary);
+}
+
+.ia-fundo {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(37, 36, 35, 0.32);
+  animation: ia-fade 0.14s ease-out;
+}
+
+.ia-painel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 61;
+  width: min(430px, 100vw);
+  display: flex; flex-direction: column;
+  background: var(--pbi-superficie);
+  border-left: 1px solid var(--pbi-borda);
+  box-shadow: -8px 0 28px rgba(37, 36, 35, 0.18);
+  animation: ia-entra 0.18s ease-out;
+}
+
+@keyframes ia-fade { from { opacity: 0; } }
+@keyframes ia-entra { from { transform: translateX(18px); opacity: 0; } }
+
+.ia-painel > header {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; background: var(--pbi-primary); color: #fff;
+}
+.ia-painel > header h3 {
+  margin: 2px 0 0; font-size: 13.5px; font-weight: 600; line-height: 1.3;
+}
+.ia-painel-rotulo {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+  opacity: 0.75;
+}
+.ia-painel-sub { display: block; margin-top: 3px; font-size: 11px; opacity: 0.8; }
+.ia-fechar {
+  margin-left: auto; flex: none;
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border: 0; border-radius: 4px; background: rgba(255, 255, 255, 0.14); color: #fff;
+  cursor: pointer;
+}
+.ia-fechar:hover { background: rgba(255, 255, 255, 0.28); }
+
+.ia-painel-corpo {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+}
+
+.ia-carregando {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 40px 0; color: var(--pbi-muted); font-size: 12.5px;
+}
+
+.ia-erro {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 12px; border-radius: 5px;
+  background: #FDF3D6; color: #6b5200; font-size: 12.5px; line-height: 1.5;
+}
+.ia-erro p { margin: 0; }
+.ia-erro p + p { margin-top: 6px; }
+
+.ia-resumo {
+  margin: 0; padding: 11px 12px; border-radius: 5px;
+  background: #FAF9F8; border-left: 3px solid var(--pbi-primary);
+  font-size: 13px; line-height: 1.55; color: var(--pbi-ink);
+}
+
+.ia-card {
+  border: 1px solid var(--pbi-borda); border-radius: 5px;
+  border-left-width: 3px; padding: 10px 12px;
+}
+.ia-card.critico  { border-left-color: #b3261e; }
+.ia-card.atencao  { border-left-color: var(--pbi-gold-600); }
+.ia-card.positivo { border-left-color: var(--pbi-green); }
+
+.ia-card > header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.ia-card > header h4 { margin: 0; font-size: 12.5px; font-weight: 700; line-height: 1.35; }
+.ia-card.critico  > header svg { color: #b3261e; }
+.ia-card.atencao  > header svg { color: var(--pbi-gold-600); }
+.ia-card.positivo > header svg { color: var(--pbi-green); }
+.ia-selo {
+  margin-left: auto; flex: none;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 999px; background: #F3F2F1; color: var(--pbi-muted);
+}
+.ia-card p { margin: 0; font-size: 12.5px; line-height: 1.55; color: #3b3a39; }
+.ia-acao { margin-top: 6px !important; color: var(--pbi-ink) !important; }
+
+.ia-indicadores {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin: 8px 0 0; padding: 0; list-style: none;
+}
+.ia-indicadores li {
+  font-size: 10.5px; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px;
+  background: #F3F2F1; color: var(--pbi-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ia-perguntas {
+  border-top: 1px solid var(--pbi-borda); padding-top: 11px; margin-top: 2px;
+}
+.ia-perguntas h4 {
+  margin: 0 0 6px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.6px; text-transform: uppercase; color: var(--pbi-muted);
+}
+.ia-perguntas ul { margin: 0; padding-left: 16px; display: grid; gap: 5px; }
+.ia-perguntas li { font-size: 12.5px; line-height: 1.5; color: #3b3a39; }
+
+.ia-dica { font-size: 11.5px; color: var(--pbi-muted); line-height: 1.5; }
+
+.ia-assinatura {
+  margin-top: auto; padding-top: 10px;
+  border-top: 1px solid var(--pbi-borda);
+  font-size: 10.5px; line-height: 1.5; color: var(--pbi-muted);
+}
+
+@media (max-width: 640px) {
+  .ia-painel { width: 100vw; }
+}

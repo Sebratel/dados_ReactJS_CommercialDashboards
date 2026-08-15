@@ -25,6 +25,7 @@ export default function Diretoria() {
 
       <Visual
         title="Resumo Diretoria"
+        ia="diretoria:serie"
         sub="Visão consolidada dos três principais indicadores do comercial"
         actions={<Granularidade />}
         className="v-diretoria"

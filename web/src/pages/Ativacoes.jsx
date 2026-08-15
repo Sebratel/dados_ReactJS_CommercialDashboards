@@ -29,6 +29,7 @@ export default function Ativacoes() {
       <div className="grid linha-principal">
         <Visual
           title={`TOTAL ATIVOS / ${filtros.g === 'dia' ? 'DIA' : 'MÊS'}`}
+          ia="ativacoes:serie"
           actions={<Granularidade />}
         >
           {isLoading && !data ? <Loading /> : (
@@ -43,7 +44,7 @@ export default function Ativacoes() {
           ]} />
         </div>
 
-        <Visual title="CANAL VOALLE">
+        <Visual title="CANAL VOALLE" ia="ativacoes:porCanal">
           {isLoading && !data ? <Loading /> : (
             <BarrasHorizontais
               data={data?.porCanal || []}
@@ -57,7 +58,7 @@ export default function Ativacoes() {
       </div>
 
       <div className="grid linha-33-67">
-        <Visual title="TOTAL / CIDADE" className="v-tabela">
+        <Visual title="TOTAL / CIDADE" className="v-tabela" ia="ativacoes:porCidade">
           {isLoading && !data ? <Loading /> : (
             <BarrasHorizontais
               data={data?.porCidade || []}
@@ -70,6 +71,7 @@ export default function Ativacoes() {
 
         <Visual
           title="ATIVOS / VENDEDOR"
+          ia="ativacoes:porVendedor"
           flush
           className="v-tabela"
           actions={(
