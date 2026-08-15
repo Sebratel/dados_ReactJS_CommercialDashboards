@@ -121,8 +121,13 @@ Credenciais: copie `.env.example` para `.env` (senhas com `#` precisam de aspas 
 
 ### Opção A — Stack apontando para o repositório
 
-Em **Stacks → Add stack → Repository**, informe o repositório, o caminho
-`dashboard/docker-compose.yml` e cadastre as variáveis de ambiente:
+Em **Stacks → Add stack → Repository**, informe:
+
+* **Repository URL:** `https://github.com/Sebratel/dados_ReactJS_CommercialDashboards`
+* **Reference:** `refs/heads/main`
+* **Compose path:** `docker-compose.yml` (fica na raiz do repositório)
+
+E cadastre as variáveis de ambiente:
 
 ```
 DB_VOALLE_HOST=ip-do-voalle
