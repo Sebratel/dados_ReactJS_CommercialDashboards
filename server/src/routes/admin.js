@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import {
-  definirPapel, definirTela, listarTelas, listarUsuarios, papelDe, removerUsuario, telasDoUsuario,
+  definirPapel, definirPowerUser, definirTela, listarTelas, listarUsuarios, papelDe,
+  removerUsuario, telasDoUsuario,
 } from '../auth/access.js';
 import { listarQueries, testarQuery } from '../model/catalogo.js';
 import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
@@ -27,6 +28,7 @@ admin.get('/me', exigirAuth(), (req, res) => {
     nome: req.usuario.nome,
     foto: req.usuario.foto || null,
     papel: req.usuario.papel,
+    powerUser: !!req.usuario.powerUser,
     telas: telasDoUsuario(req.usuario),
   });
 });
@@ -40,6 +42,16 @@ admin.put('/access/users/:email', exigirAuth({ minPapel: 'admin' }), (req, res) 
   try {
     const papel = definirPapel(req.params.email, req.body?.papel);
     res.json({ ok: true, email: req.params.email.toLowerCase(), papel });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** Atributo de power user — independente do papel, por isso rota própria. */
+admin.put('/access/users/:email/poweruser', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    const powerUser = definirPowerUser(req.params.email, !!req.body?.ativo);
+    res.json({ ok: true, email: req.params.email.toLowerCase(), powerUser });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -72,13 +84,13 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
 });
 
 // ------------------------------------------------- catálogo de queries (DEV)
-// Exclusivo do papel DEV: administrar pessoas e enxergar o SQL do sistema são
-// atribuições diferentes, então o admin não entra aqui.
-admin.get('/queries', exigirAuth({ papeis: ['dev'] }), (req, res) => {
+// Exclusivo de power users: administrar pessoas e enxergar o SQL do sistema são
+// atribuições diferentes, então o papel de admin, sozinho, não entra aqui.
+admin.get('/queries', exigirAuth({ powerUser: true }), (req, res) => {
   res.json({ queries: listarQueries(), since: config.since, phoneSince: config.phoneSince });
 });
 
-admin.post('/queries/:id/test', exigirAuth({ papeis: ['dev'] }), async (req, res) => {
+admin.post('/queries/:id/test', exigirAuth({ powerUser: true }), async (req, res) => {
   try {
     const resultado = await testarQuery(req.params.id, req.body?.limite);
     res.json(resultado);

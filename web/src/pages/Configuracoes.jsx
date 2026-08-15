@@ -8,8 +8,8 @@ import { int, labelDataHora } from '../format';
 const PAPEL_LABEL = { viewer: 'Visualizador', dev: 'DEV', admin: 'Administrador' };
 const PAPEL_AJUDA = {
   viewer: 'Vê as telas liberadas para todos e aquelas em que o e-mail está na lista.',
-  dev: 'Enxerga o catálogo de queries do sistema — o SQL que alimenta cada tela.',
-  admin: 'Gerencia pessoas e o acesso por tela. Vê todas as telas do dashboard.',
+  dev: 'Visualizador com o atributo de power user já marcado.',
+  admin: 'Gerencia pessoas, acesso por tela e provedor de IA. Vê todas as telas do dashboard.',
 };
 
 // ------------------------------------------------------ usuários e papéis
@@ -80,6 +80,7 @@ function AbaUsuarios() {
             <tr>
               <th className="left">E-mail</th>
               <th className="left">Papel</th>
+              <th className="left">Power user</th>
               <th className="left">Origem</th>
               <th />
             </tr>
@@ -111,6 +112,26 @@ function AbaUsuarios() {
                   )}
                 </td>
                 <td className="left">
+                  <label className="cfg-toggle" title={u.powerUserFixo
+                    ? 'Vem de DEV_EMAILS no .env — a tela não rebaixa o que vem de lá.'
+                    : 'Libera o catálogo de queries do sistema, seja qual for o papel.'}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!u.powerUser}
+                      disabled={u.powerUserFixo || ocupado === u.email}
+                      onChange={(e) => executar(
+                        () => apiJson(`/access/users/${encodeURIComponent(u.email)}/poweruser`, {
+                          method: 'PUT', body: { ativo: e.target.checked },
+                        }),
+                        u.email,
+                      )}
+                    />
+                    <span>{u.powerUser ? 'sim' : 'não'}</span>
+                    {u.powerUserFixo && <Icone nome="cadeado" tamanho={11} />}
+                  </label>
+                </td>
+                <td className="left">
                   {u.origem === 'env'
                     ? <span className="cfg-tag fixo"><Icone nome="cadeado" tamanho={11} /> semente (.env)</span>
                     : <span className="cfg-tag">definido na tela</span>}
@@ -134,7 +155,7 @@ function AbaUsuarios() {
               </tr>
             ))}
             {dados && !dados.usuarios.length && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: 24, color: '#605E5C' }}>Ninguém com papel elevado ainda.</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#605E5C' }}>Ninguém com papel elevado ainda.</td></tr>
             )}
           </tbody>
         </table>
@@ -144,6 +165,11 @@ function AbaUsuarios() {
         {Object.entries(PAPEL_AJUDA).map(([p, txt]) => (
           <li key={p}><b>{PAPEL_LABEL[p]}:</b> {txt}</li>
         ))}
+        <li>
+          <b>Power user:</b> atributo à parte do papel — é ele, e só ele, que abre o catálogo de
+          queries. Ser administrador não concede e não impede: quem acumula os dois continua vendo
+          o SQL, e um administrador sem a marcação não vê.
+        </li>
         <li>
           Quem não está na lista é <b>visualizador</b>. Papéis de semente vêm de
           <code> ADMIN_EMAILS</code> / <code>DEV_EMAILS</code> e não podem ser removidos por aqui.

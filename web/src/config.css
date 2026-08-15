@@ -56,6 +56,16 @@
   display: inline-flex; align-items: center; gap: 4px;
 }
 
+/* atributo de power user: fora da escada de papéis, então não é um <select> */
+.cfg-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--pbi-muted); cursor: pointer; user-select: none;
+}
+.cfg-toggle input { width: 15px; height: 15px; accent-color: var(--pbi-wine); cursor: pointer; margin: 0; }
+.cfg-toggle input:checked + span { color: var(--pbi-wine); font-weight: 600; }
+.cfg-toggle input:disabled { cursor: default; }
+.cfg-toggle:has(input:disabled) { cursor: default; opacity: 0.75; }
+
 .cfg-legenda { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; color: #4d4b49; line-height: 1.55; }
 
 /* --- acesso por tela (tabela) --- */

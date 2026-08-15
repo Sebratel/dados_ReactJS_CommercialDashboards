@@ -1,24 +1,26 @@
 import { config } from '../config.js';
 import { usuarioDoToken } from './google.js';
-import { papelDe, peloMenos, podeVerTela } from './access.js';
+import { ehPowerUser, papelDe, peloMenos, podeVerTela } from './access.js';
 
 /**
  * Autenticação + autorização.
- *   minPapel: 'viewer' (padrão) | 'dev' | 'admin' — hierárquico
- *   papeis:   lista de papéis exatos (não hierárquico). É o caso do catálogo de
- *             queries, que é atribuição do DEV e não do administrador.
- *   tela:     id da tela cujo ACL deve ser respeitado
+ *   minPapel:  'viewer' (padrão) | 'dev' | 'admin' — hierárquico
+ *   powerUser: exige o atributo de power user, que corre por fora da hierarquia.
+ *              É o caso do catálogo de queries: ler o SQL do sistema é atribuição
+ *              do DEV, não do administrador — mas quem acumula os dois entra.
+ *   tela:      id da tela cujo ACL deve ser respeitado
  *
  * Com AUTH_ENABLED=false o middleware libera tudo — útil para rodar local sem
  * Google, nunca em produção.
  */
-export function exigirAuth({ minPapel = 'viewer', papeis = null, tela = null } = {}) {
+export function exigirAuth({ minPapel = 'viewer', powerUser = false, tela = null } = {}) {
   return async (req, res, next) => {
     if (!config.auth.habilitado) {
       req.usuario = {
         email: 'dev@local',
         nome: 'Modo sem autenticação',
-        papel: papeis ? papeis[0] : 'admin',
+        papel: 'admin',
+        powerUser: true,
       };
       return next();
     }
@@ -39,14 +41,16 @@ export function exigirAuth({ minPapel = 'viewer', papeis = null, tela = null } =
     }
 
     const papel = papelDe(usuario.email);
-    req.usuario = { ...usuario, papel };
+    const power = ehPowerUser(usuario.email);
+    req.usuario = { ...usuario, papel, powerUser: power };
 
-    if (papeis && !papeis.includes(papel)) {
-      const rotulo = papeis.includes('dev') ? 'usuários DEV' : papeis.join(' ou ');
-      return res.status(403).json({ error: `Área exclusiva de ${rotulo}. Seu perfil é "${papel}".` });
+    if (powerUser && !power) {
+      return res.status(403).json({
+        error: 'Área exclusiva de power users (DEV). Peça a um administrador para marcar o seu e-mail como power user.',
+      });
     }
 
-    if (!papeis && !peloMenos(papel, minPapel)) {
+    if (!peloMenos(papel, minPapel)) {
       const rotulo = minPapel === 'admin' ? 'administradores' : 'usuários DEV';
       return res.status(403).json({ error: `Área restrita a ${rotulo}. Seu perfil é "${papel}".` });
     }

@@ -3,13 +3,20 @@
  *
  * Papéis, do menor para o maior:
  *   viewer  → qualquer conta do domínio permitido; vê as telas liberadas.
- *   dev     → power user: além das telas, enxerga o catálogo de queries do sistema.
+ *   dev     → viewer + power user (ver abaixo).
  *   admin   → tudo, inclusive a tela de configurações e a gestão de acessos.
  *
  * O papel efetivo é o MAIOR entre a semente do .env (ADMIN_EMAILS / DEV_EMAILS)
  * e o que estiver gravado em access.json — assim sempre existe um admin capaz de
  * abrir a tela, mesmo com o arquivo vazio, e a tela não consegue rebaixar quem
  * está no .env.
+ *
+ * POWER USER é um atributo à parte, fora da escada. Administrar pessoas e ler o
+ * SQL do sistema são atribuições diferentes: ser admin não concede o atributo —
+ * e também não impede. Quem está em DEV_EMAILS, quem tem papel 'dev' ou quem foi
+ * marcado na tela enxerga o catálogo de queries, seja qual for o seu papel.
+ * Sem essa separação, quem acumula admin e DEV perderia o acesso às queries, já
+ * que o papel efetivo pararia em 'admin'.
  *
  * Cada tela tem um modo de acesso:
  *   'todos' → qualquer usuário autenticado do domínio
@@ -45,7 +52,9 @@ const csv = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase())
 const ENV_ADMINS = new Set(csv(process.env.ADMIN_EMAILS));
 const ENV_DEVS = new Set(csv(process.env.DEV_EMAILS || process.env.POWER_USER_EMAILS));
 
-const vazio = () => ({ papeis: {}, telas: {} });
+const normEmail = (e) => String(e || '').trim().toLowerCase();
+
+const vazio = () => ({ papeis: {}, telas: {}, powerUsers: [] });
 
 function ler() {
   try {
@@ -56,6 +65,7 @@ function ler() {
     return {
       papeis: d && typeof d.papeis === 'object' ? d.papeis : {},
       telas: d && typeof d.telas === 'object' ? d.telas : {},
+      powerUsers: Array.isArray(d?.powerUsers) ? d.powerUsers.map(normEmail).filter(Boolean) : [],
     };
   } catch (err) {
     console.warn(`[acesso] não foi possível ler ${config.accessPath}: ${err.message} — usando só o .env`);
@@ -67,8 +77,6 @@ function gravar(dados) {
   fs.mkdirSync(path.dirname(config.accessPath), { recursive: true });
   fs.writeFileSync(config.accessPath, `${JSON.stringify(dados, null, 2)}\n`, 'utf8');
 }
-
-const normEmail = (e) => String(e || '').trim().toLowerCase();
 
 function papelDoEnv(email) {
   const e = normEmail(email);
@@ -86,20 +94,57 @@ export function papelDe(email) {
   return rank(doEnv) >= rank(arquivo) ? doEnv : arquivo;
 }
 
+/**
+ * É power user? Independe do papel — some do caminho a pergunta "é dev OU admin".
+ * Um admin que não está em nenhuma dessas origens continua sem ver as queries.
+ */
+export function ehPowerUser(email) {
+  const e = normEmail(email);
+  if (ENV_DEVS.has(e)) return true;
+  const d = ler();
+  return d.papeis[e] === 'dev' || d.powerUsers.includes(e);
+}
+
+/** Marca/desmarca o atributo sem tocar no papel da pessoa. */
+export function definirPowerUser(email, ativo) {
+  const e = normEmail(email);
+  if (!e.includes('@')) throw new Error('E-mail inválido.');
+  const dados = ler();
+  const lista = new Set(dados.powerUsers);
+  if (ativo) {
+    lista.add(e);
+  } else {
+    if (ENV_DEVS.has(e)) {
+      throw new Error('Este e-mail está em DEV_EMAILS no .env — a tela não rebaixa o que vem de lá.');
+    }
+    lista.delete(e);
+    // papel 'dev' é "viewer + power user": tirar o atributo tira também o papel.
+    if (dados.papeis[e] === 'dev') delete dados.papeis[e];
+  }
+  dados.powerUsers = [...lista];
+  gravar(dados);
+  return ehPowerUser(e);
+}
+
 /** Lista consolidada para a tela de acessos. */
 export function listarUsuarios() {
-  const { papeis } = ler();
+  const { papeis, powerUsers } = ler();
   const out = new Map();
-  for (const e of ENV_ADMINS) out.set(e, { email: e, papel: 'admin', origem: 'env' });
-  for (const e of ENV_DEVS) if (!out.has(e)) out.set(e, { email: e, papel: 'dev', origem: 'env' });
+  const põe = (e, papel, origem) => out.set(e, { email: e, papel, origem });
+  for (const e of ENV_ADMINS) põe(e, 'admin', 'env');
+  for (const e of ENV_DEVS) if (!out.has(e)) põe(e, 'dev', 'env');
   for (const [e, papel] of Object.entries(papeis)) {
     if (RANK[papel] == null) continue;
     const efetivo = papelDe(e);
     if (!out.has(e) || rank(efetivo) > rank(out.get(e).papel)) {
-      out.set(e, { email: e, papel: efetivo, origem: rank(papelDoEnv(e)) >= rank(papel) ? 'env' : 'arquivo' });
+      põe(e, efetivo, rank(papelDoEnv(e)) >= rank(papel) ? 'env' : 'arquivo');
     }
   }
-  return [...out.values()].sort((a, b) => rank(b.papel) - rank(a.papel) || a.email.localeCompare(b.email));
+  // quem é só power user, sem papel elevado, também precisa aparecer
+  for (const e of powerUsers) if (!out.has(e)) põe(e, papelDe(e), 'arquivo');
+  return [...out.values()]
+    .map((u) => ({ ...u, powerUser: ehPowerUser(u.email), powerUserFixo: ENV_DEVS.has(u.email) }))
+    .sort((a, b) => rank(b.papel) - rank(a.papel) || a.email.localeCompare(b.email));
 }
 
 export function definirPapel(email, papel) {
@@ -113,11 +158,14 @@ export function definirPapel(email, papel) {
   return papelDe(e);
 }
 
+/** Tira tudo o que a tela concedeu: o papel e o atributo de power user. */
 export function removerUsuario(email) {
   const e = normEmail(email);
   const dados = ler();
-  if (!(e in dados.papeis)) return false;
+  const tinha = e in dados.papeis || dados.powerUsers.includes(e);
+  if (!tinha) return false;
   delete dados.papeis[e];
+  dados.powerUsers = dados.powerUsers.filter((x) => x !== e);
   gravar(dados);
   return true;
 }

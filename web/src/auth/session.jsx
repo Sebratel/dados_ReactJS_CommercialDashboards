@@ -129,7 +129,7 @@ export function limparSessao() {
 // ---- contexto React ------------------------------------------------------
 export function SessionProvider({ children }) {
   const [config, setConfig] = useState(null);      // { clientId, dominio, habilitado }
-  const [usuario, setUsuario] = useState(null);    // { email, nome, foto, papel, telas }
+  const [usuario, setUsuario] = useState(null);    // { email, nome, foto, papel, powerUser, telas }
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [token, setTokenState] = useState(tokenAtual);
@@ -148,7 +148,7 @@ export function SessionProvider({ children }) {
         setConfig(cfg);
         if (cfg.clientId) await garantirClient(cfg.clientId).catch(() => {});
         if (!cfg.habilitado) {
-          setUsuario({ email: 'dev@local', nome: 'Modo sem autenticação', papel: 'admin', telas: null });
+          setUsuario({ email: 'dev@local', nome: 'Modo sem autenticação', papel: 'admin', powerUser: true, telas: null });
           return;
         }
         if (tokenAtual) {
@@ -187,8 +187,9 @@ export function SessionProvider({ children }) {
   const valor = useMemo(() => ({
     config, usuario, carregando, erro, token, entrar, sair, recarregarMe,
     ehAdmin: usuario?.papel === 'admin',
-    // DEV é um papel à parte: o catálogo de queries é atribuição dele, não do admin
-    ehDev: usuario?.papel === 'dev',
+    // Power user corre por fora da hierarquia: o catálogo de queries é atribuição
+    // do DEV, não do admin — mas quem acumula os dois papéis continua enxergando.
+    ehDev: !!usuario?.powerUser,
     podeVer: (tela) => !usuario?.telas || usuario.telas.includes(tela) || usuario.papel === 'admin',
   }), [config, usuario, carregando, erro, token, entrar, sair, recarregarMe]);
 

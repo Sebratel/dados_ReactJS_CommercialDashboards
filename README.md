@@ -63,23 +63,37 @@ confere o token no `userinfo` do Google, exige o domínio permitido e resolve o 
 | Papel | O que vê |
 |---|---|
 | **viewer** | telas liberadas para todos + telas onde o e-mail está na lista |
-| **dev** | as telas do viewer + o **catálogo de queries** (SQL, estatísticas e teste com LIMIT) |
-| **admin** | todas as telas + **Usuários e papéis** e **Acesso por tela** |
-
-> **DEV e admin são atribuições diferentes, não níveis.** O catálogo de queries é exclusivo
-> do papel `dev` — o administrador gerencia pessoas e permissões, mas não enxerga o SQL do
-> sistema. No servidor isso é `exigirAuth({ papeis: ['dev'] })`, comparação exata em vez de
-> hierárquica. Consequência prática: um e-mail que esteja em `ADMIN_EMAILS` **e** em
-> `DEV_EMAILS` resolve para `admin` e, portanto, **não** vê as queries — use contas
-> diferentes para cada atribuição.
+| **dev** | viewer com o atributo de power user já marcado |
+| **admin** | todas as telas + **Usuários e papéis**, **Acesso por tela** e **Provedor de IA** |
 
 O papel efetivo é o **maior** entre a semente do `.env` (`ADMIN_EMAILS` / `DEV_EMAILS`) e o
 que estiver em `access.json`. Assim sempre existe um admin para abrir a tela, e a tela não
 consegue rebaixar quem está no `.env`.
 
+### Power user: um atributo, não um degrau
+
+Administrar pessoas e ler o SQL do sistema são atribuições diferentes, então o **catálogo de
+queries não é concedido pelo papel de admin**. Mas ele também não é *negado* por ele: power
+user é uma marcação à parte, fora da hierarquia — `exigirAuth({ powerUser: true })`.
+
+| Quem | Papel | Vê as queries |
+|---|---|---|
+| está em `DEV_EMAILS` | qualquer um | sim |
+| tem papel `dev` | dev | sim |
+| marcado na tela de usuários | qualquer um | sim |
+| admin sem nenhuma das marcações | admin | **não** |
+
+A primeira versão modelava `dev` como degrau (`viewer < dev < admin`) e exigia igualdade
+exata do papel. O efeito colateral: quem estava nas duas listas resolvia para `admin` e
+perdia o acesso ao SQL, sem conta possível que fosse as duas coisas. Separar o atributo da
+escada resolve isso mantendo a regra original de pé.
+
+Em **Configurações → Usuários e papéis** a coluna *Power user* liga e desliga a marcação sem
+tocar no papel. Quem vem de `DEV_EMAILS` aparece cadeado — a tela não rebaixa a semente.
+
 ### Acesso por tela
 
-Em **Configurações → Acesso por tela** cada uma das 9 telas aparece em uma linha da tabela
+Em **Configurações → Acesso por tela** cada uma das 10 telas aparece em uma linha da tabela
 com o modo de acesso e as pessoas liberadas:
 
 * **Todos** — qualquer conta do domínio;
@@ -287,10 +301,11 @@ marcações de eixo espaçadas.
 | `GET /api/premiacoes` | faixas de premiação |
 | `POST /api/refresh?group=hot\|full\|dims` | força releitura |
 | `GET /api/auth/config` | client_id do Google e domínio (público) |
-| `GET /api/me` | e-mail, papel e telas liberadas |
+| `GET /api/me` | e-mail, papel, atributo de power user e telas liberadas |
 | `GET/PUT/DELETE /api/access/users` | papéis (admin) |
 | `GET/PUT /api/access/screens` | acesso por tela (admin) |
-| `GET /api/queries` · `POST /api/queries/:id/test` | catálogo de queries (exclusivo do papel `dev`) |
+| `PUT /api/access/users/:email/poweruser` | liga/desliga o atributo de power user (admin) |
+| `GET /api/queries` · `POST /api/queries/:id/test` | catálogo de queries (exclusivo de power users) |
 | `GET /api/preditivo` | indicadores preditivos (sem IA) |
 | `POST /api/preditivo/insights` | leitura da IA sobre os indicadores |
 | `GET/PUT/DELETE /api/ia` · `POST /api/ia/modelos` · `POST /api/ia/testar` | provedor de IA (admin) |
