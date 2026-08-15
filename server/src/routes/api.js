@@ -9,6 +9,8 @@ import { monthKey, today } from '../model/dates.js';
 import { refreshAll, refreshGroup } from '../etl/refresh.js';
 import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
+import { podeVerTela } from '../auth/access.js';
+import { CONJUNTOS, gerarCSV, listarConjuntos } from '../model/exportar.js';
 
 export const api = Router();
 
@@ -231,6 +233,36 @@ api.get('/rampagem', auth('rampagem'), (req, res) => {
 // -------------------------------------------------------------- PREMIAÇÕES
 api.get('/premiacoes', auth('premiacoes'), (req, res) => {
   res.json(withMeta(premiacoes(parseFilters(req.query))));
+});
+
+// -------------------------------------------------------------- EXPORTAÇÕES
+/** Conjuntos que o usuário pode exportar (respeita o acesso por tela). */
+api.get('/exportacoes', auth(), (req, res) => {
+  const podeVer = (tela) => podeVerTela(req.usuario, tela);
+  res.json(withMeta({ conjuntos: listarConjuntos(podeVer) }));
+});
+
+/** CSV completo do conjunto, com os filtros da tela aplicados. */
+api.get('/exportar/:id', auth(), (req, res) => {
+  const conjunto = CONJUNTOS[req.params.id];
+  if (!conjunto) return res.status(404).json({ error: 'Conjunto de dados desconhecido.' });
+  if (!podeVerTela(req.usuario, conjunto.tela)) {
+    return res.status(403).json({ error: 'Você não tem acesso a estes dados.' });
+  }
+
+  try {
+    const flt = parseFilters(req.query);
+    const { csv, arquivo, linhas } = gerarCSV(req.params.id, flt);
+    const sufixo = [flt.de, flt.ate].filter(Boolean).join('_a_') || 'completo';
+    const nome = `${arquivo}_${sufixo}.csv`;
+    console.log(`[export] ${req.usuario.email} baixou ${req.params.id}: ${linhas} linhas`);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
+    res.setHeader('X-Linhas', String(linhas));
+    return res.send(csv);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 });
 
 // ----------------------------------------------------------------- REFRESH

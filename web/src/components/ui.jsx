@@ -93,3 +93,16 @@ export function Legenda({ itens }) {
     </div>
   );
 }
+
+/**
+ * Botão de exportar no cabeçalho do visual: baixa exatamente o que está na
+ * tabela (mesmas colunas, mesmos filtros) em CSV.
+ */
+export function BotaoExportar({ onExportar, titulo = 'Exportar em CSV', rotulo = 'CSV' }) {
+  return (
+    <button type="button" className="btn-exportar" onClick={onExportar} title={titulo}>
+      <Icone nome="baixar" tamanho={13} />
+      {rotulo}
+    </button>
+  );
+}

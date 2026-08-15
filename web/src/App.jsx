@@ -17,6 +17,7 @@ import PrimeiroPagamento from './pages/PrimeiroPagamento';
 import Rampagem from './pages/Rampagem';
 import Premiacoes from './pages/Premiacoes';
 import Configuracoes from './pages/Configuracoes';
+import Exportacoes from './pages/Exportacoes';
 import { Icone } from './components/Icone';
 
 const PAGINAS = [
@@ -86,8 +87,8 @@ function TopBar({ paginas }) {
   const idade = atualizado ? (Date.now() - new Date(atualizado).getTime()) / 1000 : Infinity;
   const classe = erro ? 'error' : idade > ((meta?.refresh?.hot || 120000) / 1000) * 3 ? 'stale' : '';
 
-  const titulo = pathname === '/configuracoes'
-    ? 'Configurações'
+  const titulo = pathname === '/configuracoes' ? 'Configurações'
+    : pathname === '/exportacoes' ? 'Exportações'
     : paginas.find((p) => p.path === pathname)?.label || 'Gestão Comercial';
 
   const clicar = async () => {
@@ -124,6 +125,9 @@ function TopBar({ paginas }) {
             {p.label}
           </NavLink>
         ))}
+        <NavLink to="/exportacoes" className={({ isActive }) => `com-icone${isActive ? ' active' : ''}`}>
+          <Icone nome="baixar" tamanho={13} /> Exportações
+        </NavLink>
         {(ehAdmin || ehDev) && (
           <NavLink to="/configuracoes" className={({ isActive }) => `com-icone${isActive ? ' active' : ''}`}>
             <Icone nome="config" tamanho={13} /> Configurações
@@ -165,6 +169,7 @@ export default function App() {
         {PAGINAS.map((p) => (
           <Route key={p.path} path={p.path} element={podeVer(p.id) ? p.el : <SemAcesso />} />
         ))}
+        <Route path="/exportacoes" element={<Exportacoes />} />
         <Route path="/configuracoes" element={ehAdmin || ehDev ? <Configuracoes /> : <SemAcesso />} />
         <Route path="*" element={<Navigate to={inicial} replace />} />
       </Routes>

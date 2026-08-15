@@ -293,7 +293,37 @@ da série dos gráficos de coluna).
 
 ---
 
-## 8. Convenções de interface
+## 8. Exportações
+
+Duas formas de tirar o dado da tela:
+
+* **Botão `CSV` no cabeçalho de cada tabela** — baixa exatamente o que está no visual,
+  com as mesmas colunas, os filtros aplicados e a ordenação escolhida. É processado no
+  navegador, sem ida ao servidor.
+* **Aba `Exportações`** — sete conjuntos completos gerados pelo servidor, sem o corte que
+  as telas aplicam. O relatório de primeiros pagamentos, por exemplo, mostra 1.500 linhas
+  na tela e exporta as 18.723 do período.
+
+| Conjunto | Tela que controla o acesso |
+|---|---|
+| Vendas (contratos criados) | vendas |
+| Ativações | ativacoes |
+| Primeiro pagamento | primeiro-pagamento |
+| Premiações (>60 e ≤60 dias) | premiacoes |
+| Rampagem (novatos) | rampagem |
+| Resumo por vendedor | vendas |
+
+O ACL por tela vale para o download: quem não vê Premiações recebe 403 ao tentar exportá-la,
+e o conjunto nem aparece na lista.
+
+**Formato:** CSV com separador `;`, BOM UTF-8, decimal com vírgula e datas `dd/mm/aaaa` —
+abre no Excel em português com duplo clique, sem assistente de importação. O nome do arquivo
+carrega o período (`vendas_2026-01-01_a_2026-08-15.csv`).
+
+> O download passa por `fetch` com o Bearer e entrega um blob. Link direto (`href`) não
+> leva o header de autenticação e devolveria 401.
+
+## 9. Convenções de interface
 
 * **Sem emojis.** Todos os ícones são SVG traçado em `web/src/components/Icone.jsx`,
   herdando a cor do texto via `currentColor`. Isso vale inclusive para os títulos que o

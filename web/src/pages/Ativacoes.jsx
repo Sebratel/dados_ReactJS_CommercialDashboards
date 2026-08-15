@@ -2,16 +2,24 @@ import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBar } from '../components/SlicerBar';
 import { Granularidade } from '../components/Granularidade';
-import { Erro, KpiStack, Loading, Visual } from '../components/ui';
+import { BotaoExportar, Erro, KpiStack, Loading, Visual } from '../components/ui';
 import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { dec1, int, labelPeriodo } from '../format';
+import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Ativacoes() {
   const { filtros, alternar } = useFilters();
   const { data, error, isLoading } = useDados('/ativacoes', filtros);
 
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
+  const colunasVendedor = [
+    { key: 'vendedor', titulo: 'VENDEDORES', align: 'left' },
+    { key: 'total', titulo: 'TOTAL ATIVOS', fmt: int, databar: { cor: CORES.gold } },
+    { key: 'media', titulo: 'MEDIA ATIVOS / DIA', fmt: dec1 },
+    { key: 'spark', titulo: 'MÉDIA AO LONGO DO TEMPO', tipo: 'spark' },
+    { key: 'equipe', titulo: 'EQUIPES', align: 'left' },
+  ];
 
   return (
     <main className="page">
@@ -60,16 +68,20 @@ export default function Ativacoes() {
           )}
         </Visual>
 
-        <Visual title="ATIVOS / VENDEDOR" flush className="v-tabela">
+        <Visual
+          title="ATIVOS / VENDEDOR"
+          flush
+          className="v-tabela"
+          actions={(
+            <BotaoExportar onExportar={() => baixar(
+              `ativacoes-por-vendedor_${sufixoPeriodo(filtros)}.csv`,
+              tabelaParaCSV(colunasVendedor, data?.porVendedor || []),
+            )} />
+          )}
+        >
           {isLoading && !data ? <Loading /> : (
             <Tabela
-              colunas={[
-                { key: 'vendedor', titulo: 'VENDEDORES', align: 'left' },
-                { key: 'total', titulo: 'TOTAL ATIVOS', fmt: int, databar: { cor: CORES.gold } },
-                { key: 'media', titulo: 'MEDIA ATIVOS / DIA', fmt: dec1 },
-                { key: 'spark', titulo: 'MÉDIA AO LONGO DO TEMPO', tipo: 'spark' },
-                { key: 'equipe', titulo: 'EQUIPES', align: 'left' },
-              ]}
+              colunas={colunasVendedor}
               dados={data?.porVendedor || []}
               totais={{
                 __label: `Total (${(data?.porVendedor || []).length} vendedores)`,

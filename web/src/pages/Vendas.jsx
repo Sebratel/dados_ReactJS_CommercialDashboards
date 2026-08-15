@@ -2,16 +2,23 @@ import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBar } from '../components/SlicerBar';
 import { Granularidade } from '../components/Granularidade';
-import { Erro, KpiStack, Legenda, Loading, Visual } from '../components/ui';
+import { BotaoExportar, Erro, KpiStack, Legenda, Loading, Visual } from '../components/ui';
 import { BarrasHorizontais, ColunasPorTecnologia, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, dec1, int, labelDia, labelMesLongo, labelPeriodo } from '../format';
+import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Vendas() {
   const { filtros, alternar } = useFilters();
   const { data, error, isLoading } = useDados('/vendas', filtros);
 
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
+  const colunasVendedor = [
+    { key: 'vendedor', titulo: 'VENDEDORES', align: 'left' },
+    { key: 'total', titulo: 'NOVOS CADASTROS', fmt: int, databar: { cor: CORES.gold } },
+    { key: 'media', titulo: 'MÉDIA / DIA', fmt: dec1 },
+    { key: 'spark', titulo: 'AO DECORRER DO TEMPO', tipo: 'spark' },
+  ];
   const porDia = (data?.porDia || []).map((d) => ({ ...d, label: labelDia(d.dia) }));
 
   return (
@@ -64,15 +71,20 @@ export default function Vendas() {
       </div>
 
       <div className="grid linha-dupla">
-        <Visual title="VENDAS / VENDEDOR" flush className="v-tabela">
+        <Visual
+          title="VENDAS / VENDEDOR"
+          flush
+          className="v-tabela"
+          actions={(
+            <BotaoExportar onExportar={() => baixar(
+              `vendas-por-vendedor_${sufixoPeriodo(filtros)}.csv`,
+              tabelaParaCSV(colunasVendedor, data?.porVendedor || []),
+            )} />
+          )}
+        >
           {isLoading && !data ? <Loading /> : (
             <Tabela
-              colunas={[
-                { key: 'vendedor', titulo: 'VENDEDORES', align: 'left' },
-                { key: 'total', titulo: 'NOVOS CADASTROS', fmt: int, databar: { cor: CORES.gold } },
-                { key: 'media', titulo: 'MÉDIA / DIA', fmt: dec1 },
-                { key: 'spark', titulo: 'AO DECORRER DO TEMPO', tipo: 'spark' },
-              ]}
+              colunas={colunasVendedor}
               dados={data?.porVendedor || []}
               totais={{
                 __label: `Total (${(data?.porVendedor || []).length} vendedores)`,

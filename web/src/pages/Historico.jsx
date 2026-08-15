@@ -1,9 +1,10 @@
 import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBar } from '../components/SlicerBar';
-import { Erro, Loading, Visual } from '../components/ui';
+import { BotaoExportar, Erro, Loading, Visual } from '../components/ui';
 import { Matriz } from '../components/tables';
 import { int, labelDia, labelMes } from '../format';
+import { baixar, matrizParaCSV, sufixoPeriodo } from '../exportar';
 
 /** Páginas "HISTÓRICO": matriz vendedor x dia com mapa de calor. */
 export function Historico({ dataset, titulo, rotuloPeriodo }) {
@@ -24,6 +25,12 @@ export function Historico({ dataset, titulo, rotuloPeriodo }) {
         sub={data ? `${int(data.total)} registros · ${int(data.linhas.length)} vendedores · ${porMes ? 'agrupado por mês' : 'por dia'}` : ''}
         flush
         className="v-matriz"
+        actions={data && (
+          <BotaoExportar onExportar={() => baixar(
+            `${dataset === 'vendas' ? 'vendas' : 'ativacoes'}-por-vendedor-matriz_${sufixoPeriodo(filtros)}.csv`,
+            matrizParaCSV(matriz, porMes ? labelMes : labelDia),
+          )} />
+        )}
       >
         {isLoading && !data ? <Loading /> : (
           <Matriz
