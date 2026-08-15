@@ -135,7 +135,7 @@ DB_MARIA_DATABASE=DB_Applicattion
 DB_MARIA_USER=usuario-mariadb
 DB_MARIA_PASSWORD=********
 DB_MARIA_PORT=3306
-HOST_PORT=8080
+HOST_PORT=8081
 ```
 
 > ⚠️ **Aspas nas senhas.** No arquivo `dashboard/.env` (lido pelo Node local e pela
@@ -151,12 +151,16 @@ docker build -t comercial-dashboard:1.0.0 .
 docker save comercial-dashboard:1.0.0 | gzip > comercial-dashboard.tar.gz
 ```
 
-Suba o `.tar.gz` em **Images → Import** e crie o container publicando a porta `8080`
-com as mesmas variáveis acima.
+Suba o `.tar.gz` em **Images → Import** e crie o container mapeando a porta do host para a
+`8080` do container, com as mesmas variáveis acima.
+
+> **Porta.** A `8080` do servidor já está em uso, então o compose publica em **8081**
+> (`8081:8080`) — dentro do container a aplicação continua na 8080. Para mudar, use a
+> variável `HOST_PORT` no stack, sem mexer no compose.
 
 O container expõe:
 
-* `GET /` — dashboard
+* `GET /` — dashboard (no servidor: `http://<host>:8081`)
 * `GET /api/health` — usado pelo healthcheck (`start_period` de 90 s: a carga inicial leva ~40 s)
 
 > O container precisa de rota para `ip-do-voalle:5432` (Voalle) e `ip-do-mariadb:3306` (MariaDB).

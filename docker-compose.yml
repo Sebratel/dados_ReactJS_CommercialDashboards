@@ -7,7 +7,9 @@ services:
     container_name: comercial-dashboard
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-8080}:8080"
+      # host:container — a 8080 do servidor já está ocupada, então publicamos na 8081.
+      # Dentro do container a aplicação continua na 8080 (PORT abaixo).
+      - "${HOST_PORT:-8081}:8080"
     environment:
       TZ: America/Sao_Paulo
       PORT: 8080
