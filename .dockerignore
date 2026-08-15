@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+server/public
+.env
+.env.local
+*.log
+.git
+.vscode
+README.md

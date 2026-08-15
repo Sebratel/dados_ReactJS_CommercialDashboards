@@ -1,0 +1,18 @@
+# dependências e artefatos de build
+node_modules/
+dist/
+server/public/
+
+# segredos — NUNCA versionar (use .env.example como modelo)
+.env
+.env.*
+!.env.example
+
+# estado de execução: papéis e permissões por tela (fica no volume do container)
+server/data/
+data/
+
+# diversos
+*.log
+.DS_Store
+Thumbs.db

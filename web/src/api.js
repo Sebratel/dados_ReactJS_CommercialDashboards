@@ -1,0 +1,124 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getToken, renovarToken } from './auth/session.jsx';
+
+/** intervalo de auto-refresh do front (ms) */
+export const AUTO_REFRESH_MS = 60000;
+
+export function buildQuery(filtros = {}) {
+  const p = new URLSearchParams();
+  const add = (k, v) => {
+    if (v === null || v === undefined || v === '') return;
+    if (Array.isArray(v)) {
+      if (!v.length) return;
+      p.set(k, v.join(','));
+    } else {
+      p.set(k, String(v));
+    }
+  };
+  add('de', filtros.de);
+  add('ate', filtros.ate);
+  add('vendedor', filtros.vendedor);
+  add('equipe', filtros.equipe);
+  add('tecnologia', filtros.tecnologia);
+  add('situacao', filtros.situacao);
+  add('cidade', filtros.cidade);
+  add('canal', filtros.canal);
+  add('cliente', filtros.cliente);
+  add('g', filtros.g);
+  return p.toString();
+}
+
+/** fetch autenticado: manda o Bearer e, em 401, renova o token e tenta de novo. */
+export async function apiFetch(url, init = {}) {
+  const comToken = (extra = {}) => {
+    const token = getToken();
+    return {
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...extra,
+      },
+    };
+  };
+
+  let res = await fetch(url, comToken());
+  if (res.status === 401 && getToken()) {
+    try {
+      await renovarToken();
+      res = await fetch(url, comToken());
+    } catch { /* segue com o 401 — a UI manda para o login */ }
+  }
+  return res;
+}
+
+export async function apiGet(path, filtros) {
+  const qs = filtros ? buildQuery(filtros) : '';
+  const res = await apiFetch(`/api${path}${qs ? `?${qs}` : ''}`);
+  if (!res.ok) {
+    let msg = `Erro ${res.status}`;
+    try {
+      const j = await res.json();
+      msg = j.error || msg;
+    } catch { /* corpo não é JSON */ }
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+export async function apiJson(path, { method = 'GET', body } = {}) {
+  const res = await apiFetch(`/api${path}`, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let dados = null;
+  try { dados = await res.json(); } catch { /* sem corpo */ }
+  if (!res.ok) {
+    const err = new Error(dados?.error || `Erro ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return dados;
+}
+
+export function useDados(path, filtros, options = {}) {
+  return useQuery({
+    queryKey: [path, filtros],
+    queryFn: () => apiGet(path, filtros),
+    refetchInterval: AUTO_REFRESH_MS,
+    refetchOnWindowFocus: true,
+    staleTime: 20000,
+    placeholderData: (prev) => prev,
+    retry: 1,
+    ...options,
+  });
+}
+
+export function useMeta() {
+  return useQuery({
+    queryKey: ['/meta'],
+    queryFn: () => apiGet('/meta'),
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
+}
+
+export function useFiltros() {
+  return useQuery({
+    queryKey: ['/filters'],
+    queryFn: () => apiGet('/filters'),
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+  });
+}
+
+export function useRefreshServidor() {
+  const qc = useQueryClient();
+  return async (group = 'hot') => {
+    await fetch(`/api/refresh?group=${group}`, { method: 'POST' });
+    await qc.invalidateQueries();
+  };
+}

@@ -1,0 +1,66 @@
+services:
+  comercial-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: comercial-dashboard:1.0.0
+    container_name: comercial-dashboard
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      TZ: America/Sao_Paulo
+      PORT: 8080
+      NODE_OPTIONS: --max-old-space-size=1024
+
+      # ---- Voalle (PostgreSQL) ----
+      DB_VOALLE_HOST: ${DB_VOALLE_HOST}
+      DB_VOALLE_DATABASE: ${DB_VOALLE_DATABASE}
+      DB_VOALLE_USER: ${DB_VOALLE_USER}
+      DB_VOALLE_PASSWORD: ${DB_VOALLE_PASSWORD}
+      DB_VOALLE_PORT: ${DB_VOALLE_PORT:-5432}
+
+      # ---- MariaDB (equipes / RH) ----
+      DB_MARIA_HOST: ${DB_MARIA_HOST}
+      DB_MARIA_DATABASE: ${DB_MARIA_DATABASE:-DB_Applicattion}
+      DB_MARIA_USER: ${DB_MARIA_USER}
+      DB_MARIA_PASSWORD: ${DB_MARIA_PASSWORD}
+      DB_MARIA_PORT: ${DB_MARIA_PORT:-3306}
+
+      # ---- login com Google e controle de acesso ----
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      ALLOWED_DOMAIN: ${ALLOWED_DOMAIN:-sebratel.com.br}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      DEV_EMAILS: ${DEV_EMAILS}
+      ACCESS_PATH: /app/data/access.json
+
+      # ---- recorte e frequência de atualização ----
+      DATA_SINCE: ${DATA_SINCE:-2024-01-01}
+      PHONE_SINCE: ${PHONE_SINCE:-2024-11-01}
+      REFRESH_HOT_MS: ${REFRESH_HOT_MS:-120000}
+      REFRESH_FULL_MS: ${REFRESH_FULL_MS:-1800000}
+      REFRESH_DIMS_MS: ${REFRESH_DIMS_MS:-900000}
+      INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-60}
+    volumes:
+      # papéis e permissões por tela sobrevivem ao recriar o container
+      - comercial-dashboard-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1.5g
+
+volumes:
+  comercial-dashboard-data:
