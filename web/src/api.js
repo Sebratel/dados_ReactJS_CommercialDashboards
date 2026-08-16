@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getToken, renovarToken } from './auth/session.jsx';
+import { encerrarSessao, getToken, renovarToken } from './auth/session.jsx';
 
 /** intervalo de auto-refresh do front (ms) */
 export const AUTO_REFRESH_MS = 60000;
@@ -47,7 +47,14 @@ export async function apiFetch(url, init = {}) {
     try {
       await renovarToken();
       res = await fetch(url, comToken());
-    } catch { /* segue com o 401 — a UI manda para o login */ }
+      // 401 depois de renovar: o token novo também não serve, então acabou
+      if (res.status === 401) encerrarSessao('expirada');
+    } catch {
+      // a renovação silenciosa falhou (sessão do Google encerrada, cookies de
+      // terceiros bloqueados). Antes o 401 só voltava para a página, que ficava
+      // no ar sem dado nenhum; agora a sessão termina e a tela volta ao login.
+      encerrarSessao('expirada');
+    }
   }
   return res;
 }
@@ -118,7 +125,9 @@ export function useFiltros() {
 export function useRefreshServidor() {
   const qc = useQueryClient();
   return async (group = 'hot') => {
-    await fetch(`/api/refresh?group=${group}`, { method: 'POST' });
+    // via apiFetch: sem o header o servidor devolvia 401 em silêncio e a
+    // atualização nunca acontecia — só o cache do front era invalidado
+    await apiFetch(`/api/refresh?group=${group}`, { method: 'POST' });
     await qc.invalidateQueries();
   };
 }

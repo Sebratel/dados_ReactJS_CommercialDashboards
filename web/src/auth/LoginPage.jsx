@@ -14,7 +14,7 @@ function MarcaGoogle() {
 }
 
 export default function LoginPage() {
-  const { config, entrar, carregando } = useSession();
+  const { config, entrar, carregando, motivoSaida } = useSession();
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -69,6 +69,13 @@ export default function LoginPage() {
               <h1>Acessar o dashboard</h1>
               <p>Entre com a sua conta Google corporativa. As telas liberadas dependem da sua permissão.</p>
             </header>
+
+            {motivoSaida === 'expirada' && !erro && (
+              <div className="login-expirou">
+                <Icone nome="relogio" tamanho={15} />
+                <span>Sua sessão expirou e você foi desconectado. Entre novamente para continuar.</span>
+              </div>
+            )}
 
             <div className="login-aviso">
               <div className="icone"><Icone nome="cadeado" tamanho={17} /></div>

@@ -68,14 +68,12 @@ export function sufixoPeriodo(filtros) {
  * fetch para levar o Bearer — navegação direta por href não manda o header.
  */
 export async function baixarDoServidor(id, filtros, { aoTerminar, aoFalhar } = {}) {
-  const { buildQuery } = await import('./api.js');
-  const { getToken } = await import('./auth/session.jsx');
+  const { apiFetch, buildQuery } = await import('./api.js');
   const qs = buildQuery(filtros);
-  const token = getToken();
   try {
-    const res = await fetch(`/api/exportar/${id}?${qs}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    // apiFetch em vez de fetch direto: renova o token em 401 e, se não der,
+    // encerra a sessão — senão a exportação falhava sozinha logo após expirar
+    const res = await apiFetch(`/api/exportar/${id}?${qs}`);
     if (!res.ok) {
       const corpo = await res.json().catch(() => ({}));
       throw new Error(corpo.error || `Erro ${res.status} ao gerar o arquivo.`);

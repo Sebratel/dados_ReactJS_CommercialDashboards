@@ -748,6 +748,15 @@ table.matrix tfoot td {
 .login-card h1 { margin: 0; font-size: 25px; letter-spacing: -0.3px; }
 .login-card header p { margin: 0; font-size: 13.5px; line-height: 1.6; color: #4d4b49; }
 
+/* sessão expirada: explica a volta ao login, senão parece queda do sistema */
+.login-expirou {
+  display: flex; gap: 9px; align-items: center;
+  border: 1px solid #EFE3C0; background: #FFFBEB; color: #6b5200;
+  border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; line-height: 1.45;
+}
+.login-expirou svg { flex: none; }
+
 .login-aviso {
   display: flex; gap: 12px; align-items: flex-start;
   border: 1px solid #EFE3C0; background: #FFFBEB;

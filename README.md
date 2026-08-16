@@ -131,6 +131,29 @@ A telefonia tem data própria porque entrou na operação depois do resto; ela n
 anterior à data inicial da base. A carga incremental (60 dias) também respeita o recorte:
 se ele for mais estreito que a janela incremental, ela é encurtada.
 
+### Expiração da sessão
+
+O token do Google dura cerca de uma hora. A sessão se renova **sozinha cinco minutos antes
+de expirar**, então quem está com a tela aberta não percebe a troca.
+
+Quando a renovação silenciosa não é possível — sessão do Google encerrada, cookies de
+terceiros bloqueados, máquina suspensa por muito tempo — a sessão é **encerrada de verdade**:
+o token é descartado, o cache de dados do front é limpo e a tela volta ao login explicando o
+motivo.
+
+> Antes, o 401 era engolido: a renovação falhava, as requisições passavam a ser recusadas e a
+> tela continuava montada com o usuário anterior — todos os números em branco e nenhum
+> caminho de volta a não ser abrir o perfil, sair e entrar na mão. O `usuario` do contexto
+> nunca era limpo, então o app não sabia que a sessão tinha acabado.
+
+O cache é descartado junto para que ninguém reencontre os números de outra conta ao entrar
+depois na mesma máquina.
+
+Todas as chamadas passam por `apiFetch`, que renova em 401 e encerra a sessão se o token novo
+também for recusado. Isso inclui as exportações e o botão ⟳ — este último fazia `fetch` sem o
+header de autorização e, com autenticação ligada, tomava 401 em silêncio: a atualização nunca
+acontecia, só o cache do front era invalidado.
+
 ### Antes do primeiro login
 
 No **Google Cloud Console → Credenciais → ID do cliente OAuth**, inclua em *Origens
