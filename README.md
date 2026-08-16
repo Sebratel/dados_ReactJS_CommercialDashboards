@@ -4,6 +4,8 @@ Réplica em React do relatório Power BI **COM - Gestão Comercial**, com os mes
 medidas, layout e paleta de cores — porém lendo os bancos em tempo quase real, sem depender
 do refresh manual do Power BI Service.
 
+Ok
+
 O arquivo `.pbip` de origem não é versionado aqui; ele continua com o time de BI e serviu
 como especificação da réplica (as consultas e medidas equivalentes estão documentadas abaixo).
 
