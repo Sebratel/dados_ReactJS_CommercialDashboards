@@ -60,7 +60,7 @@ export const VISUAIS = {
   'ativacoes:serie': {
     tela: 'ativacoes',
     titulo: 'Total de ativações por período',
-    oQueE: 'Instalações concluídas por período, com valor associado.',
+    oQueE: 'Instalações concluídas por período, com as colunas separadas por tecnologia. O relatório antigo em Power BI não contabiliza a telefonia, então só a parte de fibra e rádio é comparável com ele.',
     recorte: (p) => ({ kpis: p.kpis, granularidade: p.granularidade, serie: serieEnxuta(p.serie) }),
   },
   'ativacoes:porCanal': {

@@ -8,7 +8,7 @@
  */
 import {
   DATE_FIELD, groupCount, matriz, mediaPonderada, porVendedor, premiacoes, rampagem,
-  rows, serie, serieDiaria, serieDiariaPorTecnologia, soma,
+  rows, serie, serieDiaria, serieDiariaPorTecnologia, seriePorTecnologia, soma,
 } from './measures.js';
 import { monthKey, today } from './dates.js';
 
@@ -81,14 +81,23 @@ export function painelVendas(flt, g) {
 
 export function painelAtivacoes(flt, g) {
   const ativos = rows('ativos', flt);
+  const porTec = seriePorTecnologia(ativos, 'dtAtiv', g);
+  const totalTelefonia = ativos.reduce((a, f) => a + (f.tecnologia === 'TELEFONIA' ? 1 : 0), 0);
+
   return {
     kpis: {
       totalAtivos: ativos.length,
       mediaAtivos: mediaPonderada(ativos, 'dtAtiv'),
       valor: soma(ativos),
+      // o relatório do Power BI não mostra a telefonia; separar aqui deixa o
+      // total reconciliável com ele sem precisar refazer a conta na mão
+      totalTelefonia,
+      totalFibraRadio: ativos.length - totalTelefonia,
     },
     granularidade: g,
-    serie: serie(ativos, 'dtAtiv', g).map((m) => ({ periodo: m.periodo, ativacoes: m.qtd, valor: m.valor })),
+    // `ativacoes` é o mesmo que `total`, mantido porque a série já era consumida
+    // com esse nome pelo gráfico e pelas exportações
+    serie: porTec.map((m) => ({ ...m, ativacoes: m.total })),
     porCanal: groupCount(ativos, (f) => f.canal || '(sem canal)', { limit: 12 }),
     porCidade: groupCount(ativos, (f) => f.cidade, { limit: 15 }),
     porVendedor: porVendedor(ativos, 'dtAtiv'),

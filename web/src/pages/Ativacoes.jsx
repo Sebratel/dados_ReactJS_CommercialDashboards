@@ -2,8 +2,8 @@ import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBar } from '../components/SlicerBar';
 import { Granularidade } from '../components/Granularidade';
-import { BotaoExportar, Erro, KpiStack, Loading, Visual } from '../components/ui';
-import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
+import { BotaoExportar, Erro, KpiStack, Legenda, Loading, Visual } from '../components/ui';
+import { BarrasHorizontais, ColunasPorTecnologia, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { dec1, int, labelPeriodo } from '../format';
 import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
@@ -29,11 +29,21 @@ export default function Ativacoes() {
       <div className="grid linha-principal">
         <Visual
           title={`TOTAL ATIVOS / ${filtros.g === 'dia' ? 'DIA' : 'MÊS'}`}
+          sub="o rótulo é o total; a telefonia aparece separada porque o Power BI não a contabiliza"
           ia="ativacoes:serie"
           actions={<Granularidade />}
         >
           {isLoading && !data ? <Loading /> : (
-            <ComboChart data={serie} barKey="ativacoes" barName="ATIVAÇÕES" />
+            <>
+              <Legenda itens={[
+                { label: 'FIBRA', cor: CORES.goldSoft },
+                { label: 'RÁDIO', cor: CORES.ink },
+                { label: 'TELEFONIA', cor: CORES.orangeSoft },
+              ]} />
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <ColunasPorTecnologia data={serie} />
+              </div>
+            </>
           )}
         </Visual>
 
@@ -41,6 +51,8 @@ export default function Ativacoes() {
           <KpiStack itens={[
             { label: 'MEDIA ATIVOS / DIA', value: dec1(data?.kpis?.mediaAtivos || 0) },
             { label: 'TOTAL ATIVOS', value: int(data?.kpis?.totalAtivos || 0) },
+            { label: 'FIBRA E RÁDIO', value: int(data?.kpis?.totalFibraRadio || 0), small: true },
+            { label: 'TELEFONIA', value: int(data?.kpis?.totalTelefonia || 0), small: true },
           ]} />
         </div>
 

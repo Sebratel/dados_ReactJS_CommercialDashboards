@@ -264,6 +264,57 @@ marcações de eixo espaçadas.
 
 ## 6. Diferenças propositais em relação ao Power BI
 
+### Ativações: a telefonia que o relatório antigo não conta
+
+O Power BI define a data de ativação assim (Power Query, tabela `general`):
+
+```
+DATA ATIVAÇÃO = if [TECNOLOGIA] = "TELEFONIA" then [DATA ATIVAÇÃO TELEFONIA]
+                                              else [DATA ATIVAÇÃO FIBRA]
+```
+
+Ou seja: a fórmula manda contar a ativação de telefonia. **A tela dele, porém, não as
+mostra** — em junho/2026 o relatório exibe 2.595 e o dashboard, 2.674.
+
+Replicando o pipeline do relatório em SQL independente, a definição dele produz **81
+ativações de telefonia em junho e 71 em julho**, exatamente o que o dashboard apura. A
+implementação aqui é fiel à fórmula; o número exibido no Power BI é que diverge da própria
+definição. Foram descartadas, com evidência: defasagem de carga (os registros foram criados
+no mês corrente, não em backfill), incompatibilidade de tipo no merge (`contract_number` é
+`varchar` e `protocol` é `bigint` dos dois lados), filtro de tecnologia salvo no visual e
+relação inativa no modelo. A causa do comportamento em tempo de execução do Power BI não é
+determinável a partir dos arquivos do `.pbip`.
+
+Decisão: **manter a contagem completa e separar as faixas no gráfico.** As colunas de
+Ativações vêm empilhadas por tecnologia e os KPIs trazem `FIBRA E RÁDIO` e `TELEFONIA` em
+separado, então o total continua correto e a parte comparável ao relatório antigo é lida
+direto, sem refazer conta.
+
+Resta uma diferença de **-2 (junho) e -6 (julho)** na fibra. Ela vem de outro ponto: a
+consulta de alocação do Power BI **não agrega** — devolve uma linha por equipamento — e o
+`Table.Distinct` posterior fica com a *primeira* linha de cada contrato, que depende da ordem
+em que o banco devolveu. Aqui usamos `MIN(data_ativacao)`, que é determinístico. Perseguir
+esses 2-6 contratos significaria replicar uma ordenação arbitrária.
+
+> Uma nota sobre a consulta de telefonia: o `WHERE` do relatório é `t.title <> 'Financeiro'`,
+> e como `t` vem de `LEFT JOIN`, a comparação é NULL quando o atendimento não tem time —
+> essas linhas ficam de fora. Escrever `t.title IS NULL OR ...` parece o conserto de um
+> descuido de lógica ternária, mas muda a medida. A réplica aqui é literal.
+
+### Premiações: só quem está ativo
+
+O corte do Senior (`termination_date IS NULL`) é o mesmo do relatório e vale para todas as
+telas. Ele não basta para a premiação: **quem é recontratado ganha um registro novo em
+aberto** e volta a aparecer, mesmo já fora da operação comercial.
+
+Por isso a tela de Premiações — e só ela — exige também `ATIVO` na `Comercial_Teams`. É uma
+divergência proposital: o relatório antigo não usa essa coluna. A justificativa é que
+premiação é dinheiro a pagar, e quem foi desligado não pode concorrer.
+
+Quem tem demissão antiga **e** readmissão em aberto continua aparecendo — está empregado
+hoje.
+
+
 1. **Layout responsivo que cabe em uma tela**, em vez da tela fixa de 1920×1125.
 
    A altura de cada visual é derivada da área útil da janela:

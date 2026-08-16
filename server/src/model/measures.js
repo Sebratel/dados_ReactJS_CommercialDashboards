@@ -168,6 +168,32 @@ export function serieDiariaPorTecnologia(list, field) {
   return [...map.values()].sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
+/**
+ * Série por período com as colunas separadas por tecnologia.
+ *
+ * Existe por causa da divergência com o Power BI nas ativações: a fórmula do
+ * relatório manda contar a ativação de telefonia, mas a tela dele não as mostra.
+ * Separando as faixas, o total continua completo e a parte de fibra/rádio fica
+ * diretamente comparável ao relatório antigo, sem esconder nem inflar nada.
+ */
+export function seriePorTecnologia(list, field, granularidade = 'mes') {
+  const map = new Map();
+  for (const f of list) {
+    const d = f[field];
+    if (!d) continue;
+    const periodo = granularidade === 'dia' ? d : monthKey(d);
+    const cur = map.get(periodo) || {
+      periodo, FIBRA: 0, 'RÁDIO': 0, TELEFONIA: 0, total: 0, valor: 0,
+    };
+    const tec = f.tecnologia in cur ? f.tecnologia : 'FIBRA';
+    cur[tec] += 1;
+    cur.total += 1;
+    cur.valor += Number(f.valor) || 0;
+    map.set(periodo, cur);
+  }
+  return [...map.values()].sort((a, b) => a.periodo.localeCompare(b.periodo));
+}
+
 /** Tabela por vendedor com total, média/dia, equipe e sparkline mensal. */
 export function porVendedor(list, field, { sparkBy = 'mes' } = {}) {
   const map = new Map();
@@ -313,6 +339,12 @@ export function premiacoes(flt) {
   for (const [nome, seller] of state.sellersByName) {
     const team = state.teamsByName.get(nome);
     if (!team) continue;
+    // Diferença proposital em relação ao Power BI: só entra quem está marcado
+    // ATIVO na Comercial_Teams. O corte do Senior (termination_date IS NULL) já
+    // vale para todas as telas, mas quem foi recontratado volta a ter registro
+    // em aberto e reaparecia aqui mesmo estando fora da operação comercial.
+    // Premiação é dinheiro a pagar: o desligado não pode concorrer.
+    if (!team.ativo) continue;
     if (flt.vendedor && !flt.vendedor.includes(nome)) continue;
     if (flt.equipe && !flt.equipe.includes(team.equipe)) continue;
     if (flt.situacao && !flt.situacao.includes(team.situacao)) continue;

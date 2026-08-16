@@ -12,5 +12,10 @@ LEFT JOIN incident_types it         ON it.id  = ai.incident_type_id
 LEFT JOIN teams t                   ON t.id   = r.team_id
 WHERE it.id IN ('275', '1011')
   AND c.created > $1
-  AND (t.title IS NULL OR t.title <> 'Financeiro')
+  -- Réplica literal do BI: `t.title <> 'Financeiro'`. Como t vem de LEFT JOIN,
+  -- a comparação é NULL (não verdadeira) quando o atendimento não tem time, e
+  -- essas linhas ficam de fora. Escrever `t.title IS NULL OR ...` pareceria o
+  -- conserto de um descuido de lógica ternária, mas muda a medida: passa a
+  -- contar ativações de telefonia que o relatório de referência não conta.
+  AND t.title <> 'Financeiro'
 GROUP BY ai.protocol, c.contract_number
