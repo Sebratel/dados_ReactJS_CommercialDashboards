@@ -1,5 +1,7 @@
 # COM · Gestão Comercial — dashboard React
 
+ok
+
 Réplica em React do relatório Power BI **COM - Gestão Comercial**, com os mesmos gráficos,
 medidas, layout e paleta de cores — porém lendo os bancos em tempo quase real, sem depender
 do refresh manual do Power BI Service.
