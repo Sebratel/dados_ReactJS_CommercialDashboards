@@ -161,6 +161,98 @@ export function granularidadeHistorico(query, flt) {
   return dias > 62 ? 'mes' : 'dia';
 }
 
+
+/**
+ * VENDAS CANCELADAS — réplica da tela única do relatório "COM - Vendas Canceladas".
+ *
+ * O recorte é dado pelos dois filtros de página daquele relatório: contrato
+ * cancelado E sem data de ativação, ou seja, a venda que se perdeu antes de
+ * virar instalação. Contrato cancelado depois de ativado não entra aqui.
+ *
+ * Duas fidelidades que exigiram atenção:
+ *
+ * 1. Aquele relatório não considera os tipos de atendimento #HR (1254/1255), ao
+ *    contrário do resto do modelo. Em vez de uma segunda carga da base inteira
+ *    para 0,2% dos contratos, `base.sql` marca quem tem algum atendimento da
+ *    lista dele e o filtro usa essa marca — mesmo conjunto, sem custo extra.
+ *
+ * 2. O filtro de período do relatório é a DATA DO CONTRATO, mas o gráfico mensal
+ *    agrupa por CADASTRO DO CLIENTE. As duas só coincidem em 70% dos casos, então
+ *    a diferença é real; mantemos como está lá e dizemos no título do visual qual
+ *    data cada um usa.
+ */
+export function painelCanceladas(flt) {
+  const canceladas = rows('vendas', flt).filter(
+    (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao,
+  );
+
+  // Duas séries, e a razão é prática: o relatório agrupa por cadastro do cliente,
+  // mas o cliente pode ter se cadastrado anos antes de fechar o contrato. Num
+  // único mês de vendas isso espalha o gráfico por 47 meses, quase todos com uma
+  // barra de valor 1 e um pico no fim — ilegível. A série por data da venda é a
+  // coerente com o filtro de período e vira o padrão; a do cadastro fica a um
+  // clique, para quem precisa conferir contra o Power BI.
+  const agrupar = (campo) => {
+    const m = new Map();
+    for (const f of canceladas) {
+      const d = f[campo];
+      const k = d ? monthKey(d) : '(sem data)';
+      const cur = m.get(k) || { periodo: k, canceladas: 0, valor: 0 };
+      cur.canceladas += 1;
+      cur.valor += Number(f.valor) || 0;
+      m.set(k, cur);
+    }
+    return [...m.values()].sort((a, b) => a.periodo.localeCompare(b.periodo));
+  };
+
+  // "por valor": mesma ideia dos planos, agrupando pelo valor do contrato
+  const porValor = new Map();
+  for (const f of canceladas) {
+    const v = Number(f.valor) || 0;
+    const cur = porValor.get(v) || { valor: v, qtd: 0 };
+    cur.qtd += 1;
+    porValor.set(v, cur);
+  }
+
+  const detalhe = canceladas
+    .slice()
+    .sort((a, b) => (b.dtVenda || '').localeCompare(a.dtVenda || ''))
+    .slice(0, 2000)
+    .map((f) => ({
+      dtVenda: f.dtVenda,
+      horaVenda: f.horaVenda,
+      contrato: f.contrato,
+      cliente: f.cliente,
+      cidade: f.cidade,
+      vendedor: f.vendedor,
+      situacao: f.situacao,
+      statusContrato: f.statusContrato,
+      statusCancelamento: f.statusCancelamento,
+      valor: f.valor,
+      tecnologia: f.tecnologia,
+    }));
+
+  return {
+    kpis: {
+      total: canceladas.length,
+      valor: soma(canceladas),
+      ticketMedio: canceladas.length ? soma(canceladas) / canceladas.length : 0,
+    },
+    serie: agrupar('dtVenda'),
+    serieCadastro: agrupar('dtCadastroCliente'),
+    porMotivo: groupCount(canceladas, (f) => f.statusCancelamento || '(sem motivo informado)', { limit: 20 }),
+    porCidade: groupCount(canceladas, (f) => f.cidade, { limit: 20 }),
+    porTecnologia: groupCount(canceladas, (f) => f.tecnologia),
+    porEquipe: groupCount(canceladas, (f) => f.equipe || '(sem equipe)', { limit: 20 }),
+    porSituacao: groupCount(canceladas, (f) => f.situacao || '(sem situação)'),
+    porVendedor: groupCount(canceladas, (f) => f.vendedor, { limit: 30 }),
+    porTipo: groupCount(canceladas, (f) => f.tipoSolicitacao || '(sem tipo)'),
+    porValor: [...porValor.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 25),
+    detalhe,
+    detalheTotal: canceladas.length,
+  };
+}
+
 /** Um painel por id de tela — usado pelo motor de insights. */
 export const PAINEIS = {
   diretoria: (flt, g) => painelDiretoria(flt, g),
@@ -169,6 +261,7 @@ export const PAINEIS = {
   'primeiro-pagamento': (flt, g) => painelPrimeiroPagamento(flt, g),
   rampagem: (flt, g) => rampagem(flt, g),
   premiacoes: (flt) => premiacoes(flt),
+  'vendas-canceladas': (flt) => painelCanceladas(flt),
   'vendas-historico': (flt) => painelHistorico('vendas', flt, granularidadeHistorico(null, flt)),
   'ativacoes-historico': (flt) => painelHistorico('ativos', flt, granularidadeHistorico(null, flt)),
 };

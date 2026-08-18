@@ -15,7 +15,9 @@ SELECT
     contrato,
     valor::float8                    AS valor,
     canal,
-    tecnologia
+    tecnologia,
+    tipo_solicitacao,
+    tem_tipo_padrao
 FROM (
     SELECT
         ai.protocol            AS protocolo,
@@ -28,6 +30,12 @@ FROM (
         c.v_status             AS status_contrato,
         c.contract_number      AS contrato,
         c.amount               AS valor,
+        it.title               AS tipo_solicitacao,
+        -- O relatório de Vendas Canceladas não considera os tipos #HR (1254/1255).
+        -- Marcando aqui quais contratos têm algum atendimento fora deles, aquela
+        -- tela reproduz o recorte exato sem precisar de uma segunda carga da base.
+        bool_or(it.id IN ('12', '1014', '1136', '249', '275', '1011', '1015'))
+             OVER (PARTITION BY c.contract_number) AS tem_tipo_padrao,
         c.cancellation_motive  AS status_cancelamento,
         isc.title              AS canal,
         CASE

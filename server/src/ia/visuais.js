@@ -126,6 +126,38 @@ export const VISUAIS = {
     recorte: (p) => ({ dataRef: p.dataRef, total: p.kpis?.novatos, novatos: topo(p.novatos, 60) }),
   },
 
+  // ------------------------------------------------------ vendas canceladas
+  'vendas-canceladas:serie': {
+    tela: 'vendas-canceladas',
+    titulo: 'Vendas canceladas por mês',
+    oQueE: 'Contratos cancelados que nunca foram ativados, agrupados pelo mês de CADASTRO DO CLIENTE (é assim no relatório de origem), enquanto o filtro de período usa a data do contrato.',
+    recorte: (p) => ({ kpis: p.kpis, serie: serieEnxuta(p.serie) }),
+  },
+  'vendas-canceladas:motivo': {
+    tela: 'vendas-canceladas',
+    titulo: 'Motivo do cancelamento',
+    oQueE: 'Justificativa registrada no cancelamento. Motivo vazio significa cancelamento sem justificativa preenchida, não ausência de motivo.',
+    recorte: (p) => ({ total: p.kpis?.total, porMotivo: topo(p.porMotivo, 20) }),
+  },
+  'vendas-canceladas:vendedor': {
+    tela: 'vendas-canceladas',
+    titulo: 'Cancelamentos por vendedor',
+    oQueE: 'Quem mais perdeu venda antes da instalação. Quem vende mais tende a cancelar mais em número absoluto.',
+    recorte: (p) => ({ total: p.kpis?.total, porVendedor: topo(p.porVendedor, 30) }),
+  },
+  'vendas-canceladas:cidade': {
+    tela: 'vendas-canceladas',
+    titulo: 'Cancelamentos por cidade',
+    oQueE: 'Onde a venda se perde antes de virar instalação.',
+    recorte: (p) => ({ total: p.kpis?.total, porCidade: topo(p.porCidade, 20) }),
+  },
+  'vendas-canceladas:tipo': {
+    tela: 'vendas-canceladas',
+    titulo: 'Cancelamentos por tipo de atendimento',
+    oQueE: 'Tipo de solicitação registrado no atendimento que originou o contrato.',
+    recorte: (p) => ({ total: p.kpis?.total, porTipo: topo(p.porTipo, 12), porTecnologia: topo(p.porTecnologia, 6) }),
+  },
+
   // ------------------------------------------------------------ premiações
   'premiacoes:pagantes': {
     tela: 'premiacoes',

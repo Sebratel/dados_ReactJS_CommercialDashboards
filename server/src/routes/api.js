@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { getState, isReady } from '../model/store.js';
 import { parseFilters, parseGranularidade, premiacoes, rampagem } from '../model/measures.js';
 import {
-  granularidadeHistorico, painelAtivacoes, painelDiretoria, painelHistorico,
-  painelPrimeiroPagamento, painelVendas,
+  granularidadeHistorico, painelAtivacoes, painelCanceladas, painelDiretoria,
+  painelHistorico, painelPrimeiroPagamento, painelVendas,
 } from '../model/paineis.js';
 import { today } from '../model/dates.js';
 import { refreshAll, refreshGroup } from '../etl/refresh.js';
@@ -114,6 +114,11 @@ api.get('/historico/:dataset', authHistorico, (req, res) => {
 // ---------------------------------------------------------------- RAMPAGEM
 api.get('/rampagem', auth('rampagem'), (req, res) => {
   res.json(withMeta(rampagem(parseFilters(req.query), parseGranularidade(req.query))));
+});
+
+// -------------------------------------------------------- VENDAS CANCELADAS
+api.get('/canceladas', auth('vendas-canceladas'), (req, res) => {
+  res.json(withMeta(painelCanceladas(parseFilters(req.query))));
 });
 
 // -------------------------------------------------------------- PREMIAÇÕES

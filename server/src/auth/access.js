@@ -43,6 +43,7 @@ export const TELAS = [
   { id: 'vendas-historico', label: 'Vendas - Histórico', rota: '/vendas-historico', descricao: 'Matriz de vendas por vendedor' },
   { id: 'rampagem', label: 'Rampagem', rota: '/rampagem', descricao: 'Vendedores nos primeiros 90 dias' },
   { id: 'premiacoes', label: 'Premiações', rota: '/premiacoes', descricao: 'Faixas e valores de premiação (dado sensível)' },
+  { id: 'vendas-canceladas', label: 'Vendas Canceladas', rota: '/vendas-canceladas', descricao: 'Contratos cancelados que nunca chegaram a ser ativados' },
   { id: 'preditivo', label: 'Análise Preditiva', rota: '/preditivo', descricao: 'Projeções, carteira em risco e leitura por IA' },
 ];
 

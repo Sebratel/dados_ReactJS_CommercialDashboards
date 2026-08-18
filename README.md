@@ -93,7 +93,7 @@ tocar no papel. Quem vem de `DEV_EMAILS` aparece cadeado — a tela não rebaixa
 
 ### Acesso por tela
 
-Em **Configurações → Acesso por tela** cada uma das 10 telas aparece em uma linha da tabela
+Em **Configurações → Acesso por tela** cada uma das 11 telas aparece em uma linha da tabela
 com o modo de acesso e as pessoas liberadas:
 
 * **Todos** — qualquer conta do domínio;
@@ -324,6 +324,37 @@ esses 2-6 contratos significaria replicar uma ordenação arbitrária.
 > essas linhas ficam de fora. Escrever `t.title IS NULL OR ...` parece o conserto de um
 > descuido de lógica ternária, mas muda a medida. A réplica aqui é literal.
 
+### Vendas canceladas: uma segunda origem, sem segunda carga
+
+A tela vem do relatório **COM - Vendas Canceladas**, que é um `.pbip` separado com uma única
+página. O recorte é dado pelos dois filtros de página dele: contrato **cancelado** e **sem
+data de ativação** — a venda perdida antes de virar instalação.
+
+A consulta daquele relatório é 95% igual à `general` do principal, com três diferenças:
+
+| | |
+|---|---|
+| **Tipos de atendimento** | ele não considera os `#HR` (1254/1255) |
+| **Coluna a mais** | `TIPO SOLICITAÇÃO` (`it.title`) |
+| **Tabela anexada** | `Table.Combine` com `DB_Applicattion.General_Commercial` (MariaDB, 55 mil linhas de 2022-2024) |
+
+A tabela anexada **não tem a coluna `STATUS CONTRATO`**, então o filtro `= 'Cancelado'` a
+descarta inteira: ela não influencia esta tela e não foi replicada.
+
+A diferença de tipos vale 74 contratos em 36 mil (0,2%). Em vez de uma segunda carga da base
+inteira por causa disso, `base.sql` marca em `tem_tipo_padrao` quem tem algum atendimento da
+lista daquele relatório, e a tela filtra por essa marca — mesmo conjunto, sem custo de ETL.
+`TIPO SOLICITAÇÃO` entrou como mais uma coluna da mesma consulta.
+
+> **Duas datas.** No relatório de origem o filtro de período usa a **data do contrato**, mas o
+> gráfico mensal agrupa por **cadastro do cliente** — e as duas só coincidem em 70% dos casos.
+> Como o cliente pode ter se cadastrado anos antes de fechar, o agrupamento original espalha
+> um único mês de vendas por 47 barras, quase todas valendo 1. A tela abre pela data da venda
+> (coerente com o filtro) e o agrupamento do Power BI fica no alternador do cabeçalho.
+
+Cabem duas faixas na tela; o detalhamento fica abaixo, como amostra rolável, com o CSV
+completo ao lado.
+
 ### Premiações: só quem está ativo
 
 O corte do Senior (`termination_date IS NULL`) é o mesmo do relatório e vale para todas as
@@ -397,6 +428,7 @@ hoje.
 | `GET /api/primeiro-pagamento` | cartões, série, planos, detalhe |
 | `GET /api/historico/:vendas\|ativos` | matriz vendedor × dia |
 | `GET /api/rampagem` | novatos < 90 dias |
+| `GET /api/canceladas` | vendas canceladas sem ativação |
 | `GET /api/premiacoes` | faixas de premiação |
 | `POST /api/refresh?group=hot\|full\|dims` | força releitura |
 | `GET /api/auth/config` | client_id do Google e domínio (público) |

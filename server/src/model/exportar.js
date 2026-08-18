@@ -73,6 +73,19 @@ export const CONJUNTOS = {
     ]),
     linhas: (flt) => rows('pagantes', flt).sort((a, b) => (b.dtPagto || '').localeCompare(a.dtPagto || '')),
   },
+  'vendas-canceladas': {
+    titulo: 'Vendas canceladas',
+    descricao: 'Contratos cancelados que nunca chegaram a ser ativados, com o motivo do cancelamento e o tipo de atendimento.',
+    tela: 'vendas-canceladas',
+    arquivo: 'vendas-canceladas',
+    colunas: () => contrato([
+      { titulo: 'TIPO SOLICITAÇÃO', valor: (f) => f.tipoSolicitacao || '' },
+      { titulo: 'HORA DA VENDA', valor: (f) => f.horaVenda || '' },
+    ]),
+    linhas: (flt) => rows('vendas', flt)
+      .filter((f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao)
+      .sort((a, b) => (b.dtVenda || '').localeCompare(a.dtVenda || '')),
+  },
   'premiacoes-pagantes': {
     titulo: 'Premiações — mais de 60 dias',
     descricao: 'Faixa e valor de premiação por vendedor, calculados sobre os primeiros pagamentos do período.',
