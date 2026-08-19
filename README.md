@@ -127,6 +127,25 @@ O ACL de tela responde *quais telas* alguém abre. O escopo responde *qual fatia
 e as duas são perguntas independentes de propósito. Na matriz, a coluna **Equipes** define o
 escopo: nenhuma marcada significa "vê tudo".
 
+> **O escopo vale no dashboard INTEIRO, não na tela onde foi configurado.** Marcar equipes
+> para alguém recorta todas as visões por equipe de **todas** as telas — Diretoria, Vendas,
+> Vendas Histórico, Ativações, Ativações Histórico, Rampagem, Premiações, Vendas Canceladas e
+> Análise Preditiva — mais as exportações e a leitura de IA. Não existe escopo "só de uma
+> tela": ele é atributo da pessoa. A interface repete isso em três lugares (introdução da aba,
+> seletor de equipes e legenda) porque é a confusão mais provável de quem configura.
+
+**Para quem serve.** Quem acessa é o **líder**, não o vendedor — a relação é 1 líder para N
+equipes, não 1 para 1. O líder não precisa existir na `Comercial_Teams` como pessoa: o recorte
+é amarrado ao e-mail dele, independente de ele aparecer na base como vendedor.
+
+> **Por que a marcação é manual.** O Senior tem as colunas `supervisor_name`,
+> `coordinator_name` e `manager_name`, que permitiriam derivar as equipes de cada líder
+> automaticamente — mas elas estão **vazias** (0 preenchidos em 644 ativos). O campo `team` de
+> lá também não serve: tem 3 valores (`ADM`, `SVA`, `SCM`), nenhum deles correspondendo às 36
+> equipes da `Comercial_Teams`. Enquanto o RH não alimentar a hierarquia, marcar à mão é o
+> único caminho honesto — inferir liderança pelo cargo erraria em silêncio. São ~19 líderes,
+> não 100 vendedores.
+
 O escopo é propriedade do cargo, não da tela: quem cuida das equipes X, Y e Z cuida delas em
 Vendas, Ativações e Premiações igualmente. Por isso ele vale em **todas** as telas — pendurá-lo
 em cada uma viraria tela × equipe × pessoa, que é o desenho que não se sustenta.

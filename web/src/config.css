@@ -57,16 +57,28 @@
 }
 
 /* --- matriz pessoas x telas --- */
-.matriz-wrap { max-height: 420px; }
+.matriz-wrap { max-height: 460px; }
+
+/*
+ * `table-layout: fixed` porque a distribuição automática dava 478px de 1400 para
+ * a coluna de e-mail (34% da tabela para um texto de ~260px) e deixava as onze
+ * colunas de tela apertadas em 74px. Com largura fixa nas duas primeiras, as de
+ * tela dividem o resto em partes iguais e ganham ~90px cada.
+ */
+table.pbi.matriz { table-layout: fixed; }
 
 table.pbi.matriz th.col-tela,
-table.pbi.matriz td.col-tela { text-align: center; width: 74px; padding: 4px 2px; }
+table.pbi.matriz td.col-tela { text-align: center; padding: 5px 2px; }
 
 table.pbi.matriz th.col-pessoa,
 table.pbi.matriz td.col-pessoa {
   position: sticky; left: 0; z-index: 2;
-  background: #fff; min-width: 250px;
+  background: #fff; width: 296px;
   box-shadow: 1px 0 0 var(--pbi-grid);
+}
+/* com largura fixa o e-mail longo precisa de corte, mas o title mantém o valor */
+table.pbi.matriz td.col-pessoa .mt-email {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 table.pbi.matriz thead th.col-pessoa { z-index: 3; background: var(--pbi-primary); }
 
@@ -103,8 +115,8 @@ table.pbi.matriz tr.linha-nova td { background: #FFFDF5; }
 /* escopo de dados na matriz: outra dimensão, por isso não é caixa de marcação */
 table.pbi.matriz th.col-escopo,
 table.pbi.matriz td.col-escopo {
-  text-align: center; width: 108px; padding: 4px 6px;
-  position: sticky; left: 250px; z-index: 2; background: #fff;
+  text-align: center; width: 116px; padding: 4px 6px;
+  position: sticky; left: 296px; z-index: 2; background: #fff;
   box-shadow: 1px 0 0 var(--pbi-grid);
 }
 table.pbi.matriz thead th.col-escopo { z-index: 3; background: var(--pbi-primary); }

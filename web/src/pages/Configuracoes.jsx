@@ -240,8 +240,12 @@ function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
             ))}
           </div>
           <p className="esc-nota">
-            Nenhuma marcada = vê todas. O recorte vale em todas as telas, e registro
-            sem equipe fica de fora.
+            <b>Vale no dashboard inteiro.</b> Marcar equipes aqui recorta todas as visões
+            por equipe de todas as telas — Diretoria, Vendas, Ativações, Rampagem,
+            Premiações, Canceladas, Preditiva e as exportações. Não é filtro de uma tela.
+          </p>
+          <p className="esc-nota">
+            Nenhuma marcada = vê todas. Registro sem equipe fica de fora do recorte.
           </p>
         </div>
       )}
@@ -331,10 +335,12 @@ function AbaTelas() {
       {erro && <Erro erro={erro} />}
 
       <p className="cfg-nota">
-        Duas perguntas diferentes na mesma tabela: as colunas de tela dizem <b>quais telas</b> a
-        pessoa abre; a coluna <b>Equipes</b> diz <b>qual fatia dos dados</b> ela enxerga — e essa
-        vale em todas as telas. Tudo grava na hora. Coluna em <b>todos</b> vale para qualquer
-        conta do domínio, então aparece preenchida e sem caixa.
+        Duas perguntas diferentes na mesma tabela. As colunas de tela dizem <b>quais telas</b> a
+        pessoa abre. A coluna <b>Equipes</b> diz <b>qual fatia dos dados</b> ela enxerga, e essa
+        <b> vale no dashboard inteiro</b>: recorta todas as visões por equipe de todas as telas,
+        além das exportações e da leitura de IA — não é um filtro de uma tela só. Tudo grava na
+        hora. Coluna em <b>todos</b> vale para qualquer conta do domínio, então aparece
+        preenchida e sem caixa.
       </p>
 
       <div className="cfg-form">
@@ -363,7 +369,7 @@ function AbaTelas() {
           <thead>
             <tr>
               <th className="left col-pessoa">Pessoa</th>
-              <th className="col-escopo" title="Equipes que a pessoa enxerga, em todas as telas">Equipes</th>
+              <th className="col-escopo" title="Recorte de dados: vale no dashboard inteiro, não em uma tela só">Equipes</th>
               {telas.map((t) => (
                 <th key={t.id} className="col-tela" title={`${t.label} — ${t.descricao}`}>
                   <span className="mt-nome">{t.curto || t.label}</span>
@@ -385,10 +391,12 @@ function AbaTelas() {
           <tbody>
             {linhas.map((p) => (
               <tr key={p.email} className={p.novo ? 'linha-nova' : ''}>
-                <td className="left col-pessoa">
-                  {p.email}
-                  {p.email === usuario?.email && <span className="cfg-tag">você</span>}
-                  {p.papel !== 'viewer' && <span className="cfg-tag">{PAPEL_LABEL[p.papel]}</span>}
+                <td className="left col-pessoa" title={p.email}>
+                  <span className="mt-email">
+                    {p.email}
+                    {p.email === usuario?.email && <span className="cfg-tag">você</span>}
+                    {p.papel !== 'viewer' && <span className="cfg-tag">{PAPEL_LABEL[p.papel]}</span>}
+                  </span>
                 </td>
                 <td className="col-escopo">
                   <SeletorEscopo
@@ -453,6 +461,12 @@ function AbaTelas() {
           Tela restrita <b>sem ninguém marcado</b> fica só para administradores. É estado válido:
           antes, tirar a última pessoa devolvia a tela ao domínio inteiro, ou seja, uma remoção
           de acesso acabava ampliando o acesso.
+        </li>
+        <li>
+          <b>Equipes (escopo de dados):</b> recorta o dashboard <b>inteiro</b> para aquela pessoa,
+          não a tela em que foi configurado. Serve para líder ver as equipes que responde. Quem
+          tem recorte enxerga um selo na barra de filtros com as equipes que alcança, e o total
+          dele nunca fecha com o total geral — inclusive porque contrato sem equipe fica de fora.
         </li>
         <li>
           O backend confere a permissão <b>em cada endpoint</b>, não só na navegação: esconder o
