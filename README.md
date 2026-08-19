@@ -453,6 +453,18 @@ procurava a tabela onde ela não estava.
 As larguras da faixa de seis também vêm de lá: vendedor mais largo que as outras cinco,
 porque nome de vendedor é o rótulo mais longo da faixa.
 
+**O que os indicadores medem.** O nome de um KPI raramente basta, então cada um traz uma
+linha de descrição e o detalhe completo no `title`:
+
+| Indicador | O que é |
+|---|---|
+| Vendas canceladas | contratos cancelados sem nunca ter sido ativados, no período filtrado pela data da venda |
+| Valor perdido | **soma do valor mensal** dos planos que não entraram — é a receita recorrente que deixou de começar, uma parcela, não a perda acumulada ao longo do tempo |
+| Ticket médio | valor perdido dividido pela quantidade de contratos |
+
+A distinção do valor perdido importa: sem ela, R$ 683 mil é lido como prejuízo total quando
+é a soma de mensalidades. A perda real dependeria de quanto cada cliente teria ficado.
+
 **As cores da tabela principal são a formatação condicional do relatório**, lida de
 `objects.values` no `visual.json` — não escolhidas aqui:
 

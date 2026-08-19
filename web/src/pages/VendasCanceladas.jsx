@@ -104,9 +104,26 @@ export default function VendasCanceladas() {
           no nosso caso vivem no topo da página), mas o total e o valor perdido são
           a primeira pergunta de quem abre a tela — cabem numa faixa fina */}
       <div className="kpi-faixa">
-        <Kpi value={int(data?.kpis?.total || 0)} label="VENDAS CANCELADAS" />
-        <Kpi value={brl(data?.kpis?.valor || 0)} label="VALOR PERDIDO" small />
-        <Kpi value={brl(data?.kpis?.ticketMedio || 0)} label="TICKET MÉDIO" small />
+        <Kpi
+          value={int(data?.kpis?.total || 0)}
+          label="VENDAS CANCELADAS"
+          desc="contratos cancelados sem nunca ter sido ativados"
+          title="Contagem de contratos no período filtrado (pela data da venda) com status Cancelado e sem data de ativação."
+        />
+        <Kpi
+          value={brl(data?.kpis?.valor || 0)}
+          label="VALOR PERDIDO"
+          small
+          desc="soma do valor mensal dos planos que não entraram"
+          title="Soma do valor do contrato, que é a mensalidade do plano. É a receita recorrente que deixou de começar — uma parcela, não a perda acumulada ao longo do tempo, que dependeria de quanto cada cliente teria ficado."
+        />
+        <Kpi
+          value={brl(data?.kpis?.ticketMedio || 0)}
+          label="TICKET MÉDIO"
+          small
+          desc="mensalidade média por contrato perdido"
+          title="Valor perdido dividido pela quantidade de contratos cancelados."
+        />
       </div>
 
       {/* y=196 no relatório: a primeira coisa que aparece */}

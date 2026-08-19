@@ -177,7 +177,7 @@ Monte estes primeiro; as telas viram composição.
 | Componente | Função |
 |---|---|
 | `Visual` | card com cabeçalho colorido, subtítulo, slot de ações |
-| `Kpi` / `KpiStack` | número grande com rótulo, empilhados numa coluna estreita |
+| `Kpi` / `KpiStack` | número grande com rótulo e descrição opcional |
 | `Segmentado` | alternador no cabeçalho (mês/dia, escala) |
 | `Legenda` | marcadores de série — presente sempre que houver 2+ séries |
 | `Loading` / `Vazio` / `Erro` | os três estados, sem exceção |
@@ -187,6 +187,11 @@ Monte estes primeiro; as telas viram composição.
 O `Visual` concentra a moldura, então o cabeçalho é o lugar natural para tudo que é
 "desta visão": granularidade, exportação, leitura por IA. Passe como props em vez de
 repetir markup em cada tela.
+
+**Nome de KPI raramente basta.** "Valor perdido" é lido como prejuízo acumulado quando é
+a soma de uma parcela mensal; "ticket médio" pode ser por contrato ou por cliente. Reserve
+uma linha de descrição no cartão e o detalhe no `title`. Indicador ambíguo não gera dúvida
+— gera número errado em apresentação, e ninguém volta para conferir a definição.
 
 **Os três estados não são opcionais.** Tela de dashboard passa a vida carregando,
 filtrando para vazio e tomando erro de rede. Sem os três, o usuário vê card branco e

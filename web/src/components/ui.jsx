@@ -45,11 +45,17 @@ export function Segmentado({ valor, opcoes, onChange, titulo }) {
   );
 }
 
-export function Kpi({ value, label, small = false }) {
+/**
+ * `desc` é opcional: uma linha dizendo o que o número mede. Vale para indicador
+ * cujo nome não basta — "valor perdido" pode ser lido como prejuízo acumulado
+ * quando é a soma de uma parcela mensal. Telas que não passam `desc` seguem iguais.
+ */
+export function Kpi({ value, label, small = false, desc = null, title = null }) {
   return (
-    <div className="kpi">
+    <div className="kpi" title={title || undefined}>
       <div className={`value${small ? ' sm' : ''}`}>{value}</div>
       <div className="label">{label}</div>
+      {desc && <div className="desc">{desc}</div>}
     </div>
   );
 }

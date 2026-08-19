@@ -206,15 +206,32 @@ body {
    são a primeira pergunta de quem abre a tela. Em faixa custa ~70px, contra os
    ~330px de uma coluna de KPI ao lado de um gráfico. */
 /*
- * A faixa cuida só da distribuição. Não redefine a aparência do `.kpi`: ele já vem
- * com fundo escuro e `color: #fff`, e a primeira versão daqui trocou o fundo para
- * branco sem tocar no texto — resultado, branco sobre branco, cartão invisível.
- * Fundo e cor de texto viajam juntos; sobrescrever metade do par é o bug.
+ * Variante clara do cartão de KPI. O `.kpi` padrão é escuro com texto branco, então
+ * aqui o par de cores é redefinido INTEIRO — fundo, valor, rótulo e descrição. Trocar
+ * só o fundo foi o bug da primeira versão: branco sobre branco, cartão invisível.
+ *
+ * Valor em vinho dá 9,87:1 sobre branco e rótulo em muted dá 6,46:1. O dourado da
+ * marca ficaria em 2,40:1 e por isso não entra em texto, só em preenchimento.
  */
 .kpi-faixa {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--gap);
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--gap);
 }
-.kpi-faixa .kpi { min-height: 58px; }
+.kpi-faixa .kpi {
+  background: var(--pbi-superficie);
+  border: 1px solid var(--pbi-borda);
+  box-shadow: var(--card-shadow);
+  color: var(--pbi-ink);
+  text-align: left;
+  padding: 10px 14px;
+  gap: 1px;
+  min-height: 74px;
+}
+.kpi-faixa .kpi .value { color: var(--pbi-primary); }
+.kpi-faixa .kpi .label { color: var(--pbi-muted); }
+.kpi-faixa .kpi .desc {
+  color: var(--pbi-muted); font-size: 10.5px; line-height: 1.35;
+  margin-top: 2px; font-weight: 400;
+}
 
 /* Alturas derivadas da área útil (tela menos o cromo): duas linhas de visuais
    cabem em uma tela sem cortar nada, com piso para telas baixas. */
