@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBar } from '../components/SlicerBar';
-import { BotaoExportar, Erro, KpiStack, Loading, Segmentado, Visual } from '../components/ui';
+import { BotaoExportar, Erro, Kpi, Loading, Segmentado, Visual } from '../components/ui';
 import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, labelData, labelPeriodo } from '../format';
@@ -12,6 +12,15 @@ import { baixar, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../expor
  * Réplica da tela única do relatório "COM - Vendas Canceladas": contratos
  * cancelados que nunca chegaram a ser ativados — a venda perdida antes da
  * instalação. Quem cancelou depois de ativado não aparece aqui.
+ *
+ * A ORDEM dos visuais segue a do relatório, lida das coordenadas dos visuais no
+ * `.pbip` (y=196 detalhe, y=770 as seis contagens, y=1195 tipo e motivo, y=1629
+ * gráfico). Isso importa mais do que parece: quem usa o relatório há meses procura
+ * a informação pela posição, e inverter a ordem — como estava antes, com o gráfico
+ * em cima e o detalhe no fim — faz a pessoa achar que falta coisa.
+ *
+ * A página de origem tem 2000px de altura e foi feita para rolar. Aqui também
+ * rola, e é proposital: comprimir quatro faixas numa tela deixaria todas ilegíveis.
  */
 export default function VendasCanceladas() {
   const { filtros, alternar } = useFilters();
@@ -23,8 +32,6 @@ export default function VendasCanceladas() {
   const bruta = porData === 'cadastro' ? data?.serieCadastro : data?.serie;
   const serie = (bruta || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
 
-  // os motivos são muito concentrados; dizer isso em uma linha poupa quem só
-  // olha o gráfico de contar as barras
   const motivos = (data?.porMotivo || []).filter((m) => !m.agrupado);
   const total = data?.kpis?.total || 0;
   let concentracao = '';
@@ -35,14 +42,6 @@ export default function VendasCanceladas() {
     concentracao = `${n} ${n === 1 ? 'motivo responde' : 'motivos respondem'} por ${Math.round((acc / total) * 100)}% dos cancelamentos`;
   }
 
-  const colunasVendedor = [
-    { key: 'key', titulo: 'VENDEDOR', align: 'left' },
-    { key: 'valor', titulo: 'CANCELADAS', fmt: int, databar: { cor: CORES.primary } },
-  ];
-  const colunasTipo = [
-    { key: 'key', titulo: 'TIPO DE ATENDIMENTO', align: 'left' },
-    { key: 'valor', titulo: 'QTD', fmt: int, databar: { cor: CORES.gold } },
-  ];
   const colunasDetalhe = [
     { key: 'dtVenda', titulo: 'DATA DA VENDA', fmt: labelData },
     { key: 'contrato', titulo: 'CONTRATO', align: 'left' },
@@ -55,6 +54,18 @@ export default function VendasCanceladas() {
     { key: 'valor', titulo: 'VALOR', fmt: brl },
   ];
 
+  /** As seis contagens do relatório têm todas a mesma forma: rótulo + quantidade. */
+  const contagem = (titulo, cor = CORES.primary) => [
+    { key: 'key', titulo, align: 'left' },
+    { key: 'valor', titulo: 'QTD', fmt: int, databar: { cor } },
+  ];
+  const colunasValor = [
+    { key: 'valor', titulo: 'VALOR DO PLANO', fmt: brl },
+    { key: 'qtd', titulo: 'QTD', fmt: int, databar: { cor: CORES.gold } },
+  ];
+
+  const vazio = isLoading && !data;
+
   return (
     <main className="page">
       <SlicerBar rotuloPeriodo="Data da venda" />
@@ -62,108 +73,27 @@ export default function VendasCanceladas() {
 
       <div className="banner">
         Só entram contratos <b>cancelados</b> que <b>nunca foram ativados</b> — os dois filtros de
-        página do relatório de origem. O período filtra pela data da venda; o gráfico agrupa por
-        mês de cadastro do cliente, como no Power BI.
+        página do relatório de origem. A ordem dos blocos abaixo é a mesma de lá: detalhamento,
+        contagens, motivo e, por último, a evolução mensal.
       </div>
 
-      <div className="grid linha-principal">
-        <Visual
-          title={`VENDAS CANCELADAS / MÊS ${porData === 'cadastro' ? 'DE CADASTRO DO CLIENTE' : 'DA VENDA'}`}
-          sub={porData === 'cadastro'
-            ? 'agrupamento do Power BI: o cliente pode ter se cadastrado muito antes de fechar o contrato'
-            : 'mesma data usada pelo filtro de período'}
-          ia="vendas-canceladas:serie"
-          actions={(
-            <Segmentado
-              valor={porData}
-              titulo="Agrupar o gráfico por"
-              onChange={setPorData}
-              opcoes={[
-                { id: 'venda', label: 'data da venda' },
-                { id: 'cadastro', label: 'cadastro' },
-              ]}
-            />
-          )}
-        >
-          {isLoading && !data ? <Loading /> : (
-            <ComboChart data={serie} barKey="canceladas" barName="CANCELADAS" />
-          )}
-        </Visual>
-
-        <div className="col-kpi">
-          <KpiStack itens={[
-            { label: 'VENDAS CANCELADAS', value: int(data?.kpis?.total || 0) },
-            { label: 'VALOR PERDIDO', value: brl(data?.kpis?.valor || 0), small: true },
-            { label: 'TICKET MÉDIO', value: brl(data?.kpis?.ticketMedio || 0), small: true },
-          ]} />
-        </div>
-
-        <Visual
-          title="MOTIVO DO CANCELAMENTO"
-          sub={concentracao}
-          ia="vendas-canceladas:motivo"
-        >
-          {isLoading && !data ? <Loading /> : (
-            <BarrasHorizontais
-              data={data?.porMotivo || []}
-              nome="CANCELADAS"
-              larguraCategoria={170}
-            />
-          )}
-        </Visual>
+      {/* o relatório não tem KPI aqui (os cards de lá são data/hora da carga, que
+          no nosso caso vivem no topo da página), mas o total e o valor perdido são
+          a primeira pergunta de quem abre a tela — cabem numa faixa fina */}
+      <div className="kpi-faixa">
+        <Kpi value={int(data?.kpis?.total || 0)} label="VENDAS CANCELADAS" />
+        <Kpi value={brl(data?.kpis?.valor || 0)} label="VALOR PERDIDO" small />
+        <Kpi value={brl(data?.kpis?.ticketMedio || 0)} label="TICKET MÉDIO" small />
       </div>
 
-      <div className="grid linha-33-67">
-        <Visual title="POR CIDADE" ia="vendas-canceladas:cidade">
-          {isLoading && !data ? <Loading /> : (
-            <BarrasHorizontais
-              data={data?.porCidade || []}
-              nome="CANCELADAS"
-              selecionados={filtros.cidade}
-              onSelect={(c) => alternar('cidade', c)}
-            />
-          )}
-        </Visual>
-
-        <div className="grid linha-dupla">
-          <Visual
-            title="POR VENDEDOR"
-            flush
-            className="v-meia"
-            ia="vendas-canceladas:vendedor"
-            actions={(
-              <BotaoExportar onExportar={() => baixar(
-                `canceladas-por-vendedor_${sufixoPeriodo(filtros)}.csv`,
-                tabelaParaCSV(colunasVendedor, data?.porVendedor || []),
-              )} />
-            )}
-          >
-            {isLoading && !data ? <Loading /> : (
-              <Tabela colunas={colunasVendedor} dados={data?.porVendedor || []} />
-            )}
-          </Visual>
-
-          <Visual
-            title="POR TIPO DE ATENDIMENTO"
-            flush
-            className="v-meia"
-            ia="vendas-canceladas:tipo"
-          >
-            {isLoading && !data ? <Loading /> : (
-              <Tabela colunas={colunasTipo} dados={data?.porTipo || []} />
-            )}
-          </Visual>
-        </div>
-      </div>
-
+      {/* y=196 no relatório: a primeira coisa que aparece */}
       <Visual
         title="RELATÓRIO DETALHADO DAS VENDAS CANCELADAS"
-        sub={data ? `${int(data.detalheTotal)} contratos - total ${brl(data.kpis.valor)} · role a tabela ou baixe o arquivo completo` : ''}
+        sub={data
+          ? `${int(data.detalheTotal)} contratos · total ${brl(data.kpis.valor)} — a tabela mostra as ${int((data.detalhe || []).length)} mais recentes; o CSV traz todas`
+          : ''}
         flush
-        className="v-meia"
-        // as duas faixas de cima já ocupam a tela; aqui o detalhamento fica como
-        // amostra rolável, e quem precisa de tudo usa o CSV completo ao lado
-        style={{ height: 250 }}
+        className="v-tabela-alta"
         actions={(
           <BotaoExportar
             titulo="Baixar as vendas canceladas do período (arquivo completo, sem o corte da tela)"
@@ -172,12 +102,82 @@ export default function VendasCanceladas() {
           />
         )}
       >
-        {isLoading && !data ? <Loading /> : (
+        {vazio ? <Loading /> : (
           <Tabela
             colunas={colunasDetalhe}
             dados={(data?.detalhe || []).map((d, i) => ({ ...d, __key: `${d.contrato}-${i}` }))}
-            alturaMax={196}
           />
+        )}
+      </Visual>
+
+      {/* y=770: as seis contagens, lado a lado */}
+      <div className="grid linha-seis">
+        <Visual title="POR VENDEDOR" flush className="v-meia" ia="vendas-canceladas:vendedor">
+          {vazio ? <Loading /> : <Tabela colunas={contagem('VENDEDOR')} dados={data?.porVendedor || []} />}
+        </Visual>
+        <Visual title="POR EQUIPE" flush className="v-meia">
+          {vazio ? <Loading /> : <Tabela colunas={contagem('EQUIPE')} dados={data?.porEquipe || []} />}
+        </Visual>
+        <Visual title="POR SITUAÇÃO" flush className="v-meia">
+          {vazio ? <Loading /> : <Tabela colunas={contagem('SITUAÇÃO')} dados={data?.porSituacao || []} />}
+        </Visual>
+        <Visual title="POR CIDADE" flush className="v-meia" ia="vendas-canceladas:cidade">
+          {vazio ? <Loading /> : <Tabela colunas={contagem('CIDADE')} dados={data?.porCidade || []} />}
+        </Visual>
+        <Visual title="POR VALOR" flush className="v-meia">
+          {vazio ? <Loading /> : <Tabela colunas={colunasValor} dados={data?.porValor || []} />}
+        </Visual>
+        <Visual title="POR TECNOLOGIA" flush className="v-meia">
+          {vazio ? <Loading /> : <Tabela colunas={contagem('TECNOLOGIA', CORES.goldSoft)} dados={data?.porTecnologia || []} />}
+        </Visual>
+      </div>
+
+      {/* y=1195: tipo estreito à esquerda, motivo largo à direita */}
+      <div className="grid linha-33-67">
+        <Visual title="POR TIPO DE ATENDIMENTO" flush className="v-meia" ia="vendas-canceladas:tipo">
+          {vazio ? <Loading /> : <Tabela colunas={contagem('TIPO DE ATENDIMENTO', CORES.gold)} dados={data?.porTipo || []} />}
+        </Visual>
+
+        <Visual
+          title="MOTIVO DO CANCELAMENTO"
+          sub={concentracao}
+          className="v-meia"
+          ia="vendas-canceladas:motivo"
+          actions={(
+            <BotaoExportar onExportar={() => baixar(
+              `canceladas-por-motivo_${sufixoPeriodo(filtros)}.csv`,
+              tabelaParaCSV(contagem('MOTIVO'), data?.porMotivo || []),
+            )} />
+          )}
+        >
+          {vazio ? <Loading /> : (
+            <BarrasHorizontais data={data?.porMotivo || []} nome="CANCELADAS" larguraCategoria={170} />
+          )}
+        </Visual>
+      </div>
+
+      {/* y=1629: por último, como no relatório */}
+      <Visual
+        title={`VENDAS CANCELADAS / MÊS ${porData === 'cadastro' ? 'DE CADASTRO DO CLIENTE' : 'DA VENDA'}`}
+        sub={porData === 'cadastro'
+          ? 'agrupamento do Power BI: o cliente pode ter se cadastrado muito antes de fechar o contrato'
+          : 'mesma data usada pelo filtro de período'}
+        className="v-grafico"
+        ia="vendas-canceladas:serie"
+        actions={(
+          <Segmentado
+            valor={porData}
+            titulo="Agrupar o gráfico por"
+            onChange={setPorData}
+            opcoes={[
+              { id: 'venda', label: 'data da venda' },
+              { id: 'cadastro', label: 'cadastro' },
+            ]}
+          />
+        )}
+      >
+        {vazio ? <Loading /> : (
+          <ComboChart data={serie} barKey="canceladas" barName="CANCELADAS" />
         )}
       </Visual>
     </main>

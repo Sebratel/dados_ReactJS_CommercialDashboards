@@ -438,8 +438,19 @@ lista daquele relatório, e a tela filtra por essa marca — mesmo conjunto, sem
 > um único mês de vendas por 47 barras, quase todas valendo 1. A tela abre pela data da venda
 > (coerente com o filtro) e o agrupamento do Power BI fica no alternador do cabeçalho.
 
-Cabem duas faixas na tela; o detalhamento fica abaixo, como amostra rolável, com o CSV
-completo ao lado.
+**A ordem dos blocos é a do relatório de origem**, lida das coordenadas dos visuais no
+`.pbip`: detalhamento de largura inteira (y=196), as seis contagens lado a lado (y=770),
+tipo de solicitação e motivo (y=1195) e o gráfico mensal por último (y=1629). A primeira
+versão aqui invertia isso — gráfico em cima, detalhe no fim — e quem usa o relatório
+procurava a tabela onde ela não estava.
+
+As larguras da faixa de seis também vêm de lá: vendedor mais largo que as outras cinco,
+porque nome de vendedor é o rótulo mais longo da faixa.
+
+A página de origem tem 2000px e foi feita para rolar; aqui a tela fica em ~1750px e
+também rola. Comprimir quatro faixas numa tela deixaria todas ilegíveis. O detalhamento
+mostra as 400 linhas mais recentes — a tabela exibe ~10 por vez, então 2000 no DOM era
+peso sem leitor — e o CSV completo fica ao lado.
 
 **O motivo do cancelamento** chega do Voalle como uma frase de até 230 caracteres — prefixo
 fixo, motivo no meio, justificativa do procedimento no fim. No gráfico fica só o miolo; o

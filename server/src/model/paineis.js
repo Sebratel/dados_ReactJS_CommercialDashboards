@@ -298,7 +298,9 @@ export function painelCanceladas(flt) {
   const detalhe = canceladas
     .slice()
     .sort((a, b) => (b.dtVenda || '').localeCompare(a.dtVenda || ''))
-    .slice(0, 2000)
+    // amostra: a tabela mostra ~10 linhas por vez, então 2000 no DOM era peso sem
+    // leitor. Quem precisa de tudo usa o CSV completo, que não passa por aqui.
+    .slice(0, 400)
     .map((f) => ({
       dtVenda: f.dtVenda,
       horaVenda: f.horaVenda,

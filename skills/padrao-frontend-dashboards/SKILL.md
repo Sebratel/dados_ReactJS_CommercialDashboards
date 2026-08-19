@@ -144,6 +144,23 @@ Proporções do relatório de origem, com mínimos que permitem refluxo:
 O `minmax` é o que evita a coluna de KPI virar um filete em tela estreita. Calcule
 os mínimos para o conjunto caber a partir de ~1100px.
 
+### Respeite a ordem de leitura da origem
+
+Ao replicar um relatório, a **ordem dos visuais não é detalhe de estética** — quem
+usa aquele relatório há meses procura a informação pela posição. Inverter a ordem faz
+a pessoa concluir que falta conteúdo, mesmo com todos os números certos.
+
+A ordem verdadeira não está no nome dos arquivos: está nas coordenadas. No `.pbip`,
+cada `visuals/<id>/visual.json` tem `position: { x, y, z, width, height }`. Ordene por
+`y` e depois por `x` para obter a sequência de leitura, e use as larguras relativas
+para dimensionar as colunas — se lá uma coluna é o dobro da vizinha, é porque o rótulo
+dela é mais longo.
+
+Isso pode contrariar a sua intuição de layout: no caso de referência, o relatório
+começa com a tabela de detalhe de largura inteira e termina com o gráfico de evolução,
+o oposto de "gráfico em cima, detalhe embaixo". Siga a origem e diga no subtítulo o que
+mudou; convenção interna vem depois de fidelidade quando existe um relatório em uso.
+
 ### Quantos visuais cabem
 
 Duas faixas de conteúdo por tela, no máximo. Uma terceira faixa **não cabe** — a

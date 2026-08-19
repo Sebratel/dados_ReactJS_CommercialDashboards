@@ -187,6 +187,33 @@ body {
 .linha-33-67     { grid-template-columns: minmax(250px, 33fr) minmax(400px, 67fr); }
 .linha-64-36     { grid-template-columns: minmax(400px, 64fr) minmax(260px, 36fr); }
 
+/* Seis contagens lado a lado, como na faixa y=770 do relatório de origem. Abaixo
+   de ~1500px seis colunas ficariam com menos de 210px e o rótulo não caberia, então
+   quebra em três e depois em duas — a leitura continua por linha. */
+/* Proporções do relatório: lá o vendedor tem 403px e os outros cinco 273px, porque
+   nome de vendedor é o rótulo mais longo da faixa. Manter isso evita truncar só a
+   coluna que mais precisa de espaço. */
+.linha-seis {
+  grid-template-columns:
+    minmax(200px, 21fr) minmax(150px, 14fr) minmax(150px, 14fr)
+    minmax(150px, 14fr) minmax(150px, 14fr) minmax(150px, 14fr);
+}
+/* quebra só abaixo de 1150: em 1366 e 1440 a faixa continua com as seis, como lá */
+@media (max-width: 1150px) { .linha-seis { grid-template-columns: repeat(3, minmax(190px, 1fr)); } }
+@media (max-width: 760px)  { .linha-seis { grid-template-columns: repeat(2, minmax(170px, 1fr)); } }
+
+/* KPI em faixa fina: o relatório não tem indicador aqui, mas total e valor perdido
+   são a primeira pergunta de quem abre a tela. Em faixa custa ~70px, contra os
+   ~330px de uma coluna de KPI ao lado de um gráfico. */
+.kpi-faixa {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--gap);
+}
+.kpi-faixa .kpi {
+  background: var(--pbi-superficie); border: 1px solid var(--pbi-borda);
+  border-radius: var(--card-radius); box-shadow: var(--card-shadow);
+  padding: 10px 14px; text-align: left;
+}
+
 /* Alturas derivadas da área útil (tela menos o cromo): duas linhas de visuais
    cabem em uma tela sem cortar nada, com piso para telas baixas. */
 .visual.v-grafico     { height: clamp(258px, calc((var(--util) - var(--gap)) * 0.455), 430px); }
