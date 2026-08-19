@@ -790,6 +790,104 @@ function AbaIA() {
   );
 }
 
+// -------------------------------------------------- catálogo de queries (DEV)
+function AbaQueries() {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [aberta, setAberta] = useState(null);
+  const [amostra, setAmostra] = useState({});
+  const [testando, setTestando] = useState(null);
+
+  useEffect(() => { apiJson('/queries').then(setDados).catch(setErro); }, []);
+
+  const testar = async (q) => {
+    setTestando(q.id);
+    try {
+      const r = await apiJson(`/queries/${q.id}/test`, { method: 'POST', body: { limite: 20 } });
+      setAmostra((s) => ({ ...s, [q.id]: r }));
+      setErro(null);
+    } catch (e) { setErro(e); } finally { setTestando(null); }
+  };
+
+  if (!dados && !erro) return <Loading texto="Carregando catálogo…" />;
+
+  return (
+    <div className="cfg-bloco">
+      {erro && <Erro erro={erro} />}
+      <p className="cfg-nota">
+        Todas as consultas que alimentam o dashboard, como são enviadas ao banco. O recorte
+        histórico é <code>{dados?.since}</code> (telefonia a partir de <code>{dados?.phoneSince}</code>).
+        O botão <b>testar</b> executa com <code>LIMIT 20</code>, sem alterar nada.
+      </p>
+
+      {(dados?.queries || []).map((q) => (
+        <article key={q.id} className="cfg-query">
+          <header onClick={() => setAberta(aberta === q.id ? null : q.id)}>
+            <div className="cfg-query-id">
+              <span className={`cfg-banco ${q.banco}`}>{q.bancoLabel}</span>
+              <b>{q.titulo}</b>
+              <code>{q.id}</code>
+            </div>
+            <div className="cfg-query-stats">
+              {q.erro
+                ? <span className="cfg-erro">falhou: {q.erro}</span>
+                : (
+                  <>
+                    <span>{q.linhas != null ? `${int(q.linhas)} linhas` : '—'}</span>
+                    <span>{q.ms != null ? `${int(q.ms)} ms` : ''}</span>
+                    <span>{q.ultimaExecucao ? labelDataHora(q.ultimaExecucao) : 'nunca'}</span>
+                  </>
+                )}
+              <Icone nome={aberta === q.id ? 'cima' : 'baixo'} tamanho={13} className="cfg-chevron" />
+            </div>
+          </header>
+
+          {aberta === q.id && (
+            <div className="cfg-query-corpo">
+              <p>{q.descricao}</p>
+              <div className="cfg-query-meta">
+                <span>origem no Power BI: <b>{q.origemPbi}</b></span>
+                {!!q.params.length && <span>parâmetros: <code>{q.params.join(', ')}</code></span>}
+                {q.incrementos != null && <span>cargas incrementais: <b>{int(q.incrementos)}</b></span>}
+              </div>
+
+              <pre className="cfg-sql">{q.sql}</pre>
+
+              <div className="cfg-query-acoes">
+                <button type="button" className="cfg-botao" disabled={testando === q.id} onClick={() => testar(q)}>
+                  <Icone nome="play" tamanho={13} /> {testando === q.id ? 'executando…' : 'testar (LIMIT 20)'}
+                </button>
+                <button type="button" className="cfg-botao ghost" onClick={() => navigator.clipboard?.writeText(q.sql)}>
+                  <Icone nome="copiar" tamanho={13} /> copiar SQL
+                </button>
+              </div>
+
+              {amostra[q.id] && (
+                <div className="tbl-wrap" style={{ maxHeight: 300, marginTop: 10 }}>
+                  <table className="pbi">
+                    <thead>
+                      <tr>{amostra[q.id].colunas.map((c) => <th key={c} className="left">{c}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {amostra[q.id].linhas.map((l, i) => (
+                        <tr key={i}>
+                          {amostra[q.id].colunas.map((c) => (
+                            <td key={c} className="left">{l[c] === null || l[c] === undefined ? '—' : String(l[c])}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ página
 export default function Configuracoes() {
   const { ehAdmin, ehDev, usuario } = useSession();
