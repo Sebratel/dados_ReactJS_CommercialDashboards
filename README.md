@@ -437,6 +437,12 @@ lista daquele relatório, e a tela filtra por essa marca — mesmo conjunto, sem
 > Como o cliente pode ter se cadastrado anos antes de fechar, o agrupamento original espalha
 > um único mês de vendas por 47 barras, quase todas valendo 1. A tela abre pela data da venda
 > (coerente com o filtro) e o agrupamento do Power BI fica no alternador do cabeçalho.
+>
+> **Consequência prática, já observada em uso:** comparar o nosso gráfico (por venda) com o
+> do relatório (por cadastro) mostra números bem diferentes — 1.060 contra 798 em janeiro/2026,
+> por exemplo. Não é divergência de regra: trocando o alternador para "cadastro", os meses
+> batem com folga de 0 a 3 registros, que é o dado entrado desde a última atualização do
+> relatório. O mês corrente diverge mais porque continua recebendo cancelamentos.
 
 **A ordem dos blocos é a do relatório de origem**, lida das coordenadas dos visuais no
 `.pbip`: detalhamento de largura inteira (y=196), as seis contagens lado a lado (y=770),

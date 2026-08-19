@@ -183,8 +183,8 @@ export default function VendasCanceladas() {
       <Visual
         title={`VENDAS CANCELADAS / MÊS ${porData === 'cadastro' ? 'DE CADASTRO DO CLIENTE' : 'DA VENDA'}`}
         sub={porData === 'cadastro'
-          ? 'agrupamento do Power BI: o cliente pode ter se cadastrado muito antes de fechar o contrato'
-          : 'mesma data usada pelo filtro de período'}
+          ? 'agrupamento do Power BI — é esta opção que reproduz os números do relatório antigo'
+          : 'mesma data do filtro de período. Para comparar com o Power BI, troque para “cadastro”: lá o gráfico agrupa por cadastro do cliente'}
         className="v-grafico"
         ia="vendas-canceladas:serie"
         actions={(
