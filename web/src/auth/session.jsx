@@ -54,13 +54,29 @@ function setToken(token, expiresIn) {
  * Renova sozinho antes de expirar, em vez de esperar a primeira requisição
  * falhar. O token do Google dura ~1h; renovando cinco minutos antes, quem está
  * com a tela aberta não percebe a troca.
+ *
+ * Falha aqui NÃO encerra a sessão. O temporizador dispara cinco minutos antes do
+ * vencimento, então o token corrente ainda serve: derrubar a sessão porque a
+ * renovação antecipada falhou transformava uma oscilação passageira — cookie de
+ * terceiros bloqueado, GSI ainda não carregado, rede instável — em logout de uma
+ * sessão perfeitamente válida. Quem decide que acabou é o 401 de verdade, em
+ * `apiFetch`: ali o token realmente não serve mais.
  */
 function agendarRenovacao() {
   clearTimeout(timerRenovacao);
   if (!tokenAtual || !expiraEm) return;
-  const emQuanto = Math.max(5000, expiraEm - Date.now() - 5 * 60 * 1000);
+  const faltando = expiraEm - Date.now();
+  const emQuanto = Math.max(5000, faltando - 5 * 60 * 1000);
   timerRenovacao = setTimeout(() => {
-    renovarToken().catch(() => encerrarSessao('expirada'));
+    renovarToken().catch((err) => {
+      // sem alarde: só registra e tenta de novo mais perto do vencimento
+      console.warn(`[sessão] renovação antecipada falhou (${err?.message || err}); o token atual continua valendo`);
+      const resta = expiraEm - Date.now();
+      if (resta > 30000) {
+        clearTimeout(timerRenovacao);
+        timerRenovacao = setTimeout(() => { renovarToken().catch(() => {}); }, Math.max(15000, resta - 45000));
+      }
+    });
   }, emQuanto);
 }
 
@@ -70,8 +86,16 @@ function agendarRenovacao() {
  * montada com o usuário antigo — todos os números em branco e nenhum caminho
  * de volta a não ser sair e entrar na mão.
  */
-export function encerrarSessao(motivo = 'expirada') {
+export function encerrarSessao(motivo = 'expirada', detalhe = null) {
   if (!tokenAtual && !ler()) return; // já encerrada: não avisa duas vezes
+  const restava = expiraEm ? Math.round((expiraEm - Date.now()) / 1000) : null;
+  // deixa rastro: um logout inesperado sem isso vira adivinhação
+  console.warn('[sessão] encerrada', {
+    motivo,
+    detalhe,
+    segundosQueRestavamNoToken: restava,
+    tinhaClienteGoogle: !!tokenClient,
+  });
   clearTimeout(timerRenovacao);
   setToken(null);
   gravar(null);
@@ -258,10 +282,10 @@ async function buscarMe() {
       await renovarToken();
       const r2 = await fetch('/api/me', { headers: { Authorization: `Bearer ${tokenAtual}` } });
       if (r2.ok) return r2.json();
-      encerrarSessao('expirada');
+      encerrarSessao('expirada', `/api/me devolveu ${r2.status} mesmo após renovar`);
       return null;
-    } catch {
-      encerrarSessao('expirada');
+    } catch (err) {
+      encerrarSessao('expirada', `renovação falhou na carga inicial: ${err?.message || err}`);
       return null;
     }
   }

@@ -48,12 +48,12 @@ export async function apiFetch(url, init = {}) {
       await renovarToken();
       res = await fetch(url, comToken());
       // 401 depois de renovar: o token novo também não serve, então acabou
-      if (res.status === 401) encerrarSessao('expirada');
-    } catch {
+      if (res.status === 401) encerrarSessao('expirada', `${url} devolveu 401 mesmo com token renovado`);
+    } catch (err) {
       // a renovação silenciosa falhou (sessão do Google encerrada, cookies de
-      // terceiros bloqueados). Antes o 401 só voltava para a página, que ficava
-      // no ar sem dado nenhum; agora a sessão termina e a tela volta ao login.
-      encerrarSessao('expirada');
+      // terceiros bloqueados). Aqui, ao contrário do temporizador, já houve um 401
+      // de verdade: o token não serve mais, então a sessão termina.
+      encerrarSessao('expirada', `${url} deu 401 e a renovação falhou: ${err?.message || err}`);
     }
   }
   return res;
