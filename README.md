@@ -447,6 +447,19 @@ procurava a tabela onde ela não estava.
 As larguras da faixa de seis também vêm de lá: vendedor mais largo que as outras cinco,
 porque nome de vendedor é o rótulo mais longo da faixa.
 
+**As cores da tabela principal são a formatação condicional do relatório**, lida de
+`objects.values` no `visual.json` — não escolhidas aqui:
+
+| Coluna | Regra |
+|---|---|
+| `STATUS CONTRATO` | fundo `#1F601A` quando *Normal*, `#9F0E0E` quando *Cancelado*, fonte branca |
+| `VALOR` | escala linear de `#e8d166` (menor) a `#D9B300` (maior) |
+
+Como esta tela só mostra cancelados, o status sai sempre vermelho — e é isso que
+sinaliza de relance que a linha é uma perda. A coluna `STATUS CONTRATO` existia no
+payload desde o início e faltava na tabela; agora as 10 colunas batem uma a uma com as
+do relatório, na mesma ordem.
+
 A página de origem tem 2000px e foi feita para rolar; aqui a tela fica em ~1750px e
 também rola. Comprimir quatro faixas numa tela deixaria todas ilegíveis. O detalhamento
 mostra as 400 linhas mais recentes — a tabela exibe ~10 por vez, então 2000 no DOM era

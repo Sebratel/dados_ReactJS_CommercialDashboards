@@ -3,7 +3,7 @@ import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBar } from '../components/SlicerBar';
 import { BotaoExportar, Erro, Kpi, Loading, Segmentado, Visual } from '../components/ui';
-import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
+import { BarrasHorizontais, ComboChart, CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, labelData, labelPeriodo } from '../format';
 import { baixar, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
@@ -42,6 +42,17 @@ export default function VendasCanceladas() {
     concentracao = `${n} ${n === 1 ? 'motivo responde' : 'motivos respondem'} por ${Math.round((acc / total) * 100)}% dos cancelamentos`;
   }
 
+  /**
+   * Cores lidas da formatação condicional do relatório de origem, não escolhidas:
+   * o status do contrato tem fundo por valor (#1F601A normal, #9F0E0E cancelado,
+   * fonte branca) e o valor tem escala linear de #e8d166 a #D9B300. Como esta tela
+   * só mostra cancelados, o status sai sempre vermelho — e é justamente o que
+   * sinaliza, de relance, que a linha é uma perda.
+   */
+  const valores = (data?.detalhe || []).map((d) => Number(d.valor) || 0);
+  const valorMin = valores.length ? Math.min(...valores) : 0;
+  const valorMax = valores.length ? Math.max(...valores) : 1;
+
   const colunasDetalhe = [
     { key: 'dtVenda', titulo: 'DATA DA VENDA', fmt: labelData },
     { key: 'contrato', titulo: 'CONTRATO', align: 'left' },
@@ -49,9 +60,21 @@ export default function VendasCanceladas() {
     { key: 'cidade', titulo: 'CIDADE', align: 'left' },
     { key: 'vendedor', titulo: 'VENDEDOR', align: 'left' },
     { key: 'situacao', titulo: 'SITUAÇÃO', align: 'left' },
+    {
+      key: 'statusContrato',
+      titulo: 'STATUS CONTRATO',
+      align: 'center',
+      corFundo: (d) => (d.statusContrato === 'Normal' ? '#1F601A' : '#9F0E0E'),
+    },
     { key: 'statusCancelamento', titulo: 'MOTIVO DO CANCELAMENTO', align: 'left' },
+    {
+      key: 'valor',
+      titulo: 'VALOR',
+      fmt: brl,
+      align: 'center',
+      corFundo: (d) => escalaGradiente(Number(d.valor) || 0, valorMin, valorMax, '#e8d166', '#D9B300'),
+    },
     { key: 'tecnologia', titulo: 'TECNOLOGIA', align: 'left' },
-    { key: 'valor', titulo: 'VALOR', fmt: brl },
   ];
 
   /** As seis contagens do relatório têm todas a mesma forma: rótulo + quantidade. */

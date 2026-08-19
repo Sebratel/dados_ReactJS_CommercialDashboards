@@ -310,6 +310,11 @@ Emoji renderiza diferente por sistema operacional e destrói o alinhamento verti
 - Numérico à direita com `font-variant-numeric: tabular-nums`; texto à esquerda.
 - **Barra de dados** dentro da célula em vez de gráfico separado — o Power BI faz e
   economiza um visual inteiro.
+- **Fundo de célula condicional** para estado (status, faixa) e escala contínua para
+  valor. Ao replicar, essas cores estão em `objects.values` do `visual.json`, com
+  `Conditional.Cases` para estado e `FillRule.linearGradient2` para escala — leia de lá
+  em vez de escolher, e resolva o contraste do texto a partir do fundo em vez de fixar
+  branco ou preto.
 - Linha de total fixa no rodapé, sempre visível.
 - Ordenação clicável no cabeçalho, com indicador de direção.
 
