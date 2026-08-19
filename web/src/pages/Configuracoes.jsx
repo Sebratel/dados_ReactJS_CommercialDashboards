@@ -180,304 +180,203 @@ function AbaUsuarios() {
 }
 
 // ------------------------------------------------------------ acesso/telas
-function CampoEmail({ onAdicionar, sugestoes }) {
-  const [valor, setValor] = useState('');
-  const ref = useRef(null);
-
-  const confirmar = () => {
-    const e = valor.trim().toLowerCase();
-    if (!e.includes('@')) return;
-    onAdicionar(e);
-    setValor('');
-    ref.current?.focus();
-  };
-
-  return (
-    <span className="acl-add">
-      <input
-        ref={ref}
-        list="emails-conhecidos"
-        value={valor}
-        placeholder="nome@sebratel.com.br"
-        onChange={(e) => setValor(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmar(); } }}
-      />
-      <button type="button" onClick={confirmar} disabled={!valor.trim().includes('@')} title="Adicionar">
-        <Icone nome="mais" tamanho={13} />
-      </button>
-      <datalist id="emails-conhecidos">
-        {sugestoes.map((s) => <option key={s} value={s} />)}
-      </datalist>
-    </span>
-  );
-}
-
+/**
+ * Matriz pessoas x telas.
+ *
+ * A versão anterior era orientada à tela: para liberar uma pessoa em cinco telas
+ * era preciso abrir cinco cartões e digitar o mesmo e-mail em cada um. Quem
+ * administra pensa no sentido oposto — "entrou fulano, ele vê isto e isto" — e é
+ * esse o sentido que a matriz atende, sem trocar o modelo de dados: a permissão
+ * continua guardada por tela, aqui ela só é lida transposta.
+ */
 function AbaTelas() {
-  const [telas, setTelas] = useState(null);
-  const [sugestoes, setSugestoes] = useState([]);
+  const { usuario } = useSession();
+  const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
-  const [salvando, setSalvando] = useState(null);
-  const [salvo, setSalvo] = useState(null);
-  const [editando, setEditando] = useState(null); // tela em modo lista ainda sem e-mail
+  const [ocupado, setOcupado] = useState(null);
+  const [novo, setNovo] = useState('');
+  const [pendentes, setPendentes] = useState([]); // digitados, ainda sem tela marcada
 
   const carregar = useCallback(async () => {
     try {
-      const d = await apiJson('/access/screens');
-      setTelas(d.telas);
+      setDados(await apiJson('/access/matriz'));
       setErro(null);
     } catch (e) { setErro(e); }
   }, []);
+  useEffect(() => { carregar(); }, [carregar]);
 
-  useEffect(() => {
-    carregar();
-    apiJson('/access/users')
-      .then((d) => setSugestoes((d.usuarios || []).map((u) => u.email)))
-      .catch(() => {});
-  }, [carregar]);
+  const executar = async (chave, fn) => {
+    setOcupado(chave);
+    try { setDados(await fn()); setErro(null); } catch (e) { setErro(e); } finally { setOcupado(null); }
+  };
 
-  const salvar = async (tela, modo, emails) => {
-    setSalvando(tela.id);
-    try {
-      const { tela: atualizada } = await apiJson(`/access/screens/${tela.id}`, {
+  /** Um clique manda a linha inteira: o resultado não depende da ordem dos cliques. */
+  const alternarTela = (pessoa, telaId) => {
+    const atual = new Set(pessoa.telas);
+    if (atual.has(telaId)) atual.delete(telaId); else atual.add(telaId);
+    executar(`${pessoa.email}:${telaId}`, () => apiJson(
+      `/access/users/${encodeURIComponent(pessoa.email)}/telas`,
+      { method: 'PUT', body: { telas: [...atual] } },
+    ));
+  };
+
+  const trocarModo = (tela) => {
+    const modo = tela.modo === 'todos' ? 'lista' : 'todos';
+    executar(`tela:${tela.id}`, async () => {
+      await apiJson(`/access/screens/${tela.id}`, {
         method: 'PUT',
-        body: { modo, emails },
+        body: { modo, emails: modo === 'lista' ? tela.emails : [] },
       });
-      setTelas((lista) => lista.map((t) => (t.id === tela.id ? atualizada : t)));
-      setErro(null);
-      setSalvo(tela.id);
-      setTimeout(() => setSalvo((s) => (s === tela.id ? null : s)), 1800);
-    } catch (e) { setErro(e); } finally { setSalvando(null); }
+      return apiJson('/access/matriz');
+    });
   };
 
-  const trocarModo = (tela, modo) => {
-    if (modo === tela.modo) return;
-    if (modo === 'lista') {
-      // só grava quando o primeiro e-mail entrar (o servidor exige lista não vazia)
-      setEditando(tela.id);
-      return;
-    }
-    setEditando(null);
-    salvar(tela, 'todos', []);
+  const adicionar = () => {
+    const e = novo.trim().toLowerCase();
+    if (!e.includes('@')) { setErro(new Error('Informe um e-mail válido.')); return; }
+    const jaTem = (dados?.pessoas || []).some((p) => p.email === e) || pendentes.includes(e);
+    if (!jaTem) setPendentes((lista) => [...lista, e]);
+    setNovo('');
+    setErro(null);
   };
 
-  const resumo = useMemo(() => {
-    if (!telas) return null;
-    const restritas = telas.filter((t) => t.modo === 'lista').length;
-    return { total: telas.length, restritas, livres: telas.length - restritas };
-  }, [telas]);
+  if (!dados && !erro) return <Loading texto="Carregando acessos…" />;
 
-  if (!telas && !erro) return <Loading texto="Carregando telas…" />;
+  const telas = dados?.telas || [];
+  const restritas = telas.filter((t) => t.modo === 'lista').length;
+  const linhas = [
+    ...(dados?.pessoas || []),
+    ...pendentes
+      .filter((e) => !(dados?.pessoas || []).some((p) => p.email === e))
+      .map((email) => ({ email, papel: 'viewer', telas: [], novo: true })),
+  ];
 
   return (
     <div className="cfg-bloco">
       {erro && <Erro erro={erro} />}
 
-      <div className="acl-resumo">
-        <p>
-          Toda conta <b>@sebratel.com.br</b> enxerga as telas marcadas como <b>Todos</b>.
-          Em <b>Restrito</b>, só os e-mails da lista — administradores sempre entram.
-        </p>
-        {resumo && (
-          <span className="acl-contagem">
-            <b>{resumo.livres}</b> {resumo.livres === 1 ? 'liberada' : 'liberadas'}
-            {' · '}
-            <b>{resumo.restritas}</b> {resumo.restritas === 1 ? 'restrita' : 'restritas'}
-          </span>
-        )}
+      <p className="cfg-nota">
+        Cada linha é uma pessoa, cada coluna é uma tela. Marque o que ela deve enxergar — grava
+        na hora. Coluna em <b>todos</b> vale para qualquer conta do domínio, então aparece
+        preenchida e sem caixa; para restringir, use o botão no cabeçalho dela.
+      </p>
+
+      <div className="cfg-form">
+        <label>
+          <span>Liberar acesso para</span>
+          <input
+            type="email"
+            value={novo}
+            placeholder="nome@sebratel.com.br"
+            onChange={(e) => setNovo(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') adicionar(); }}
+          />
+        </label>
+        <button type="button" className="cfg-botao" onClick={adicionar}>
+          <Icone nome="mais" tamanho={14} /> Adicionar à matriz
+        </button>
+        <span className="janela-aviso">
+          {restritas === 0
+            ? 'Nenhuma tela está restrita: hoje todo o domínio vê tudo.'
+            : `${restritas} de ${telas.length} ${restritas === 1 ? 'tela restrita' : 'telas restritas'}.`}
+        </span>
       </div>
 
-      <div className="tbl-wrap acl-wrap">
-        <table className="pbi acl">
+      <div className="tbl-wrap matriz-wrap">
+        <table className="pbi matriz">
           <thead>
             <tr>
-              <th className="left">Tela</th>
-              <th className="left" style={{ width: 190 }}>Acesso</th>
-              <th className="left">Quem pode ver</th>
-              <th className="left" style={{ width: 190 }}>Última alteração</th>
+              <th className="left col-pessoa">Pessoa</th>
+              {telas.map((t) => (
+                <th key={t.id} className="col-tela" title={`${t.label} — ${t.descricao}`}>
+                  <span className="mt-nome">{t.curto || t.label}</span>
+                  <button
+                    type="button"
+                    className={`mt-modo ${t.modo}`}
+                    disabled={ocupado === `tela:${t.id}`}
+                    title={t.modo === 'todos'
+                      ? 'Visível para todo o domínio. Clique para restringir à lista.'
+                      : 'Restrita à lista. Clique para liberar a todo o domínio.'}
+                    onClick={() => trocarModo(t)}
+                  >
+                    {t.modo === 'todos' ? 'todos' : 'restrita'}
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {(telas || []).map((t) => {
-              const emLista = t.modo === 'lista' || editando === t.id;
-              return (
-                <tr key={t.id} className={emLista ? 'restrita' : ''}>
-                  <td className="left">
-                    <b>{t.label}</b>
-                    <span className="acl-desc">{t.descricao}</span>
-                  </td>
-
-                  <td className="left">
-                    <span className="acl-modo">
-                      <button
-                        type="button"
-                        className={!emLista ? 'on' : ''}
-                        onClick={() => trocarModo(t, 'todos')}
-                        disabled={salvando === t.id}
-                      >
-                        Todos
-                      </button>
-                      <button
-                        type="button"
-                        className={emLista ? 'on' : ''}
-                        onClick={() => trocarModo(t, 'lista')}
-                        disabled={salvando === t.id}
-                      >
-                        Restrito
-                      </button>
-                    </span>
-                    {salvo === t.id && <span className="acl-salvo"><Icone nome="ok" tamanho={12} /> salvo</span>}
-                  </td>
-
-                  <td className="left">
-                    {!emLista ? (
-                      <span className="acl-livre">todos os usuários do domínio</span>
-                    ) : (
-                      <div className="acl-emails">
-                        {t.emails.map((e) => (
-                          <span className="acl-chip" key={e}>
-                            {e}
-                            <button
-                              type="button"
-                              title="Remover"
-                              disabled={salvando === t.id}
-                              onClick={() => {
-                                const restantes = t.emails.filter((x) => x !== e);
-                                if (!restantes.length) salvar(t, 'todos', []);
-                                else salvar(t, 'lista', restantes);
-                              }}
-                            >
-                              <Icone nome="fechar" tamanho={11} />
-                            </button>
-                          </span>
-                        ))}
-                        <CampoEmail
-                          sugestoes={sugestoes}
-                          onAdicionar={(email) => {
-                            if (t.emails.includes(email)) return;
-                            setEditando(null);
-                            salvar(t, 'lista', [...t.emails, email]);
-                          }}
-                        />
-                        {!t.emails.length && (
-                          <span className="acl-aviso">adicione ao menos um e-mail</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-
-                  <td className="left acl-quando">
-                    {t.atualizadoEm
-                      ? <>{labelDataHora(t.atualizadoEm)}<span>{t.atualizadoPor}</span></>
-                      : '—'}
-                  </td>
-                </tr>
-              );
-            })}
+            {linhas.map((p) => (
+              <tr key={p.email} className={p.novo ? 'linha-nova' : ''}>
+                <td className="left col-pessoa">
+                  {p.email}
+                  {p.email === usuario?.email && <span className="cfg-tag">você</span>}
+                  {p.papel !== 'viewer' && <span className="cfg-tag">{PAPEL_LABEL[p.papel]}</span>}
+                </td>
+                {telas.map((t) => {
+                  const chave = `${p.email}:${t.id}`;
+                  const aberta = t.modo === 'todos';
+                  const veTudo = p.veTudo;
+                  // admin passa por definição, e tela aberta vale para todos:
+                  // caixinha nesses casos seria decorativa e enganaria quem clica
+                  if (veTudo || aberta) {
+                    return (
+                      <td key={t.id} className="col-tela">
+                        <span
+                          className={`mt-implicito${veTudo ? ' admin' : ''}`}
+                          title={veTudo
+                            ? 'Administrador enxerga todas as telas'
+                            : 'Tela liberada para todo o domínio'}
+                        >
+                          <Icone nome="ok" tamanho={12} />
+                        </span>
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={t.id} className="col-tela">
+                      <input
+                        type="checkbox"
+                        className="mt-caixa"
+                        checked={p.telas.includes(t.id)}
+                        disabled={ocupado === chave}
+                        title={`${p.telas.includes(t.id) ? 'Remover' : 'Liberar'} ${t.label} para ${p.email}`}
+                        onChange={() => alternarTela(p, t.id)}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {!linhas.length && (
+              <tr>
+                <td colSpan={telas.length + 1} style={{ textAlign: 'center', padding: 22, color: '#605E5C' }}>
+                  Ninguém cadastrado ainda. Adicione um e-mail acima.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      <ul className="cfg-legenda">
+        <li>
+          <b>Todos</b> vale para qualquer conta do domínio. <b>Restrita</b> vale só para quem
+          estiver marcado — e para os administradores, que entram em tudo.
+        </li>
+        <li>
+          Tela restrita <b>sem ninguém marcado</b> fica só para administradores. É estado válido:
+          antes, tirar a última pessoa devolvia a tela ao domínio inteiro, ou seja, uma remoção
+          de acesso acabava ampliando o acesso.
+        </li>
+        <li>
+          O backend confere a permissão <b>em cada endpoint</b>, não só na navegação: esconder o
+          item do menu não é o que protege o dado.
+        </li>
+      </ul>
     </div>
   );
 }
-
-// ---------------------------------------------------------------- queries
-function AbaQueries() {
-  const [dados, setDados] = useState(null);
-  const [erro, setErro] = useState(null);
-  const [aberta, setAberta] = useState(null);
-  const [amostra, setAmostra] = useState({});
-  const [testando, setTestando] = useState(null);
-
-  useEffect(() => { apiJson('/queries').then(setDados).catch(setErro); }, []);
-
-  const testar = async (q) => {
-    setTestando(q.id);
-    try {
-      const r = await apiJson(`/queries/${q.id}/test`, { method: 'POST', body: { limite: 20 } });
-      setAmostra((s) => ({ ...s, [q.id]: r }));
-      setErro(null);
-    } catch (e) { setErro(e); } finally { setTestando(null); }
-  };
-
-  if (!dados && !erro) return <Loading texto="Carregando catálogo…" />;
-
-  return (
-    <div className="cfg-bloco">
-      {erro && <Erro erro={erro} />}
-      <p className="cfg-nota">
-        Todas as consultas que alimentam o dashboard, como são enviadas ao banco. O recorte
-        histórico é <code>{dados?.since}</code> (telefonia a partir de <code>{dados?.phoneSince}</code>).
-        O botão <b>testar</b> executa com <code>LIMIT 20</code>, sem alterar nada.
-      </p>
-
-      {(dados?.queries || []).map((q) => (
-        <article key={q.id} className="cfg-query">
-          <header onClick={() => setAberta(aberta === q.id ? null : q.id)}>
-            <div className="cfg-query-id">
-              <span className={`cfg-banco ${q.banco}`}>{q.bancoLabel}</span>
-              <b>{q.titulo}</b>
-              <code>{q.id}</code>
-            </div>
-            <div className="cfg-query-stats">
-              {q.erro
-                ? <span className="cfg-erro">falhou: {q.erro}</span>
-                : (
-                  <>
-                    <span>{q.linhas != null ? `${int(q.linhas)} linhas` : '—'}</span>
-                    <span>{q.ms != null ? `${int(q.ms)} ms` : ''}</span>
-                    <span>{q.ultimaExecucao ? labelDataHora(q.ultimaExecucao) : 'nunca'}</span>
-                  </>
-                )}
-              <Icone nome={aberta === q.id ? 'cima' : 'baixo'} tamanho={13} className="cfg-chevron" />
-            </div>
-          </header>
-
-          {aberta === q.id && (
-            <div className="cfg-query-corpo">
-              <p>{q.descricao}</p>
-              <div className="cfg-query-meta">
-                <span>origem no Power BI: <b>{q.origemPbi}</b></span>
-                {!!q.params.length && <span>parâmetros: <code>{q.params.join(', ')}</code></span>}
-                {q.incrementos != null && <span>cargas incrementais: <b>{int(q.incrementos)}</b></span>}
-              </div>
-
-              <pre className="cfg-sql">{q.sql}</pre>
-
-              <div className="cfg-query-acoes">
-                <button type="button" className="cfg-botao" disabled={testando === q.id} onClick={() => testar(q)}>
-                  <Icone nome="play" tamanho={13} /> {testando === q.id ? 'executando…' : 'testar (LIMIT 20)'}
-                </button>
-                <button type="button" className="cfg-botao ghost" onClick={() => navigator.clipboard?.writeText(q.sql)}>
-                  <Icone nome="copiar" tamanho={13} /> copiar SQL
-                </button>
-              </div>
-
-              {amostra[q.id] && (
-                <div className="tbl-wrap" style={{ maxHeight: 300, marginTop: 10 }}>
-                  <table className="pbi">
-                    <thead>
-                      <tr>{amostra[q.id].colunas.map((c) => <th key={c} className="left">{c}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {amostra[q.id].linhas.map((l, i) => (
-                        <tr key={i}>
-                          {amostra[q.id].colunas.map((c) => (
-                            <td key={c} className="left">{l[c] === null || l[c] === undefined ? '—' : String(l[c])}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </article>
-      ))}
-    </div>
-  );
-}
-
 
 // ------------------------------------------------------- janela de dados
 function AbaJanela() {

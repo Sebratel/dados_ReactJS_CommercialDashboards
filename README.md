@@ -91,20 +91,35 @@ escada resolve isso mantendo a regra original de pé.
 Em **Configurações → Usuários e papéis** a coluna *Power user* liga e desliga a marcação sem
 tocar no papel. Quem vem de `DEV_EMAILS` aparece cadeado — a tela não rebaixa a semente.
 
-### Acesso por tela
+### Acesso por tela: matriz pessoas x telas
 
-Em **Configurações → Acesso por tela** cada uma das 11 telas aparece em uma linha da tabela
-com o modo de acesso e as pessoas liberadas:
+Em **Configurações → Acesso por tela** cada linha é uma pessoa e cada coluna é uma tela.
+Marcar a caixa libera; a gravação é imediata.
 
-* **Todos** — qualquer conta do domínio;
-* **Restrito** — só os e-mails da lista, editados como chips (Enter adiciona, × remove).
+A primeira versão era orientada à tela — para liberar alguém em seis telas era preciso abrir
+seis cartões e digitar o mesmo e-mail em cada um. Quem administra pensa no sentido oposto
+("entrou fulano, ele vê isto e isto"), e é esse o sentido da matriz.
 
-O salvamento é imediato a cada alteração; ao remover o último e-mail a tela volta
-sozinha para **Todos**, que é o estado equivalente.
+**O modelo de dados não mudou.** A permissão continua guardada por tela
+(`telas[id] = { modo, emails }`), que é como `podeVerTela` decide a cada requisição; a matriz
+é uma transposição na leitura. Não há estado novo para sair de sincronia com o antigo.
 
-Administradores enxergam todas as telas independentemente do modo. O backend valida a
-permissão **em cada endpoint** (não é só a navegação que some), e a configuração fica em
-`access.json`, no volume do container.
+Cada coluna tem um modo, no próprio cabeçalho:
+
+* **todos** — qualquer conta do domínio. A coluna aparece preenchida e sem caixa, porque
+  marcar alguém ali não mudaria nada;
+* **restrita** — só quem está marcado, mais os administradores.
+
+Linha de administrador também aparece preenchida e sem caixa: ele entra em tudo por
+definição, e uma caixa ali seria decorativa.
+
+> **Lista vazia agora é um estado válido.** Uma tela restrita sem ninguém marcado fica só
+> para os administradores. Antes isso era recusado, e o efeito colateral era pior que o
+> problema: ao tirar a última pessoa, a tela voltava a ser pública — uma remoção de acesso
+> ampliava o acesso.
+
+O backend valida a permissão **em cada endpoint**; esconder o item do menu não é o que
+protege o dado.
 
 ### Janela de dados
 

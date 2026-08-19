@@ -34,17 +34,17 @@ export const peloMenos = (papel, minimo) => rank(papel) >= rank(minimo);
 
 /** Telas do dashboard — a mesma lista alimenta a navegação e a tela de acessos. */
 export const TELAS = [
-  { id: 'capa', label: 'Capa', rota: '/capa', descricao: 'Página inicial com o objetivo e o status das fontes' },
-  { id: 'diretoria', label: 'Diretoria', rota: '/diretoria', descricao: 'Resumo executivo dos três indicadores' },
-  { id: 'primeiro-pagamento', label: 'Primeiro Pagamento', rota: '/primeiro-pagamento', descricao: 'Clientes que pagaram a primeira fatura' },
-  { id: 'ativacoes', label: 'Ativações', rota: '/ativacoes', descricao: 'Instalações concluídas' },
-  { id: 'ativacoes-historico', label: 'Ativações - Histórico', rota: '/ativacoes-historico', descricao: 'Matriz de ativações por vendedor' },
-  { id: 'vendas', label: 'Vendas', rota: '/vendas', descricao: 'Contratos criados' },
-  { id: 'vendas-historico', label: 'Vendas - Histórico', rota: '/vendas-historico', descricao: 'Matriz de vendas por vendedor' },
-  { id: 'rampagem', label: 'Rampagem', rota: '/rampagem', descricao: 'Vendedores nos primeiros 90 dias' },
-  { id: 'premiacoes', label: 'Premiações', rota: '/premiacoes', descricao: 'Faixas e valores de premiação (dado sensível)' },
-  { id: 'vendas-canceladas', label: 'Vendas Canceladas', rota: '/vendas-canceladas', descricao: 'Contratos cancelados que nunca chegaram a ser ativados' },
-  { id: 'preditivo', label: 'Análise Preditiva', rota: '/preditivo', descricao: 'Projeções, carteira em risco e leitura por IA' },
+  { id: 'capa', curto: 'Capa', label: 'Capa', rota: '/capa', descricao: 'Página inicial com o objetivo e o status das fontes' },
+  { id: 'diretoria', curto: 'Diretoria', label: 'Diretoria', rota: '/diretoria', descricao: 'Resumo executivo dos três indicadores' },
+  { id: 'primeiro-pagamento', curto: '1º Pgto', label: 'Primeiro Pagamento', rota: '/primeiro-pagamento', descricao: 'Clientes que pagaram a primeira fatura' },
+  { id: 'ativacoes', curto: 'Ativações', label: 'Ativações', rota: '/ativacoes', descricao: 'Instalações concluídas' },
+  { id: 'ativacoes-historico', curto: 'Ativ. hist.', label: 'Ativações - Histórico', rota: '/ativacoes-historico', descricao: 'Matriz de ativações por vendedor' },
+  { id: 'vendas', curto: 'Vendas', label: 'Vendas', rota: '/vendas', descricao: 'Contratos criados' },
+  { id: 'vendas-historico', curto: 'Vendas hist.', label: 'Vendas - Histórico', rota: '/vendas-historico', descricao: 'Matriz de vendas por vendedor' },
+  { id: 'rampagem', curto: 'Rampagem', label: 'Rampagem', rota: '/rampagem', descricao: 'Vendedores nos primeiros 90 dias' },
+  { id: 'premiacoes', curto: 'Premiações', label: 'Premiações', rota: '/premiacoes', descricao: 'Faixas e valores de premiação (dado sensível)' },
+  { id: 'vendas-canceladas', curto: 'Canceladas', label: 'Vendas Canceladas', rota: '/vendas-canceladas', descricao: 'Contratos cancelados que nunca chegaram a ser ativados' },
+  { id: 'preditivo', curto: 'Preditiva', label: 'Análise Preditiva', rota: '/preditivo', descricao: 'Projeções, carteira em risco e leitura por IA' },
 ];
 
 export const TELA_IDS = TELAS.map((t) => t.id);
@@ -191,9 +191,10 @@ export function definirTela(id, { modo, emails }, porQuem) {
   if (!TELA_IDS.includes(id)) throw new Error(`Tela desconhecida: ${id}.`);
   if (modo !== 'todos' && modo !== 'lista') throw new Error('Modo inválido (use "todos" ou "lista").');
   const lista = [...new Set((emails || []).map(normEmail).filter((e) => e.includes('@')))];
-  if (modo === 'lista' && !lista.length) {
-    throw new Error('No modo "lista" informe ao menos um e-mail (senão ninguém além dos admins veria a tela).');
-  }
+  // Lista vazia em modo restrito é estado válido: a tela fica só para os
+  // administradores. Antes isso era recusado, e o efeito colateral era pior que
+  // o problema — ao tirar a última pessoa a tela voltava a ser pública, ou seja,
+  // uma remoção de acesso ampliava o acesso.
   const dados = ler();
   dados.telas[id] = {
     modo,
@@ -203,6 +204,72 @@ export function definirTela(id, { modo, emails }, porQuem) {
   };
   gravar(dados);
   return listarTelas().find((t) => t.id === id);
+}
+
+
+/**
+ * A MESMA permissão vista pelo outro lado.
+ *
+ * O armazenamento continua por tela (`telas[id] = { modo, emails }`), porque é
+ * assim que `podeVerTela` decide a cada requisição. O que muda é a leitura: quem
+ * administra pensa em pessoas — "o fulano entrou, libera X, Y e Z" — e não em
+ * abrir onze telas para incluir o mesmo e-mail em cada uma.
+ *
+ * Então a matriz é uma transposição, não um segundo modelo de dados. Não existe
+ * estado novo para sair de sincronia com o antigo.
+ */
+export function matrizDeAcesso() {
+  const telas = listarTelas();
+  const usuarios = listarUsuarios();
+
+  // gente que só aparece nas listas de tela, sem papel elevado
+  const emails = new Map(usuarios.map((u) => [u.email, u]));
+  for (const t of telas) {
+    for (const e of t.emails) {
+      if (!emails.has(e)) emails.set(e, { email: e, papel: papelDe(e), origem: 'arquivo', powerUser: ehPowerUser(e) });
+    }
+  }
+
+  const pessoas = [...emails.values()].map((u) => ({
+    ...u,
+    // admin passa em tudo por definição: marcar caixinha para ele seria mentira
+    veTudo: u.papel === 'admin',
+    telas: telas.filter((t) => t.emails.includes(u.email)).map((t) => t.id),
+  }));
+
+  pessoas.sort((a, b) => rank(b.papel) - rank(a.papel) || a.email.localeCompare(b.email));
+  return { telas, pessoas };
+}
+
+/**
+ * Grava de uma vez as telas de uma pessoa. É a operação que a matriz usa: um
+ * clique numa caixinha manda a linha inteira, então o resultado não depende da
+ * ordem em que as telas foram tocadas.
+ *
+ * Marcar uma tela que está em modo "todos" não faz nada — ela já é visível para
+ * todo o domínio. A interface mostra isso em vez de fingir que a caixinha manda.
+ */
+export function definirTelasDoEmail(email, telaIds, porQuem) {
+  const e = normEmail(email);
+  if (!e.includes('@')) throw new Error('E-mail inválido.');
+  const querAcesso = new Set((telaIds || []).filter((id) => TELA_IDS.includes(id)));
+
+  const dados = ler();
+  const agora = new Date().toISOString();
+  for (const t of TELAS) {
+    const cfg = dados.telas[t.id] || { modo: 'todos', emails: [] };
+    if (cfg.modo !== 'lista') continue;            // tela aberta: nada a fazer
+    const lista = new Set((cfg.emails || []).map(normEmail));
+    const tinha = lista.has(e);
+    const quer = querAcesso.has(t.id);
+    if (tinha === quer) continue;
+    if (quer) lista.add(e); else lista.delete(e);
+    dados.telas[t.id] = {
+      ...cfg, modo: 'lista', emails: [...lista], atualizadoEm: agora, atualizadoPor: normEmail(porQuem),
+    };
+  }
+  gravar(dados);
+  return matrizDeAcesso();
 }
 
 /** O usuário pode abrir a tela? Admin sempre pode. */
