@@ -165,7 +165,7 @@ export function limparSessao() {
 // ---- contexto React ------------------------------------------------------
 export function SessionProvider({ children }) {
   const [config, setConfig] = useState(null);      // { clientId, dominio, habilitado }
-  const [usuario, setUsuario] = useState(null);    // { email, nome, foto, papel, powerUser, telas }
+  const [usuario, setUsuario] = useState(null);    // { email, nome, foto, papel, powerUser, telas, escopo }
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [token, setTokenState] = useState(tokenAtual);
@@ -243,6 +243,7 @@ export function SessionProvider({ children }) {
     // Power user corre por fora da hierarquia: o catálogo de queries é atribuição
     // do DEV, não do admin — mas quem acumula os dois papéis continua enxergando.
     ehDev: !!usuario?.powerUser,
+    escopo: usuario?.escopo || null,
     podeVer: (tela) => !usuario?.telas || usuario.telas.includes(tela) || usuario.papel === 'admin',
   }), [config, usuario, carregando, erro, token, entrar, sair, recarregarMe, motivoSaida]);
 

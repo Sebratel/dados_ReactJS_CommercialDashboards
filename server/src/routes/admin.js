@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import {
-  definirPapel, definirPowerUser, definirTela, definirTelasDoEmail, listarTelas,
-  listarUsuarios, matrizDeAcesso, papelDe, removerUsuario, telasDoUsuario,
+  definirEscopo, definirPapel, definirPowerUser, definirTela, definirTelasDoEmail,
+  listarTelas, listarUsuarios, matrizDeAcesso, papelDe, removerUsuario, telasDoUsuario,
 } from '../auth/access.js';
 import { listarQueries, testarQuery } from '../model/catalogo.js';
 import { definirJanela, estadoRecarga, janela, marcarRecarga, restaurarJanela } from '../janela.js';
@@ -33,6 +33,9 @@ admin.get('/me', exigirAuth(), (req, res) => {
     papel: req.usuario.papel,
     powerUser: !!req.usuario.powerUser,
     telas: telasDoUsuario(req.usuario),
+    // quem enxerga uma fatia precisa saber disso, senão conclui que o número está
+    // errado; a interface avisa no topo em vez de deixar o recorte invisível
+    escopo: req.usuario.escopo?.equipes || null,
   });
 });
 
@@ -76,12 +79,22 @@ admin.get('/access/screens', exigirAuth({ minPapel: 'admin' }), (req, res) => {
 
 /** A mesma permissão pelo lado da pessoa — é o que a tela de acessos usa. */
 admin.get('/access/matriz', exigirAuth({ minPapel: 'admin' }), (req, res) => {
-  res.json(matrizDeAcesso());
+  res.json({ ...matrizDeAcesso(), equipes: getState().dims?.equipes || [] });
 });
 
 admin.put('/access/users/:email/telas', exigirAuth({ minPapel: 'admin' }), (req, res) => {
   try {
     res.json(definirTelasDoEmail(req.params.email, req.body?.telas, req.usuario.email));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** Escopo de dados: as equipes que a pessoa enxerga, em todas as telas. */
+admin.put('/access/users/:email/escopo', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    definirEscopo(req.params.email, req.body?.equipes, req.usuario.email);
+    res.json(matrizDeAcesso());
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

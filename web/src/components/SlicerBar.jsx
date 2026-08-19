@@ -131,6 +131,7 @@ export function SlicerBar({
 }) {
   const { filtros, setFiltro, presetAtivo, ativos, limpar } = useFilters();
   const { data: dims } = useFiltros();
+  const { escopo } = useSession();
   const [cliente, setCliente] = useState(filtros.cliente || '');
 
   useEffect(() => setCliente(filtros.cliente || ''), [filtros.cliente]);
@@ -155,6 +156,17 @@ export function SlicerBar({
   return (
     <div className="filtros">
       <span className="rotulo">Filtros</span>
+
+      {/* recorte invisível faz a pessoa concluir que o número está errado */}
+      {!!escopo?.length && (
+        <span
+          className="escopo-aviso"
+          title={`Você enxerga apenas: ${escopo.join(', ')}. Os totais desta tela já vêm recortados.`}
+        >
+          <Icone nome="cadeado" tamanho={11} />
+          {escopo.length === 1 ? escopo[0] : `${escopo.length} equipes`}
+        </span>
+      )}
 
       {campos.includes('periodo') && (
         <FiltroPeriodo

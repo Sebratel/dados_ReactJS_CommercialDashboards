@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { usuarioDoToken } from './google.js';
-import { ehPowerUser, papelDe, peloMenos, podeVerTela } from './access.js';
+import { ehPowerUser, escopoDe, papelDe, peloMenos, podeVerTela } from './access.js';
+import { EQUIPE_INEXISTENTE } from '../model/measures.js';
 
 /**
  * Autenticação + autorização.
@@ -13,6 +14,27 @@ import { ehPowerUser, papelDe, peloMenos, podeVerTela } from './access.js';
  * Com AUTH_ENABLED=false o middleware libera tudo — útil para rodar local sem
  * Google, nunca em produção.
  */
+
+/**
+ * Aplica o escopo de dados reescrevendo o filtro de equipe da requisição.
+ *
+ * Fica aqui, e não em cada rota, porque `exigirAuth` é o único caminho por onde
+ * toda rota de dados passa: endpoint novo herda o recorte sem ninguém lembrar de
+ * aplicá-lo. Como `parseFilters` lê `req.query`, KPIs, gráficos, tabelas,
+ * exportações e leitura de IA passam a respeitar o escopo de uma só vez.
+ *
+ * O pedido é CRUZADO com o permitido, nunca substituído: quem tem escopo em
+ * [A, B] e pede a equipe C recebe vazio, não recebe A e B. E registro sem equipe
+ * fica de fora por consequência — a lista de equipes permitidas nunca contém ''.
+ */
+export function aplicarEscopo(req, escopo) {
+  if (!escopo?.equipes?.length) return;
+  const pedido = String(req.query.equipe || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const permitido = escopo.equipes;
+  const efetivo = pedido.length ? pedido.filter((x) => permitido.includes(x)) : permitido;
+  req.query.equipe = efetivo.length ? efetivo.join(',') : EQUIPE_INEXISTENTE;
+}
+
 export function exigirAuth({ minPapel = 'viewer', powerUser = false, tela = null } = {}) {
   return async (req, res, next) => {
     if (!config.auth.habilitado) {
@@ -42,7 +64,10 @@ export function exigirAuth({ minPapel = 'viewer', powerUser = false, tela = null
 
     const papel = papelDe(usuario.email);
     const power = ehPowerUser(usuario.email);
-    req.usuario = { ...usuario, papel, powerUser: power };
+    // admin é isento: com recorte ele não conseguiria auditar o que liberou
+    const escopo = papel === 'admin' ? null : escopoDe(usuario.email);
+    req.usuario = { ...usuario, papel, powerUser: power, escopo };
+    aplicarEscopo(req, escopo);
 
     if (powerUser && !power) {
       return res.status(403).json({

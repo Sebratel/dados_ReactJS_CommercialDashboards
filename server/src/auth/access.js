@@ -55,7 +55,7 @@ const ENV_DEVS = new Set(csv(process.env.DEV_EMAILS || process.env.POWER_USER_EM
 
 const normEmail = (e) => String(e || '').trim().toLowerCase();
 
-const vazio = () => ({ papeis: {}, telas: {}, powerUsers: [] });
+const vazio = () => ({ papeis: {}, telas: {}, powerUsers: [], escopos: {} });
 
 function ler() {
   try {
@@ -67,6 +67,7 @@ function ler() {
       papeis: d && typeof d.papeis === 'object' ? d.papeis : {},
       telas: d && typeof d.telas === 'object' ? d.telas : {},
       powerUsers: Array.isArray(d?.powerUsers) ? d.powerUsers.map(normEmail).filter(Boolean) : [],
+      escopos: d && typeof d.escopos === 'object' ? d.escopos : {},
     };
   } catch (err) {
     console.warn(`[acesso] não foi possível ler ${config.accessPath}: ${err.message} — usando só o .env`);
@@ -207,6 +208,49 @@ export function definirTela(id, { modo, emails }, porQuem) {
 }
 
 
+
+/**
+ * ESCOPO DE DADOS — a outra metade da permissão.
+ *
+ * O ACL de tela responde "quais telas você abre". Isto responde "qual fatia dos
+ * dados você enxerga", e as duas perguntas são independentes de propósito: o
+ * escopo é propriedade do cargo, não da tela. Quem cuida das equipes X, Y e Z
+ * cuida delas em Vendas, Ativações e Premiações igualmente, então o escopo vale
+ * em TODAS as telas — pendurá-lo em cada tela viraria tela × equipe × pessoa.
+ *
+ * Sem escopo definido a pessoa vê tudo o que a tela dela mostra: `null` significa
+ * "sem recorte", nunca "recorte vazio".
+ */
+export function escopoDe(email) {
+  const e = normEmail(email);
+  const cfg = ler().escopos[e];
+  const equipes = Array.isArray(cfg?.equipes) ? cfg.equipes.filter(Boolean) : [];
+  return equipes.length ? { equipes: [...new Set(equipes)] } : null;
+}
+
+/** Lista vazia remove o escopo (volta a ver tudo). */
+export function definirEscopo(email, equipes, porQuem) {
+  const e = normEmail(email);
+  if (!e.includes('@')) throw new Error('E-mail inválido.');
+  const lista = [...new Set((equipes || []).map((x) => String(x).trim()).filter(Boolean))];
+  // Guardar recorte para quem é isento seria gravar algo sem efeito, que voltaria
+  // a valer sozinho no dia em que a pessoa deixasse de ser administradora.
+  if (lista.length && papelDe(e) === 'admin') {
+    throw new Error('Administrador é isento do recorte de dados — sem isso não conseguiria auditar o que liberou. Rebaixe o papel antes de definir equipes.');
+  }
+  const dados = ler();
+  if (!lista.length) delete dados.escopos[e];
+  else {
+    dados.escopos[e] = {
+      equipes: lista,
+      atualizadoEm: new Date().toISOString(),
+      atualizadoPor: normEmail(porQuem),
+    };
+  }
+  gravar(dados);
+  return escopoDe(e);
+}
+
 /**
  * A MESMA permissão vista pelo outro lado.
  *
@@ -222,19 +266,23 @@ export function matrizDeAcesso() {
   const telas = listarTelas();
   const usuarios = listarUsuarios();
 
-  // gente que só aparece nas listas de tela, sem papel elevado
+  // Gente que não tem papel elevado mas existe na configuração: aparece nas
+  // listas de tela ou tem escopo definido. Sem isto o registro fica gravado e
+  // invisível — não haveria como enxergar nem desfazer pela tela.
   const emails = new Map(usuarios.map((u) => [u.email, u]));
-  for (const t of telas) {
-    for (const e of t.emails) {
-      if (!emails.has(e)) emails.set(e, { email: e, papel: papelDe(e), origem: 'arquivo', powerUser: ehPowerUser(e) });
-    }
-  }
+  const conhecer = (e) => {
+    if (!emails.has(e)) emails.set(e, { email: e, papel: papelDe(e), origem: 'arquivo', powerUser: ehPowerUser(e) });
+  };
+  for (const t of telas) for (const e of t.emails) conhecer(e);
+  for (const e of Object.keys(ler().escopos)) conhecer(normEmail(e));
 
   const pessoas = [...emails.values()].map((u) => ({
     ...u,
     // admin passa em tudo por definição: marcar caixinha para ele seria mentira
     veTudo: u.papel === 'admin',
     telas: telas.filter((t) => t.emails.includes(u.email)).map((t) => t.id),
+    // admin é isento do recorte: sem isso ele não consegue auditar o que liberou
+    escopo: u.papel === 'admin' ? null : escopoDe(u.email),
   }));
 
   pessoas.sort((a, b) => rank(b.papel) - rank(a.papel) || a.email.localeCompare(b.email));

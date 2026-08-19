@@ -121,6 +121,42 @@ definição, e uma caixa ali seria decorativa.
 O backend valida a permissão **em cada endpoint**; esconder o item do menu não é o que
 protege o dado.
 
+### Escopo de dados: qual fatia a pessoa enxerga
+
+O ACL de tela responde *quais telas* alguém abre. O escopo responde *qual fatia dos dados* —
+e as duas são perguntas independentes de propósito. Na matriz, a coluna **Equipes** define o
+escopo: nenhuma marcada significa "vê tudo".
+
+O escopo é propriedade do cargo, não da tela: quem cuida das equipes X, Y e Z cuida delas em
+Vendas, Ativações e Premiações igualmente. Por isso ele vale em **todas** as telas — pendurá-lo
+em cada uma viraria tela × equipe × pessoa, que é o desenho que não se sustenta.
+
+**Onde é aplicado.** Dentro de `exigirAuth`, reescrevendo `req.query.equipe`. É o único caminho
+por onde toda rota de dados passa, então KPIs, gráficos, tabelas, exportações e leitura de IA
+respeitam o recorte de uma só vez — e endpoint novo herda sem ninguém lembrar de aplicar.
+
+O pedido é **cruzado** com o permitido, nunca substituído: quem tem escopo em `[A, B]` e pede a
+equipe `C` recebe **vazio**, não recebe A e B.
+
+> **Por que existe um sentinela.** `asArray('')` devolve `null`, e `null` no filtro significa
+> "sem filtro". Escrever escopo vazio como string vazia abriria a base inteira em vez de
+> fechá-la, então o caso "nada permitido" usa `EQUIPE_INEXISTENTE`, um valor que nenhum
+> registro tem. Falhar fechado precisa ser explícito.
+
+Três decisões que mudam número na tela:
+
+* **`/filters`** é o único endpoint de dados fora daquele caminho, e teve o recorte aplicado à
+  mão: sem isso a pessoa veria no seletor equipes que não consegue abrir, e escolher uma
+  devolveria tela vazia sem explicação;
+* **registro sem equipe fica de fora** do escopo, por consequência de cruzar com uma lista que
+  nunca contém `''` — nas vendas canceladas são 12 mil contratos, então o efeito é visível;
+* **administrador é isento**, senão não conseguiria auditar o que liberou. Definir escopo para
+  um admin é **recusado** em vez de guardado sem efeito, que voltaria a valer sozinho no dia
+  de uma despromoção.
+
+Quem tem escopo vê um aviso na barra de filtros com as equipes que alcança. Recorte invisível
+faz a pessoa concluir que o número está errado.
+
 ### Janela de dados
 
 O recorte histórico da carga fica em **Configurações → Janela de dados** (só admin). Ele

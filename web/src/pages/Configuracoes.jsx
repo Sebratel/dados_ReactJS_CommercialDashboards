@@ -179,6 +179,76 @@ function AbaUsuarios() {
   );
 }
 
+/**
+ * Escopo de dados de uma pessoa: as equipes que ela enxerga em TODAS as telas.
+ *
+ * Fica junto da matriz porque é a outra metade da mesma pergunta — "o que essa
+ * pessoa vê" —, mas é outra dimensão: o ACL de tela diz QUAIS telas, o escopo diz
+ * QUAL FATIA. Pendurar o escopo em cada tela viraria tela × equipe × pessoa.
+ */
+function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, [aberto]);
+
+  if (pessoa.veTudo) {
+    return <span className="esc-todas admin" title="Administrador é isento do recorte: sem isso não conseguiria auditar o que liberou">isento</span>;
+  }
+
+  const atual = pessoa.escopo?.equipes || [];
+  const alternar = (eq) => {
+    const nova = atual.includes(eq) ? atual.filter((x) => x !== eq) : [...atual, eq];
+    onSalvar(pessoa, nova);
+  };
+
+  return (
+    <span className="esc-wrap" ref={ref}>
+      <button
+        type="button"
+        className={`esc-botao${atual.length ? ' on' : ''}`}
+        disabled={ocupado}
+        title={atual.length ? `Enxerga: ${atual.join(', ')}` : 'Enxerga todas as equipes'}
+        onClick={() => setAberto((a) => !a)}
+      >
+        {atual.length ? `${atual.length} ${atual.length === 1 ? 'equipe' : 'equipes'}` : 'todas'}
+        <Icone nome="baixo" tamanho={9} />
+      </button>
+      {aberto && (
+        <div className="esc-pop">
+          <div className="esc-pop-topo">
+            <b>Equipes que {pessoa.email.split('@')[0]} enxerga</b>
+            {!!atual.length && (
+              <button type="button" onClick={() => onSalvar(pessoa, [])}>limpar (ver todas)</button>
+            )}
+          </div>
+          <div className="esc-lista">
+            {equipes.map((eq) => (
+              <label key={eq}>
+                <input
+                  type="checkbox"
+                  checked={atual.includes(eq)}
+                  onChange={() => alternar(eq)}
+                />
+                <span>{eq}</span>
+              </label>
+            ))}
+          </div>
+          <p className="esc-nota">
+            Nenhuma marcada = vê todas. O recorte vale em todas as telas, e registro
+            sem equipe fica de fora.
+          </p>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // ------------------------------------------------------------ acesso/telas
 /**
  * Matriz pessoas x telas.
@@ -220,6 +290,11 @@ function AbaTelas() {
     ));
   };
 
+  const salvarEscopo = (pessoa, equipes) => executar(`escopo:${pessoa.email}`, () => apiJson(
+    `/access/users/${encodeURIComponent(pessoa.email)}/escopo`,
+    { method: 'PUT', body: { equipes } },
+  ));
+
   const trocarModo = (tela) => {
     const modo = tela.modo === 'todos' ? 'lista' : 'todos';
     executar(`tela:${tela.id}`, async () => {
@@ -256,9 +331,10 @@ function AbaTelas() {
       {erro && <Erro erro={erro} />}
 
       <p className="cfg-nota">
-        Cada linha é uma pessoa, cada coluna é uma tela. Marque o que ela deve enxergar — grava
-        na hora. Coluna em <b>todos</b> vale para qualquer conta do domínio, então aparece
-        preenchida e sem caixa; para restringir, use o botão no cabeçalho dela.
+        Duas perguntas diferentes na mesma tabela: as colunas de tela dizem <b>quais telas</b> a
+        pessoa abre; a coluna <b>Equipes</b> diz <b>qual fatia dos dados</b> ela enxerga — e essa
+        vale em todas as telas. Tudo grava na hora. Coluna em <b>todos</b> vale para qualquer
+        conta do domínio, então aparece preenchida e sem caixa.
       </p>
 
       <div className="cfg-form">
@@ -287,6 +363,7 @@ function AbaTelas() {
           <thead>
             <tr>
               <th className="left col-pessoa">Pessoa</th>
+              <th className="col-escopo" title="Equipes que a pessoa enxerga, em todas as telas">Equipes</th>
               {telas.map((t) => (
                 <th key={t.id} className="col-tela" title={`${t.label} — ${t.descricao}`}>
                   <span className="mt-nome">{t.curto || t.label}</span>
@@ -312,6 +389,14 @@ function AbaTelas() {
                   {p.email}
                   {p.email === usuario?.email && <span className="cfg-tag">você</span>}
                   {p.papel !== 'viewer' && <span className="cfg-tag">{PAPEL_LABEL[p.papel]}</span>}
+                </td>
+                <td className="col-escopo">
+                  <SeletorEscopo
+                    pessoa={p}
+                    equipes={dados?.equipes || []}
+                    ocupado={ocupado === `escopo:${p.email}`}
+                    onSalvar={salvarEscopo}
+                  />
                 </td>
                 {telas.map((t) => {
                   const chave = `${p.email}:${t.id}`;
@@ -350,7 +435,7 @@ function AbaTelas() {
             ))}
             {!linhas.length && (
               <tr>
-                <td colSpan={telas.length + 1} style={{ textAlign: 'center', padding: 22, color: '#605E5C' }}>
+                <td colSpan={telas.length + 2} style={{ textAlign: 'center', padding: 22, color: '#605E5C' }}>
                   Ninguém cadastrado ainda. Adicione um e-mail acima.
                 </td>
               </tr>

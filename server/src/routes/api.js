@@ -67,17 +67,41 @@ api.get('/health', (req, res) => {
 
 api.get('/meta', auth(), (req, res) => res.json(meta()));
 
+/**
+ * Opções dos seletores. É o único endpoint de dados que não passa por
+ * `parseFilters`, então o escopo precisa ser aplicado aqui à mão: sem isso a
+ * pessoa veria no menu equipes e vendedores que não consegue abrir — e escolher
+ * um deles devolveria uma tela vazia sem explicação.
+ */
 api.get('/filters', auth(), (req, res) => {
   const s = getState();
+  const permitidas = req.usuario?.escopo?.equipes || null;
+  const dentro = (f) => !permitidas || permitidas.includes(f.equipe);
+
   let min = null;
   let max = null;
   for (const f of s.facts) {
-    if (f.dtVenda) {
-      if (!min || f.dtVenda < min) min = f.dtVenda;
-      if (!max || f.dtVenda > max) max = f.dtVenda;
-    }
+    if (!f.dtVenda || !dentro(f)) continue;
+    if (!min || f.dtVenda < min) min = f.dtVenda;
+    if (!max || f.dtVenda > max) max = f.dtVenda;
   }
-  res.json(withMeta({ ...s.dims, periodo: { min, max, hoje: today() } }));
+
+  let dims = s.dims;
+  if (permitidas) {
+    const uniq = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const doEscopo = s.facts.filter(dentro);
+    const equipes = new Set(permitidas);
+    dims = {
+      ...s.dims,
+      equipes: uniq([...s.dims.equipes].filter((e) => equipes.has(e))),
+      vendedores: uniq([...s.teamsByName].filter(([, t]) => equipes.has(t.equipe)).map(([nome]) => nome)),
+      situacoes: uniq([...s.teamsByName.values()].filter((t) => equipes.has(t.equipe)).map((t) => t.situacao)),
+      canais: uniq(doEscopo.map((f) => f.canal)),
+      cidades: uniq(doEscopo.map((f) => f.cidade)),
+    };
+  }
+
+  res.json(withMeta({ ...dims, escopo: permitidas, periodo: { min, max, hoje: today() } }));
 });
 
 // --------------------------------------------------------------- DIRETORIA
