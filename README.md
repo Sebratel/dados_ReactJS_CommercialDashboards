@@ -134,6 +134,16 @@ escopo: nenhuma marcada significa "vê tudo".
 > tela": ele é atributo da pessoa. A interface repete isso em três lugares (introdução da aba,
 > seletor de equipes e legenda) porque é a confusão mais provável de quem configura.
 
+**Nada é gravado até você clicar em Salvar.** As alterações ficam em rascunho: a célula
+alterada aparece destacada, uma barra mostra quantas estão pendentes e oferece **Descartar**.
+A primeira versão gravava a cada clique — numa tela de uso frequente isso significa dezenas de
+requisições, nenhuma confirmação visível e nenhum jeito de desistir no meio de uma
+reorganização.
+
+> **A ordem da gravação importa.** O modo da tela vai primeiro, depois as pessoas, depois os
+> escopos. `definirTelasDoEmail` ignora tela em modo "todos", então marcar alguém numa tela que
+> só agora virou restrita seria descartado em silêncio se a ordem fosse a inversa.
+
 A escolha das equipes abre em **diálogo centralizado**, não em popover ancorado no botão: a
 célula fica dentro de uma tabela com rolagem, onde `position: absolute` é cortado pela borda
 do contêiner — e a lista ainda rolava por dentro. Eram três recortes empilhados para escolher

@@ -191,11 +191,14 @@ function AbaUsuarios() {
  * mora dentro de uma tabela com rolagem: `position: absolute` ali é cortado pela
  * borda do contêiner, e a lista de 36 equipes ainda rolava por dentro. Eram três
  * recortes empilhados para escolher uma equipe. Em diálogo, cabem todas de uma vez.
+ *
+ * Confirmar aqui NÃO grava: alimenta o rascunho da matriz, que persiste tudo de
+ * uma vez no botão Salvar. Duas gravações em níveis diferentes confundiriam quem
+ * está no meio de uma reorganização.
  */
-function DialogoEscopo({ pessoa, equipes, fechar, onAplicar }) {
-  const [marcadas, setMarcadas] = useState(() => new Set(pessoa.escopo?.equipes || []));
+function DialogoEscopo({ pessoa, equipes, marcadas: iniciais, fechar, onConfirmar }) {
+  const [marcadas, setMarcadas] = useState(() => new Set(iniciais));
   const [busca, setBusca] = useState('');
-  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') fechar(); };
@@ -209,14 +212,8 @@ function DialogoEscopo({ pessoa, equipes, fechar, onAplicar }) {
     return n;
   });
 
-  const filtradas = busca.trim()
-    ? equipes.filter((e) => e.toLowerCase().includes(busca.trim().toLowerCase()))
-    : equipes;
-
-  const aplicar = async () => {
-    setSalvando(true);
-    try { await onAplicar([...marcadas]); fechar(); } finally { setSalvando(false); }
-  };
+  const busca_ = busca.trim().toLowerCase();
+  const filtradas = busca_ ? equipes.filter((e) => e.toLowerCase().includes(busca_)) : equipes;
 
   return createPortal(
     <>
@@ -247,7 +244,7 @@ function DialogoEscopo({ pessoa, equipes, fechar, onAplicar }) {
             <input
               type="text"
               value={busca}
-              placeholder={`Buscar entre ${equipes.length} equipes…`}
+              placeholder={equipes.length ? `Buscar entre ${equipes.length} equipes…` : 'Carregando equipes…'}
               onChange={(e) => setBusca(e.target.value)}
             />
           </label>
@@ -268,13 +265,23 @@ function DialogoEscopo({ pessoa, equipes, fechar, onAplicar }) {
               <span>{eq}</span>
             </label>
           ))}
-          {!filtradas.length && <p className="esc-vazio">Nenhuma equipe com “{busca}”.</p>}
+          {!filtradas.length && (
+            <p className="esc-vazio">
+              {!equipes.length
+                ? 'A lista de equipes não chegou. Recarregue a página.'
+                : `Nenhuma equipe com “${busca}”.`}
+            </p>
+          )}
         </div>
 
         <footer>
           <button type="button" className="cfg-botao ghost" onClick={fechar}>Cancelar</button>
-          <button type="button" className="cfg-botao" onClick={aplicar} disabled={salvando}>
-            <Icone nome="ok" tamanho={13} /> {salvando ? 'salvando…' : 'Aplicar'}
+          <button
+            type="button"
+            className="cfg-botao"
+            onClick={() => { onConfirmar(pessoa, [...marcadas]); fechar(); }}
+          >
+            <Icone nome="ok" tamanho={13} /> Confirmar
           </button>
         </footer>
       </div>
@@ -283,7 +290,7 @@ function DialogoEscopo({ pessoa, equipes, fechar, onAplicar }) {
   );
 }
 
-function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
+function SeletorEscopo({ pessoa, equipes, marcadas, onConfirmar }) {
   const [aberto, setAberto] = useState(false);
 
   if (pessoa.veTudo) {
@@ -297,26 +304,24 @@ function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
     );
   }
 
-  const atual = pessoa.escopo?.equipes || [];
-
   return (
     <>
       <button
         type="button"
-        className={`esc-botao${atual.length ? ' on' : ''}`}
-        disabled={ocupado}
-        title={atual.length ? `Enxerga: ${atual.join(', ')}` : 'Enxerga todas as equipes'}
+        className={`esc-botao${marcadas.length ? ' on' : ''}`}
+        title={marcadas.length ? `Enxerga: ${marcadas.join(', ')}` : 'Enxerga todas as equipes'}
         onClick={() => setAberto(true)}
       >
-        {atual.length ? `${atual.length} ${atual.length === 1 ? 'equipe' : 'equipes'}` : 'todas'}
+        {marcadas.length ? `${marcadas.length} ${marcadas.length === 1 ? 'equipe' : 'equipes'}` : 'todas'}
         <Icone nome="baixo" tamanho={9} />
       </button>
       {aberto && (
         <DialogoEscopo
           pessoa={pessoa}
           equipes={equipes}
+          marcadas={marcadas}
           fechar={() => setAberto(false)}
-          onAplicar={(lista) => onSalvar(pessoa, lista)}
+          onConfirmar={onConfirmar}
         />
       )}
     </>
@@ -332,14 +337,24 @@ function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
  * administra pensa no sentido oposto — "entrou fulano, ele vê isto e isto" — e é
  * esse o sentido que a matriz atende, sem trocar o modelo de dados: a permissão
  * continua guardada por tela, aqui ela só é lida transposta.
+ *
+ * As alterações ficam em RASCUNHO até você clicar em Salvar. A versão anterior
+ * gravava a cada clique, o que numa tela de uso frequente significa dezenas de
+ * requisições, nenhuma confirmação visível e nenhum jeito de desistir no meio de
+ * uma reorganização. Agora o que está pendente aparece destacado e some junto.
  */
 function AbaTelas() {
   const { usuario } = useSession();
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
-  const [ocupado, setOcupado] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
   const [novo, setNovo] = useState('');
-  const [pendentes, setPendentes] = useState([]); // digitados, ainda sem tela marcada
+  const [pendentes, setPendentes] = useState([]); // e-mails digitados, ainda sem nada
+  // rascunho: só o que difere do servidor
+  const [rasTelas, setRasTelas] = useState({});   // email -> [telaId]
+  const [rasEscopo, setRasEscopo] = useState({}); // email -> [equipe]
+  const [rasModo, setRasModo] = useState({});     // telaId -> 'todos' | 'lista'
 
   const carregar = useCallback(async () => {
     try {
@@ -349,56 +364,82 @@ function AbaTelas() {
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
-  const executar = async (chave, fn) => {
-    setOcupado(chave);
-    try { setDados(await fn()); setErro(null); } catch (e) { setErro(e); } finally { setOcupado(null); }
-  };
+  const limparRascunho = () => { setRasTelas({}); setRasEscopo({}); setRasModo({}); setPendentes([]); };
 
-  /** Um clique manda a linha inteira: o resultado não depende da ordem dos cliques. */
+  if (!dados && !erro) return <Loading texto="Carregando acessos…" />;
+
+  const telas = dados?.telas || [];
+  const pessoasServidor = dados?.pessoas || [];
+
+  // leitura efetiva = rascunho quando existe, servidor quando não
+  const modoDe = (t) => rasModo[t.id] ?? t.modo;
+  const telasDe = (p) => rasTelas[p.email] ?? p.telas;
+  const escopoDe = (p) => rasEscopo[p.email] ?? (p.escopo?.equipes || []);
+
+  const linhas = [
+    ...pessoasServidor,
+    ...pendentes
+      .filter((e) => !pessoasServidor.some((p) => p.email === e))
+      .map((email) => ({ email, papel: 'viewer', telas: [], novo: true })),
+  ];
+
+  const alteracoes = Object.keys(rasTelas).length + Object.keys(rasEscopo).length + Object.keys(rasModo).length;
+
   const alternarTela = (pessoa, telaId) => {
-    const atual = new Set(pessoa.telas);
+    const atual = new Set(telasDe(pessoa));
     if (atual.has(telaId)) atual.delete(telaId); else atual.add(telaId);
-    executar(`${pessoa.email}:${telaId}`, () => apiJson(
-      `/access/users/${encodeURIComponent(pessoa.email)}/telas`,
-      { method: 'PUT', body: { telas: [...atual] } },
-    ));
+    setRasTelas((r) => ({ ...r, [pessoa.email]: [...atual] }));
+    setSalvo(false);
   };
-
-  const salvarEscopo = (pessoa, equipes) => executar(`escopo:${pessoa.email}`, () => apiJson(
-    `/access/users/${encodeURIComponent(pessoa.email)}/escopo`,
-    { method: 'PUT', body: { equipes } },
-  ));
 
   const trocarModo = (tela) => {
-    const modo = tela.modo === 'todos' ? 'lista' : 'todos';
-    executar(`tela:${tela.id}`, async () => {
-      await apiJson(`/access/screens/${tela.id}`, {
-        method: 'PUT',
-        body: { modo, emails: modo === 'lista' ? tela.emails : [] },
-      });
-      return apiJson('/access/matriz');
-    });
+    setRasModo((r) => ({ ...r, [tela.id]: modoDe(tela) === 'todos' ? 'lista' : 'todos' }));
+    setSalvo(false);
+  };
+
+  const definirEscopoRascunho = (pessoa, equipes) => {
+    setRasEscopo((r) => ({ ...r, [pessoa.email]: equipes }));
+    setSalvo(false);
   };
 
   const adicionar = () => {
     const e = novo.trim().toLowerCase();
     if (!e.includes('@')) { setErro(new Error('Informe um e-mail válido.')); return; }
-    const jaTem = (dados?.pessoas || []).some((p) => p.email === e) || pendentes.includes(e);
-    if (!jaTem) setPendentes((lista) => [...lista, e]);
+    if (!linhas.some((p) => p.email === e)) setPendentes((lista) => [...lista, e]);
     setNovo('');
     setErro(null);
   };
 
-  if (!dados && !erro) return <Loading texto="Carregando acessos…" />;
+  /**
+   * Ordem importa: o modo da tela vai primeiro. `definirTelasDoEmail` ignora tela
+   * em modo "todos", então marcar alguém numa tela que só agora virou restrita
+   * seria descartado se a gravação viesse antes.
+   */
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      for (const [id, modo] of Object.entries(rasModo)) {
+        const tela = telas.find((t) => t.id === id);
+        await apiJson(`/access/screens/${id}`, {
+          method: 'PUT',
+          body: { modo, emails: modo === 'lista' ? (tela?.emails || []) : [] },
+        });
+      }
+      for (const [email, lista] of Object.entries(rasTelas)) {
+        await apiJson(`/access/users/${encodeURIComponent(email)}/telas`, { method: 'PUT', body: { telas: lista } });
+      }
+      for (const [email, equipes] of Object.entries(rasEscopo)) {
+        await apiJson(`/access/users/${encodeURIComponent(email)}/escopo`, { method: 'PUT', body: { equipes } });
+      }
+      limparRascunho();
+      await carregar();
+      setSalvo(true);
+      setTimeout(() => setSalvo(false), 3000);
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
 
-  const telas = dados?.telas || [];
-  const restritas = telas.filter((t) => t.modo === 'lista').length;
-  const linhas = [
-    ...(dados?.pessoas || []),
-    ...pendentes
-      .filter((e) => !(dados?.pessoas || []).some((p) => p.email === e))
-      .map((email) => ({ email, papel: 'viewer', telas: [], novo: true })),
-  ];
+  const restritas = telas.filter((t) => modoDe(t) === 'lista').length;
 
   return (
     <div className="cfg-bloco">
@@ -408,9 +449,8 @@ function AbaTelas() {
         Duas perguntas diferentes na mesma tabela. As colunas de tela dizem <b>quais telas</b> a
         pessoa abre. A coluna <b>Equipes</b> diz <b>qual fatia dos dados</b> ela enxerga, e essa
         <b> vale no dashboard inteiro</b>: recorta todas as visões por equipe de todas as telas,
-        além das exportações e da leitura de IA — não é um filtro de uma tela só. Tudo grava na
-        hora. Coluna em <b>todos</b> vale para qualquer conta do domínio, então aparece
-        preenchida e sem caixa.
+        além das exportações e da leitura de IA — não é um filtro de uma tela só. Coluna em
+        <b> todos</b> vale para qualquer conta do domínio, então aparece preenchida e sem caixa.
       </p>
 
       <div className="cfg-form">
@@ -424,7 +464,7 @@ function AbaTelas() {
             onKeyDown={(e) => { if (e.key === 'Enter') adicionar(); }}
           />
         </label>
-        <button type="button" className="cfg-botao" onClick={adicionar}>
+        <button type="button" className="cfg-botao ghost" onClick={adicionar}>
           <Icone nome="mais" tamanho={14} /> Adicionar à matriz
         </button>
         <span className="janela-aviso">
@@ -434,83 +474,113 @@ function AbaTelas() {
         </span>
       </div>
 
+      {/* nada é gravado até aqui: o que está pendente fica visível e desfazível */}
+      <div className={`ras-barra${alteracoes ? ' ativa' : ''}`}>
+        {alteracoes ? (
+          <>
+            <Icone nome="alerta" tamanho={14} />
+            <span>
+              <b>{alteracoes}</b> {alteracoes === 1 ? 'alteração não salva' : 'alterações não salvas'}
+              {' '}— as células pendentes estão destacadas.
+            </span>
+            <button type="button" className="cfg-botao ghost" onClick={limparRascunho} disabled={salvando}>
+              Descartar
+            </button>
+            <button type="button" className="cfg-botao" onClick={salvar} disabled={salvando}>
+              <Icone nome="ok" tamanho={13} /> {salvando ? 'salvando…' : 'Salvar alterações'}
+            </button>
+          </>
+        ) : (
+          <>
+            <Icone nome={salvo ? 'ok' : 'cadeado'} tamanho={14} />
+            <span>{salvo ? 'Alterações salvas.' : 'Nenhuma alteração pendente.'}</span>
+          </>
+        )}
+      </div>
+
       <div className="tbl-wrap matriz-wrap">
         <table className="pbi matriz">
           <thead>
             <tr>
               <th className="left col-pessoa">Pessoa</th>
               <th className="col-escopo" title="Recorte de dados: vale no dashboard inteiro, não em uma tela só">Equipes</th>
-              {telas.map((t) => (
-                <th key={t.id} className="col-tela" title={`${t.label} — ${t.descricao}`}>
-                  <span className="mt-nome">{t.curto || t.label}</span>
-                  <button
-                    type="button"
-                    className={`mt-modo ${t.modo}`}
-                    disabled={ocupado === `tela:${t.id}`}
-                    title={t.modo === 'todos'
-                      ? 'Visível para todo o domínio. Clique para restringir à lista.'
-                      : 'Restrita à lista. Clique para liberar a todo o domínio.'}
-                    onClick={() => trocarModo(t)}
-                  >
-                    {t.modo === 'todos' ? 'todos' : 'restrita'}
-                  </button>
-                </th>
-              ))}
+              {telas.map((t) => {
+                const modo = modoDe(t);
+                return (
+                  <th key={t.id} className="col-tela" title={`${t.label} — ${t.descricao}`}>
+                    <span className="mt-nome">{t.curto || t.label}</span>
+                    <button
+                      type="button"
+                      className={`mt-modo ${modo}${rasModo[t.id] ? ' pendente' : ''}`}
+                      title={modo === 'todos'
+                        ? 'Visível para todo o domínio. Clique para restringir à lista.'
+                        : 'Restrita à lista. Clique para liberar a todo o domínio.'}
+                      onClick={() => trocarModo(t)}
+                    >
+                      {modo === 'todos' ? 'todos' : 'restrita'}
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {linhas.map((p) => (
-              <tr key={p.email} className={p.novo ? 'linha-nova' : ''}>
-                <td className="left col-pessoa" title={p.email}>
-                  <span className="mt-email">
-                    {p.email}
-                    {p.email === usuario?.email && <span className="cfg-tag">você</span>}
-                    {p.papel !== 'viewer' && <span className="cfg-tag">{PAPEL_LABEL[p.papel]}</span>}
-                  </span>
-                </td>
-                <td className="col-escopo">
-                  <SeletorEscopo
-                    pessoa={p}
-                    equipes={dados?.equipes || []}
-                    ocupado={ocupado === `escopo:${p.email}`}
-                    onSalvar={salvarEscopo}
-                  />
-                </td>
-                {telas.map((t) => {
-                  const chave = `${p.email}:${t.id}`;
-                  const aberta = t.modo === 'todos';
-                  const veTudo = p.veTudo;
-                  // admin passa por definição, e tela aberta vale para todos:
-                  // caixinha nesses casos seria decorativa e enganaria quem clica
-                  if (veTudo || aberta) {
+            {linhas.map((p) => {
+              const minhasTelas = telasDe(p);
+              const escopoPendente = !!rasEscopo[p.email];
+              return (
+                <tr key={p.email} className={p.novo ? 'linha-nova' : ''}>
+                  <td className="left col-pessoa" title={p.email}>
+                    <span className="mt-email">
+                      {p.email}
+                      {p.email === usuario?.email && <span className="cfg-tag">você</span>}
+                      {p.papel !== 'viewer' && <span className="cfg-tag">{PAPEL_LABEL[p.papel]}</span>}
+                    </span>
+                  </td>
+                  <td className={`col-escopo${escopoPendente ? ' pendente' : ''}`}>
+                    <SeletorEscopo
+                      pessoa={p}
+                      equipes={dados?.equipes || []}
+                      marcadas={escopoDe(p)}
+                      onConfirmar={definirEscopoRascunho}
+                    />
+                  </td>
+                  {telas.map((t) => {
+                    const aberta = modoDe(t) === 'todos';
+                    const veTudo = p.veTudo;
+                    // admin passa por definição, e tela aberta vale para todos:
+                    // caixinha nesses casos enganaria quem clica
+                    if (veTudo || aberta) {
+                      return (
+                        <td key={t.id} className="col-tela">
+                          <span
+                            className={`mt-implicito${veTudo ? ' admin' : ''}`}
+                            title={veTudo
+                              ? 'Administrador enxerga todas as telas'
+                              : 'Tela liberada para todo o domínio'}
+                          >
+                            <Icone nome="ok" tamanho={12} />
+                          </span>
+                        </td>
+                      );
+                    }
+                    const marcada = minhasTelas.includes(t.id);
+                    const mudou = !!rasTelas[p.email] && p.telas.includes(t.id) !== marcada;
                     return (
-                      <td key={t.id} className="col-tela">
-                        <span
-                          className={`mt-implicito${veTudo ? ' admin' : ''}`}
-                          title={veTudo
-                            ? 'Administrador enxerga todas as telas'
-                            : 'Tela liberada para todo o domínio'}
-                        >
-                          <Icone nome="ok" tamanho={12} />
-                        </span>
+                      <td key={t.id} className={`col-tela${mudou ? ' pendente' : ''}`}>
+                        <input
+                          type="checkbox"
+                          className="mt-caixa"
+                          checked={marcada}
+                          title={`${marcada ? 'Remover' : 'Liberar'} ${t.label} para ${p.email}`}
+                          onChange={() => alternarTela(p, t.id)}
+                        />
                       </td>
                     );
-                  }
-                  return (
-                    <td key={t.id} className="col-tela">
-                      <input
-                        type="checkbox"
-                        className="mt-caixa"
-                        checked={p.telas.includes(t.id)}
-                        disabled={ocupado === chave}
-                        title={`${p.telas.includes(t.id) ? 'Remover' : 'Liberar'} ${t.label} para ${p.email}`}
-                        onChange={() => alternarTela(p, t.id)}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  })}
+                </tr>
+              );
+            })}
             {!linhas.length && (
               <tr>
                 <td colSpan={telas.length + 2} style={{ textAlign: 'center', padding: 22, color: '#605E5C' }}>

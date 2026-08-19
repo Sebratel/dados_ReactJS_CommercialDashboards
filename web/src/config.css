@@ -56,6 +56,24 @@
   display: inline-flex; align-items: center; gap: 4px;
 }
 
+/* barra de rascunho: nada é gravado até o Salvar, então isso precisa ser óbvio */
+.ras-barra {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 6px;
+  background: #FAF9F8; border: 1px solid var(--pbi-borda);
+  font-size: 12.5px; color: var(--pbi-muted);
+}
+.ras-barra.ativa {
+  background: #FDF3D6; border-color: #EED790; color: #6b5200;
+}
+.ras-barra svg { flex: none; }
+.ras-barra span { flex: 1; }
+.ras-barra .cfg-botao { height: 30px; padding: 0 12px; font-size: 12px; }
+
+/* célula alterada e ainda não gravada */
+table.pbi.matriz td.pendente { background: #FDF3D6 !important; box-shadow: inset 0 0 0 1px #E0C233; }
+.mt-modo.pendente { outline: 2px solid #fff; outline-offset: -3px; }
+
 /* --- matriz pessoas x telas --- */
 .matriz-wrap { max-height: 460px; }
 

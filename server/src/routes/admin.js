@@ -77,14 +77,23 @@ admin.get('/access/screens', exigirAuth({ minPapel: 'admin' }), (req, res) => {
   res.json({ telas: listarTelas() });
 });
 
-/** A mesma permissão pelo lado da pessoa — é o que a tela de acessos usa. */
+/**
+ * A mesma permissão pelo lado da pessoa — é o que a tela de acessos usa.
+ *
+ * `matriz()` existe para que LER e GRAVAR devolvam o mesmo formato. Quando só o
+ * GET incluía `equipes`, o front — que troca o estado pela resposta — ficava sem a
+ * lista depois do primeiro clique, e o seletor de equipes abria vazio.
+ */
+const matriz = () => ({ ...matrizDeAcesso(), equipes: getState().dims?.equipes || [] });
+
 admin.get('/access/matriz', exigirAuth({ minPapel: 'admin' }), (req, res) => {
-  res.json({ ...matrizDeAcesso(), equipes: getState().dims?.equipes || [] });
+  res.json(matriz());
 });
 
 admin.put('/access/users/:email/telas', exigirAuth({ minPapel: 'admin' }), (req, res) => {
   try {
-    res.json(definirTelasDoEmail(req.params.email, req.body?.telas, req.usuario.email));
+    definirTelasDoEmail(req.params.email, req.body?.telas, req.usuario.email);
+    res.json(matriz());
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -94,7 +103,7 @@ admin.put('/access/users/:email/telas', exigirAuth({ minPapel: 'admin' }), (req,
 admin.put('/access/users/:email/escopo', exigirAuth({ minPapel: 'admin' }), (req, res) => {
   try {
     definirEscopo(req.params.email, req.body?.equipes, req.usuario.email);
-    res.json(matrizDeAcesso());
+    res.json(matriz());
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
