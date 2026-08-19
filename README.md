@@ -355,6 +355,25 @@ lista daquele relatório, e a tela filtra por essa marca — mesmo conjunto, sem
 Cabem duas faixas na tela; o detalhamento fica abaixo, como amostra rolável, com o CSV
 completo ao lado.
 
+**O motivo do cancelamento** chega do Voalle como uma frase de até 230 caracteres — prefixo
+fixo, motivo no meio, justificativa do procedimento no fim. No gráfico fica só o miolo; o
+texto íntegro continua no detalhamento e na exportação.
+
+Isso resolve três problemas de uma vez:
+
+* o rótulo passa a caber (de 231 para no máximo 28 caracteres);
+* o **mesmo motivo deixa de aparecer repetido** — "Sem comprovante de Endereço" se dividia em
+  quatro fatias só porque a redação da justificativa mudava;
+* a cauda (motivos de uma ocorrência) vira uma barra **Outros**, pintada em cinza neutro para
+  não ser lida como uma categoria de verdade.
+
+> **Reclassificação aprendida dos dados.** O mesmo cancelamento é registrado de duas formas:
+> com o motivo nomeado no meio, ou com uma cabeça genérica ("Contrato Cancelado") e o motivo
+> real só na justificativa — 496 contratos, 1,4%, num balde que não informa nada. O mapa de
+> justificativa → motivo não é escrito à mão: ele é **aprendido das linhas que trazem o motivo
+> nomeado**, e aplicado às genéricas. Motivo novo entra sozinho; justificativa desconhecida
+> fica como está em vez de ser adivinhada.
+
 ### Premiações: só quem está ativo
 
 O corte do Senior (`termination_date IS NULL`) é o mesmo do relatório e vale para todas as

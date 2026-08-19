@@ -249,6 +249,13 @@ export function BarrasHorizontais({
       {({ w, h }) => {
       const alt = Math.max(h, alturaMinima);
       const barra = Math.max(7, Math.min(18, ((alt - 20) / Math.max(data.length, 1)) * 0.62));
+      // o eixo tem largura fixa: rótulo que não cabe sai cortado em vez de
+      // invadir a área das barras. O tooltip recebe o valor original, inteiro.
+      const maxChars = Math.max(8, Math.floor((larguraCategoria - 8) / 5.6));
+      const cortar = (v) => {
+        const t = String(v ?? '');
+        return t.length > maxChars ? `${t.slice(0, maxChars - 1)}…` : t;
+      };
       return (
       <ComposedChart width={w} height={alt} data={data} layout="vertical" margin={{ top: 4, right: 54, bottom: 4, left: 4 }}>
         <CartesianGrid horizontal={false} stroke={CORES.grid} strokeDasharray="4 4" />
@@ -258,6 +265,7 @@ export function BarrasHorizontais({
           dataKey={keyLabel}
           width={larguraCategoria}
           tick={{ ...eixoTick, fontSize: 10.5 }}
+          tickFormatter={cortar}
           axisLine={false}
           tickLine={false}
           interval={0}
@@ -275,7 +283,9 @@ export function BarrasHorizontais({
           {data.map((d, i) => (
             <Cell
               key={i}
-              fill={escalaGradiente(Number(d[keyValue]) || 0, min, max)}
+              // uma barra marcada como `agrupado` é a soma de uma cauda, não uma
+              // categoria: sai da escala de cor para não ser lida como par das outras
+              fill={d.agrupado ? '#C8C6C4' : escalaGradiente(Number(d[keyValue]) || 0, min, max)}
               fillOpacity={temSelecao && !selecionados.includes(d[keyLabel]) ? 0.32 : 1}
             />
           ))}

@@ -163,6 +163,85 @@ export function granularidadeHistorico(query, flt) {
 
 
 /**
+ * O motivo do cancelamento vem do Voalle como uma frase de até 230 caracteres:
+ * um prefixo fixo, o motivo de verdade no meio e a justificativa do procedimento
+ * no fim. Num gráfico de barras isso não cabe, e pior: o MESMO motivo aparece
+ * várias vezes só porque a justificativa mudou de redação ("Sem comprovante de
+ * Endereço" chega a se dividir em quatro fatias). Aqui fica só o miolo, que é o
+ * que se lê e o que agrupa direito. O texto completo continua inteiro no
+ * detalhamento e na exportação.
+ */
+export function motivoCurto(texto) {
+  const bruto = String(texto || '').trim();
+  if (!bruto) return '(sem motivo informado)';
+  let m = bruto.split(/\s*[-.]\s*Justificativa\s*:/i)[0];
+  m = m.replace(/^cancelamento de contrato\s*-\s*/i, '');
+  m = m.replace(/^cancelamento\s*-\s*/i, '');
+  // "Cliente cancelado por falta de pagamento" não usa o separador acima
+  m = m.replace(/^cliente cancelado por\s+/i, '');
+  m = m.replace(/\.$/, '').trim();
+  if (!m) return bruto;
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+
+/** Cabeças que não informam nada — o motivo real está na justificativa. */
+const CABECA_GENERICA = /^(contrato cancelado|cancelamento de contrato|cancelamento)$/i;
+
+const justificativaDe = (texto) => String(texto || '')
+  .split(/Justificativa\s*:/i)[1]?.trim().toLowerCase() || '';
+
+/**
+ * O mesmo motivo é registrado de duas formas no Voalle: com o nome no meio
+ * ("... - Desistência - Justificativa: Cliente desistiu de instalar.") ou com uma
+ * cabeça genérica ("Contrato Cancelado. Justificativa: Cliente desistiu de
+ * instalar."). São 496 contratos, 1,4%, caindo num balde que não diz nada.
+ *
+ * Em vez de traduzir textos na mão, o mapa é APRENDIDO dos próprios dados: as
+ * linhas que trazem o motivo nomeado ensinam a que motivo cada justificativa
+ * pertence, e as genéricas são reclassificadas por ele. Se amanhã criarem um
+ * motivo novo, ele entra sozinho; se a justificativa for desconhecida, a linha
+ * fica como está em vez de ser adivinhada.
+ */
+function classificadorDeMotivo(lista) {
+  const votos = new Map();
+  for (const f of lista) {
+    const curto = motivoCurto(f.statusCancelamento);
+    if (CABECA_GENERICA.test(curto)) continue;
+    const just = justificativaDe(f.statusCancelamento);
+    if (!just) continue;
+    const porMotivo = votos.get(just) || new Map();
+    porMotivo.set(curto, (porMotivo.get(curto) || 0) + 1);
+    votos.set(just, porMotivo);
+  }
+  // empate resolvido pelo mais frequente, para o resultado não depender da ordem
+  const mapa = new Map();
+  for (const [just, porMotivo] of votos) {
+    const [melhor] = [...porMotivo].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    mapa.set(just, melhor[0]);
+  }
+  return (f) => {
+    const curto = motivoCurto(f.statusCancelamento);
+    if (!CABECA_GENERICA.test(curto)) return curto;
+    return mapa.get(justificativaDe(f.statusCancelamento)) || curto;
+  };
+}
+
+/**
+ * Quatro motivos respondem por 95% dos cancelamentos e a cauda tem itens de uma
+ * ocorrência. Deixá-los como barras próprias produz fatias invisíveis e rouba
+ * altura das que importam, então a cauda vira uma linha só — que continua
+ * clicável no detalhamento e some da lista quando não há nada nela.
+ */
+function dobrarCauda(lista, manter) {
+  if (lista.length <= manter + 1) return lista;
+  const cabeca = lista.slice(0, manter);
+  const resto = lista.slice(manter);
+  const soma = resto.reduce((a, r) => a + r.valor, 0);
+  if (!soma) return cabeca;
+  return [...cabeca, { key: `Outros (${resto.length} motivos)`, valor: soma, agrupado: true }];
+}
+
+/**
  * VENDAS CANCELADAS — réplica da tela única do relatório "COM - Vendas Canceladas".
  *
  * O recorte é dado pelos dois filtros de página daquele relatório: contrato
@@ -185,6 +264,8 @@ export function painelCanceladas(flt) {
   const canceladas = rows('vendas', flt).filter(
     (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao,
   );
+
+  const classificarMotivo = classificadorDeMotivo(canceladas);
 
   // Duas séries, e a razão é prática: o relatório agrupa por cadastro do cliente,
   // mas o cliente pode ter se cadastrado anos antes de fechar o contrato. Num
@@ -240,7 +321,7 @@ export function painelCanceladas(flt) {
     },
     serie: agrupar('dtVenda'),
     serieCadastro: agrupar('dtCadastroCliente'),
-    porMotivo: groupCount(canceladas, (f) => f.statusCancelamento || '(sem motivo informado)', { limit: 20 }),
+    porMotivo: dobrarCauda(groupCount(canceladas, classificarMotivo), 8),
     porCidade: groupCount(canceladas, (f) => f.cidade, { limit: 20 }),
     porTecnologia: groupCount(canceladas, (f) => f.tecnologia),
     porEquipe: groupCount(canceladas, (f) => f.equipe || '(sem equipe)', { limit: 20 }),

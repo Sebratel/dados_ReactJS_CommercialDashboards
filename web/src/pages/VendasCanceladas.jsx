@@ -23,6 +23,18 @@ export default function VendasCanceladas() {
   const bruta = porData === 'cadastro' ? data?.serieCadastro : data?.serie;
   const serie = (bruta || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
 
+  // os motivos são muito concentrados; dizer isso em uma linha poupa quem só
+  // olha o gráfico de contar as barras
+  const motivos = (data?.porMotivo || []).filter((m) => !m.agrupado);
+  const total = data?.kpis?.total || 0;
+  let concentracao = '';
+  if (motivos.length && total) {
+    let acc = 0;
+    let n = 0;
+    while (n < motivos.length && acc / total < 0.9) { acc += motivos[n].valor; n += 1; }
+    concentracao = `${n} ${n === 1 ? 'motivo responde' : 'motivos respondem'} por ${Math.round((acc / total) * 100)}% dos cancelamentos`;
+  }
+
   const colunasVendedor = [
     { key: 'key', titulo: 'VENDEDOR', align: 'left' },
     { key: 'valor', titulo: 'CANCELADAS', fmt: int, databar: { cor: CORES.primary } },
@@ -86,12 +98,16 @@ export default function VendasCanceladas() {
           ]} />
         </div>
 
-        <Visual title="MOTIVO DO CANCELAMENTO" ia="vendas-canceladas:motivo">
+        <Visual
+          title="MOTIVO DO CANCELAMENTO"
+          sub={concentracao}
+          ia="vendas-canceladas:motivo"
+        >
           {isLoading && !data ? <Loading /> : (
             <BarrasHorizontais
               data={data?.porMotivo || []}
               nome="CANCELADAS"
-              larguraCategoria={150}
+              larguraCategoria={170}
             />
           )}
         </Visual>
