@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiJson } from '../api';
 import { useSession } from '../auth/session.jsx';
 import { Erro, Loading, Visual } from '../components/ui';
@@ -185,71 +186,140 @@ function AbaUsuarios() {
  * Fica junto da matriz porque é a outra metade da mesma pergunta — "o que essa
  * pessoa vê" —, mas é outra dimensão: o ACL de tela diz QUAIS telas, o escopo diz
  * QUAL FATIA. Pendurar o escopo em cada tela viraria tela × equipe × pessoa.
+ *
+ * A escolha abre em diálogo, e não em popover ancorado no botão, porque a célula
+ * mora dentro de uma tabela com rolagem: `position: absolute` ali é cortado pela
+ * borda do contêiner, e a lista de 36 equipes ainda rolava por dentro. Eram três
+ * recortes empilhados para escolher uma equipe. Em diálogo, cabem todas de uma vez.
  */
-function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
-  const [aberto, setAberto] = useState(false);
-  const ref = useRef(null);
+function DialogoEscopo({ pessoa, equipes, fechar, onAplicar }) {
+  const [marcadas, setMarcadas] = useState(() => new Set(pessoa.escopo?.equipes || []));
+  const [busca, setBusca] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    if (!aberto) return undefined;
-    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
-    document.addEventListener('mousedown', fora);
-    return () => document.removeEventListener('mousedown', fora);
-  }, [aberto]);
+    const onKey = (e) => { if (e.key === 'Escape') fechar(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fechar]);
+
+  const alternar = (eq) => setMarcadas((s) => {
+    const n = new Set(s);
+    if (n.has(eq)) n.delete(eq); else n.add(eq);
+    return n;
+  });
+
+  const filtradas = busca.trim()
+    ? equipes.filter((e) => e.toLowerCase().includes(busca.trim().toLowerCase()))
+    : equipes;
+
+  const aplicar = async () => {
+    setSalvando(true);
+    try { await onAplicar([...marcadas]); fechar(); } finally { setSalvando(false); }
+  };
+
+  return createPortal(
+    <>
+      <div className="esc-fundo" onClick={fechar} role="presentation" />
+      <div className="esc-dialogo" role="dialog" aria-label={`Equipes de ${pessoa.email}`}>
+        <header>
+          <div>
+            <span className="esc-rotulo">Escopo de dados</span>
+            <h3>{pessoa.email}</h3>
+          </div>
+          <button type="button" className="ia-fechar" onClick={fechar} title="Fechar (Esc)">
+            <Icone nome="fechar" tamanho={15} />
+          </button>
+        </header>
+
+        <p className="esc-aviso">
+          <Icone nome="alerta" tamanho={13} />
+          <span>
+            <b>Vale no dashboard inteiro.</b> Recorta todas as visões por equipe de todas as
+            telas, mais exportações e leitura de IA — não é filtro de uma tela só. Nenhuma
+            marcada = vê todas. Contrato sem equipe fica de fora do recorte.
+          </span>
+        </p>
+
+        <div className="esc-barra">
+          <label className="esc-busca">
+            <Icone nome="busca" tamanho={13} />
+            <input
+              type="text"
+              value={busca}
+              placeholder={`Buscar entre ${equipes.length} equipes…`}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </label>
+          <span className="esc-contagem">
+            {marcadas.size === 0 ? 'vê todas' : `${marcadas.size} marcada${marcadas.size > 1 ? 's' : ''}`}
+          </span>
+          {marcadas.size > 0 && (
+            <button type="button" className="esc-limpar" onClick={() => setMarcadas(new Set())}>
+              limpar
+            </button>
+          )}
+        </div>
+
+        <div className="esc-grade">
+          {filtradas.map((eq) => (
+            <label key={eq} className={marcadas.has(eq) ? 'on' : ''}>
+              <input type="checkbox" checked={marcadas.has(eq)} onChange={() => alternar(eq)} />
+              <span>{eq}</span>
+            </label>
+          ))}
+          {!filtradas.length && <p className="esc-vazio">Nenhuma equipe com “{busca}”.</p>}
+        </div>
+
+        <footer>
+          <button type="button" className="cfg-botao ghost" onClick={fechar}>Cancelar</button>
+          <button type="button" className="cfg-botao" onClick={aplicar} disabled={salvando}>
+            <Icone nome="ok" tamanho={13} /> {salvando ? 'salvando…' : 'Aplicar'}
+          </button>
+        </footer>
+      </div>
+    </>,
+    document.body,
+  );
+}
+
+function SeletorEscopo({ pessoa, equipes, ocupado, onSalvar }) {
+  const [aberto, setAberto] = useState(false);
 
   if (pessoa.veTudo) {
-    return <span className="esc-todas admin" title="Administrador é isento do recorte: sem isso não conseguiria auditar o que liberou">isento</span>;
+    return (
+      <span
+        className="esc-todas admin"
+        title="Administrador é isento do recorte: sem isso não conseguiria auditar o que liberou"
+      >
+        isento
+      </span>
+    );
   }
 
   const atual = pessoa.escopo?.equipes || [];
-  const alternar = (eq) => {
-    const nova = atual.includes(eq) ? atual.filter((x) => x !== eq) : [...atual, eq];
-    onSalvar(pessoa, nova);
-  };
 
   return (
-    <span className="esc-wrap" ref={ref}>
+    <>
       <button
         type="button"
         className={`esc-botao${atual.length ? ' on' : ''}`}
         disabled={ocupado}
         title={atual.length ? `Enxerga: ${atual.join(', ')}` : 'Enxerga todas as equipes'}
-        onClick={() => setAberto((a) => !a)}
+        onClick={() => setAberto(true)}
       >
         {atual.length ? `${atual.length} ${atual.length === 1 ? 'equipe' : 'equipes'}` : 'todas'}
         <Icone nome="baixo" tamanho={9} />
       </button>
       {aberto && (
-        <div className="esc-pop">
-          <div className="esc-pop-topo">
-            <b>Equipes que {pessoa.email.split('@')[0]} enxerga</b>
-            {!!atual.length && (
-              <button type="button" onClick={() => onSalvar(pessoa, [])}>limpar (ver todas)</button>
-            )}
-          </div>
-          <div className="esc-lista">
-            {equipes.map((eq) => (
-              <label key={eq}>
-                <input
-                  type="checkbox"
-                  checked={atual.includes(eq)}
-                  onChange={() => alternar(eq)}
-                />
-                <span>{eq}</span>
-              </label>
-            ))}
-          </div>
-          <p className="esc-nota">
-            <b>Vale no dashboard inteiro.</b> Marcar equipes aqui recorta todas as visões
-            por equipe de todas as telas — Diretoria, Vendas, Ativações, Rampagem,
-            Premiações, Canceladas, Preditiva e as exportações. Não é filtro de uma tela.
-          </p>
-          <p className="esc-nota">
-            Nenhuma marcada = vê todas. Registro sem equipe fica de fora do recorte.
-          </p>
-        </div>
+        <DialogoEscopo
+          pessoa={pessoa}
+          equipes={equipes}
+          fechar={() => setAberto(false)}
+          onAplicar={(lista) => onSalvar(pessoa, lista)}
+        />
       )}
-    </span>
+    </>
   );
 }
 

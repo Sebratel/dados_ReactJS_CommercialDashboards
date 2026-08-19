@@ -134,6 +134,12 @@ escopo: nenhuma marcada significa "vê tudo".
 > tela": ele é atributo da pessoa. A interface repete isso em três lugares (introdução da aba,
 > seletor de equipes e legenda) porque é a confusão mais provável de quem configura.
 
+A escolha das equipes abre em **diálogo centralizado**, não em popover ancorado no botão: a
+célula fica dentro de uma tabela com rolagem, onde `position: absolute` é cortado pela borda
+do contêiner — e a lista ainda rolava por dentro. Eram três recortes empilhados para escolher
+uma equipe. No diálogo, as 36 equipes aparecem numa grade de três colunas, todas de uma vez,
+com busca e um único `Aplicar` em vez de uma gravação por clique.
+
 **Para quem serve.** Quem acessa é o **líder**, não o vendedor — a relação é 1 líder para N
 equipes, não 1 para 1. O líder não precisa existir na `Comercial_Teams` como pessoa: o recorte
 é amarrado ao e-mail dele, independente de ele aparecer na base como vendedor.
