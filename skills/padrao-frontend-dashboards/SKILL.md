@@ -363,6 +363,18 @@ Sintoma clássico: seletor que abre cheio e, depois de uma ação, abre vazio.
 permissão, diga isso na tela. Sem aviso, ele conclui que o dashboard está com número
 errado.
 
+**Fundo e cor de texto viajam juntos.** Ao criar uma variante de layout de um
+componente, não sobrescreva metade de um par de cores. O cartão de KPI aqui tem fundo
+escuro e `color: #fff`; uma variante em faixa trocou o fundo para branco e não tocou no
+texto — cartão invisível, branco sobre branco, e o número mais importante da tela
+sumiu. Variante de layout mexe em grade e espaçamento; se precisar mexer em cor, mexa
+no par inteiro.
+
+**Ao medir contraste, olhe também o `backgroundImage`.** `getComputedStyle().backgroundColor`
+devolve `rgba(0,0,0,0)` para elemento com gradiente, então um verificador que só lê
+`backgroundColor` acusa falso positivo justamente nos cartões que usam gradiente — foi o
+que aconteceu quando escrevi essa checagem.
+
 **Não finja controle que não existe.** Caixa de marcação que não muda nada (porque
 aquele acesso já é implícito) engana quem clica. Mostre estado preenchido e
 desabilitado, com explicação no `title`.

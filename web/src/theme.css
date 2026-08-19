@@ -205,14 +205,16 @@ body {
 /* KPI em faixa fina: o relatório não tem indicador aqui, mas total e valor perdido
    são a primeira pergunta de quem abre a tela. Em faixa custa ~70px, contra os
    ~330px de uma coluna de KPI ao lado de um gráfico. */
+/*
+ * A faixa cuida só da distribuição. Não redefine a aparência do `.kpi`: ele já vem
+ * com fundo escuro e `color: #fff`, e a primeira versão daqui trocou o fundo para
+ * branco sem tocar no texto — resultado, branco sobre branco, cartão invisível.
+ * Fundo e cor de texto viajam juntos; sobrescrever metade do par é o bug.
+ */
 .kpi-faixa {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--gap);
 }
-.kpi-faixa .kpi {
-  background: var(--pbi-superficie); border: 1px solid var(--pbi-borda);
-  border-radius: var(--card-radius); box-shadow: var(--card-shadow);
-  padding: 10px 14px; text-align: left;
-}
+.kpi-faixa .kpi { min-height: 58px; }
 
 /* Alturas derivadas da área útil (tela menos o cromo): duas linhas de visuais
    cabem em uma tela sem cortar nada, com piso para telas baixas. */
