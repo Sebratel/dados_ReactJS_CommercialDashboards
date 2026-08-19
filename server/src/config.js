@@ -72,6 +72,9 @@ export const config = {
     full: num(process.env.REFRESH_FULL_MS, 1800000), // 30 min
     // cadastros auxiliares (equipes, RH, usuários)
     dims: num(process.env.REFRESH_DIMS_MS, 900000), // 15 min
+    // condomínios: rede de splitters e ocupação das portas. Muda quando alguém
+    // instala equipamento ou conecta cliente — dá minutos, não segundos.
+    cond: num(process.env.REFRESH_COND_MS, 600000), // 10 min
   },
 };
 

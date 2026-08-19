@@ -8,6 +8,7 @@ import { loadSql, pool as pgPool } from '../db/pg.js';
 import * as maria from '../db/maria.js';
 import { SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
 import { getState } from './store.js';
+import { getEstadoCondominios } from './condominios.js';
 
 export const CATALOGO = [
   {
@@ -73,14 +74,36 @@ export const CATALOGO = [
     origemPbi: 'senior_admitted',
     sql: SENIOR_SQL,
   },
+  {
+    id: 'splitters',
+    titulo: 'Condomínios — portas dos splitters',
+    descricao: 'Réplica de SPLITTER_(GERAL): uma linha por porta de splitter secundário instalado em condomínio (título com COND., RES. ou ED.). O recorte de condomínio está no WHERE, não em coluna calculada.',
+    banco: 'voalle',
+    fonte: 'portas',
+    modelo: 'condominios',
+    origemPbi: 'SPLITTER_(GERAL) (dsn=dbVoalle)',
+    params: () => [],
+  },
+  {
+    id: 'splitter_ocupacao',
+    titulo: 'Condomínios — ocupação por splitter',
+    descricao: 'Capacidade, portas ocupadas e disponíveis de cada splitter. Uma consulta no lugar das quatro do Power BI (OCUPADA/DISPONIVEIS, OCUPACAO, LOTADOS e ZERADOS): as diferenças eram só colunas derivadas e HAVING.',
+    banco: 'voalle',
+    fonte: 'ocupacao',
+    modelo: 'condominios',
+    origemPbi: 'SPLITTER_(OCUPADA_/_DISPONIVEIS) + SPLITTER_(OCUPACAO)',
+    params: () => [],
+  },
 ];
 
 const sqlDe = (item) => (item.sql != null ? item.sql : loadSql(item.id));
 
 export function listarQueries() {
   const { sources } = getState();
+  const { fontes } = getEstadoCondominios();
   return CATALOGO.map((item) => {
-    const s = sources[item.fonte] || {};
+    // as estatísticas de execução vivem no modelo que a consulta alimenta
+    const s = (item.modelo === 'condominios' ? fontes[item.fonte] : sources[item.fonte]) || {};
     return {
       id: item.id,
       titulo: item.titulo,

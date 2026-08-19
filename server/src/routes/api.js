@@ -10,10 +10,16 @@ import { refreshAll, refreshGroup } from '../etl/refresh.js';
 import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import { podeVerTela } from '../auth/access.js';
-import { CONJUNTOS, gerarAmostra, gerarCSV, listarConjuntos } from '../model/exportar.js';
+import {
+  CONJUNTOS, filtrosDoConjunto, gerarAmostra, gerarCSV, listarConjuntos,
+} from '../model/exportar.js';
 import { analisar } from '../model/preditivo.js';
 import { gerarInsights, gerarInsightsVisual, iaConfigurada } from '../ia/insights.js';
 import { VISUAIS, listarVisuais } from '../ia/visuais.js';
+import {
+  condominiosPronto, filtrosCondominios, getEstadoCondominios,
+  painelCondominios, parseFiltrosCondominios,
+} from '../model/condominios.js';
 
 export const api = Router();
 
@@ -35,6 +41,11 @@ const authVisual = (req, res, next) => {
 
 api.use((req, res, next) => {
   if (req.path === '/health' || req.path === '/meta') return next();
+  // Condomínios tem modelo próprio e carrega em paralelo: quem só tem acesso a
+  // essa tela não pode ficar esperando a carga comercial, e uma falha lá não
+  // pode derrubar uma tela que não depende dela. Cada rota de condomínio checa
+  // o SEU estado logo abaixo.
+  if (req.path.startsWith('/condominios')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
     return res.status(503).json({ error: 'Carregando dados do Voalle/MariaDB…', carregando: true });
@@ -42,14 +53,33 @@ api.use((req, res, next) => {
   return next();
 });
 
+/** 503 com a mesma cara do global, mas olhando o modelo de condomínios. */
+const exigirCondominios = (req, res, next) => {
+  if (!condominiosPronto()) {
+    return res.status(503).json({ error: 'Carregando a rede de splitters do Voalle…', carregando: true });
+  }
+  return next();
+};
+
 function meta() {
   const s = getState();
+  const c = getEstadoCondominios();
   return {
     version: s.version,
     builtAt: s.builtAt,
     buildMs: s.buildMs ?? null,
     contratos: s.facts.length,
-    sources: s.sources,
+    // as fontes dos dois modelos no mesmo lugar: o indicador do topo já acende
+    // quando qualquer uma falha, e condomínios não fica com falha invisível
+    sources: { ...s.sources, ...c.fontes },
+    condominios: {
+      version: c.versao,
+      builtAt: c.geradoEm,
+      buildMs: c.buildMs ?? null,
+      portas: c.fatos.length,
+      splitters: c.splitters.length,
+      ready: condominiosPronto(),
+    },
     refresh: config.refresh,
     since: config.since,
     phoneSince: config.phoneSince,
@@ -145,6 +175,21 @@ api.get('/canceladas', auth('vendas-canceladas'), (req, res) => {
   res.json(withMeta(painelCanceladas(parseFilters(req.query))));
 });
 
+// ------------------------------------------------------------- CONDOMÍNIOS
+/**
+ * Opções dos seletores da tela de condomínios. Separado de `/filters` porque as
+ * dimensões não têm nada a ver: lá é vendedor/equipe/tecnologia, aqui é
+ * concentrador/ponto de acesso/splitter. Juntar os dois faria cada tela carregar
+ * listas que nunca vai usar.
+ */
+api.get('/condominios/filtros', auth('condominios'), exigirCondominios, (req, res) => {
+  res.json(withMeta(filtrosCondominios()));
+});
+
+api.get('/condominios', auth('condominios'), exigirCondominios, (req, res) => {
+  res.json(withMeta(painelCondominios(parseFiltrosCondominios(req.query))));
+});
+
 // -------------------------------------------------------------- PREMIAÇÕES
 api.get('/premiacoes', auth('premiacoes'), (req, res) => {
   res.json(withMeta(premiacoes(parseFilters(req.query))));
@@ -154,7 +199,7 @@ api.get('/premiacoes', auth('premiacoes'), (req, res) => {
 /** Conjuntos que o usuário pode exportar (respeita o acesso por tela). */
 api.get('/exportacoes', auth(), (req, res) => {
   const podeVer = (tela) => podeVerTela(req.usuario, tela);
-  res.json(withMeta({ conjuntos: listarConjuntos(podeVer, parseFilters(req.query)) }));
+  res.json(withMeta({ conjuntos: listarConjuntos(podeVer, req.query) }));
 });
 
 /** Amostra do conjunto — as primeiras linhas, como sairão no arquivo. */
@@ -165,7 +210,8 @@ api.get('/exportar/:id/amostra', auth(), (req, res) => {
     return res.status(403).json({ error: 'Você não tem acesso a estes dados.' });
   }
   try {
-    return res.json(gerarAmostra(req.params.id, parseFilters(req.query), req.query.limite));
+    const flt = filtrosDoConjunto(conjunto, req.query);
+    return res.json(gerarAmostra(req.params.id, flt, req.query.limite));
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -180,7 +226,7 @@ api.get('/exportar/:id', auth(), (req, res) => {
   }
 
   try {
-    const flt = parseFilters(req.query);
+    const flt = filtrosDoConjunto(conjunto, req.query);
     const { csv, arquivo, linhas } = gerarCSV(req.params.id, flt);
     const sufixo = [flt.de, flt.ate].filter(Boolean).join('_a_') || 'completo';
     const nome = `${arquivo}_${sufixo}.csv`;

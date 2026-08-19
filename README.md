@@ -29,10 +29,22 @@ dashboard/
 | `new_sellers` (users) | `src/sql/sellers.sql` | Voalle |
 | `teams` (Comercial_Teams) | `src/sql/maria.js` | MariaDB |
 | `senior_admitted` | `src/sql/maria.js` | MariaDB |
+| `SPLITTER_(GERAL)` ¹ | `src/sql/splitters.sql` | Voalle |
+| `SPLITTER_(OCUPADA_/_DISPONIVEIS)` + `SPLITTER_(OCUPACAO)` ¹ | `src/sql/splitter_ocupacao.sql` | Voalle |
+
+¹ do relatório **COM - Condomínios**, um `.pbip` separado. Ver a seção *Condomínios*.
 
 O servidor carrega essas consultas, faz os mesmos *merges* que o Power Query fazia
 (`src/model/store.js`) e mantém a tabela de fatos em memória (~120 mil contratos, ~60 MB).
 As páginas consultam a API, que agrega em milissegundos.
+
+**Dois modelos, não um.** Condomínios tem estado próprio em `src/model/condominios.js`,
+porque não existe relação entre os dois: o modelo comercial é um fato por contrato vendido;
+o de condomínios é um fato por *porta de splitter* (~55 mil portas, ~3.900 splitters). Na
+mesma tabela de fatos, toda medida comercial passaria a precisar excluir linhas que não são
+venda — e a primeira que esquecesse contaria porta de splitter como contrato. Consequência
+prática: a tela de Condomínios abre mesmo que a carga comercial ainda esteja rodando ou
+tenha falhado, e vice-versa.
 
 ### Frequência de atualização
 
@@ -41,6 +53,7 @@ As páginas consultam a API, que agrega em milissegundos.
 | `hot` | janela dos últimos 60 dias de vendas, ativações e primeiro pagamento | ~5 s | **2 min** | `REFRESH_HOT_MS` |
 | `full` | recarga completa desde `DATA_SINCE` | ~25 s | **30 min** | `REFRESH_FULL_MS` |
 | `dims` | equipes, RH, usuários | < 1 s | **15 min** | `REFRESH_DIMS_MS` |
+| `cond` | splitters de condomínio e ocupação das portas | ~15 s | **10 min** | `REFRESH_COND_MS` |
 
 A carga incremental é o que mantém **novas vendas, ativações e primeiro pagante** quase em
 tempo real sem pesar no Voalle: em vez de reler 120 mil contratos (≈20 s de consulta), lê só
@@ -333,6 +346,7 @@ O container expõe:
 | **Vendas - Histórico** | matriz vendedor × dia | `CountNonNull(CADASTRO[CLIENTES])` |
 | **Rampagem** | combo VENDA 90 × ATIVO 90, cartões, cidade, tabelas de novatos | `VENDAS_RAMPAGEM`, `ATIVOS_RAMPAGEM`, `Dias_Trabalhados` |
 | **Premiações** | duas tabelas (>60 dias e ≤60 dias) | `ValorFaixa`, `FaixaPorPagamento`, `ValorPorTempoDeCasa`, `ValorFinal`, `ValorFaixaAtivo`, `FaixaPorAtivo` |
+| **Condomínios** | 6 cartões, ocupação por splitter, detalhe porta a porta, resumos por condomínio e por cidade, matriz mês × cidade, colunas por cidade | `SPLITTER_CONDOMINIO`, `CLASSIFICACAO`, `TEMPO_DE_VIDA`, `TOTAL_USUARIOS`, `PORCENT_OCUPACAO_CIDADE` |
 
 ### Cores das faixas de premiação
 
@@ -563,6 +577,78 @@ hoje.
 
 ---
 
+### Condomínios: um segundo relatório, um segundo modelo
+
+A tela vem do relatório **COM - Condomínios**, um `.pbip` separado cuja página principal
+tem 3.950px de altura e dez visuais de dados. Nada ali cruza com o modelo comercial: o
+grão é a **porta de splitter**, não o contrato vendido.
+
+**O que define um condomínio.** A coluna DAX `SPLITTER_CONDOMINIO` procura `COND.`, `RES.`
+ou `ED.` no título do splitter secundário e corta dali até o primeiro `" -"`; o filtro de
+página exige que ela não seja nula. `nomeDoCondominio()` reproduz a regra letra por letra,
+inclusive a prioridade do `SWITCH` (`COND.` antes de `RES.`, `RES.` antes de `ED.`) e o
+truque de concatenar `" -"` no fim do texto para o `SEARCH` nunca falhar. Hoje isso dá
+**870 condomínios em 3.885 splitters, 55 mil portas e ~14,7 mil clientes**.
+
+O teste do título ficou no `WHERE` do SQL, e não só na coluna calculada: sem isso a
+consulta traria as portas de todos os 19 mil splitters da rede para a memória do servidor,
+quando a tela só mostra as de condomínio.
+
+**Quatro consultas viraram uma.** `SPLITTER_(OCUPADA_/_DISPONIVEIS)`, `SPLITTER_(OCUPACAO)`,
+`SPLITTER_(LOTADOS)` e `SPLITTER_(ZERADOS)` têm o mesmo corpo no Power BI; diferem por
+colunas derivadas e por um `HAVING`. Aqui é uma consulta só (`splitter_ocupacao.sql`), com
+percentual e faixa calculados em JS — mesmos cortes de 70% e 90%, e o mesmo
+`ROUND(...,2)` antes de comparar, senão 89,996% cairia em faixas diferentes nos dois lados.
+
+**Os filtros dos splitters e das portas passaram a valer dos dois lados.** O Power Query
+filtra `active`/`deleted` na consulta de ocupação, mas não na de portas. O efeito com dado
+real é que a contagem de portas da tabela de detalhe fica **maior que a capacidade
+informada ao lado** — o detalhe contradiz o indicador. Filtrando nos dois, os números
+fecham.
+
+**O usuário do cliente vem direto da conexão da porta.** O Power Query dá a volta por
+`CONTRATOS_BLOQUEADOS` casando por número de contrato; quando um contrato tem mais de uma
+conexão, essa volta duplica a linha e pode trazer o usuário de outra porta. A conexão da
+linha já está no `JOIN` — direto não tem como errar.
+
+**A cidade é a do equipamento, não a do cliente.** Esta é a divergência que mais muda a
+leitura, e ela só aparece com dado real: porta livre não tem conexão, logo não tem cidade.
+Filtrando pela cidade do cliente (`CIDADE.1`, como o relatório faz), escolher uma cidade
+descarta **todas as portas livres** — e "portas" passa a ser sinônimo de "clientes" num
+painel cujo assunto é exatamente quanto ainda cabe. Do mesmo defeito vinha a necessidade de
+avisar que um splitter com clientes em duas cidades tinha a capacidade contada duas vezes.
+
+Aqui cada splitter tem **uma** cidade e entra ou sai inteiro do filtro.
+`authentication_splitters.city` está preenchido em menos de um terço dos casos (5.583 de
+19.040), então o resto vem da cidade mais frequente entre os clientes daquele splitter —
+que é o prédio onde ele está. Empate resolve em ordem alfabética, para o resultado não
+depender da ordem em que o banco devolveu as linhas.
+
+**As cinco cidades saíram do código.** O relatório fixa Canoas, Novo Hamburgo, São
+Leopoldo, Sapucaia do Sul e Esteio como filtro nas tabelas de detalhe. A tela mostra todas
+e oferece esse recorte num botão na barra de filtros. Filtro escondido em constante é a
+receita de "o dashboard está com número errado": quem abre não tem como saber que cinco
+cidades foram escolhidas dentro de um arquivo `.js`.
+
+**O que não veio.** Os dois mapas (`LOCALIZAÇÃO SPLITTERS` e `LOCALIZAÇÃO CLIENTE`): o
+dashboard não tem biblioteca de mapa, e não vale acoplá-lo a um servidor de tiles externo
+por dois visuais. As coordenadas do splitter e do cliente vão nos dois CSVs da tela. Fora
+disso, o seletor `USUÁRIO` virou caixa de busca — a lista tem um item por conexão da rede,
+e rolar milhares de logins é mais lento que digitar três letras — e o segundo filtro de
+data (`DT. CRIAÇÃO SPLITTER PRIM.`) saiu, porque a idade do primário é da rede e não do
+prédio.
+
+**Leitura por IA ainda não.** Os visuais desta tela não estão no catálogo de
+`ia/visuais.js`: aquele caminho monta o painel com `parseFilters` (os filtros comerciais), e
+registrar aqui sem adaptá-lo produziria uma leitura sobre dados **não filtrados** com cara
+de resposta autoritativa. Prefiro sem botão a um botão que mente.
+
+**Amostra na tela, conjunto no CSV.** São 3.885 splitters, 870 condomínios e 55 mil portas.
+A tela mostra 300, 300 e 400 — sem o corte, chegava a 54 mil células no DOM e cada clique de
+ordenação repintava todas. Cada visual diz no subtítulo quantas linhas está mostrando do
+total, e os dois CSVs do cabeçalho trazem o conjunto inteiro.
+
+
 ## 7. Endpoints
 
 | Endpoint | Retorna |
@@ -576,8 +662,10 @@ hoje.
 | `GET /api/historico/:vendas\|ativos` | matriz vendedor × dia |
 | `GET /api/rampagem` | novatos < 90 dias |
 | `GET /api/canceladas` | vendas canceladas sem ativação |
+| `GET /api/condominios/filtros` | listas dos slicers da tela de condomínios |
+| `GET /api/condominios` | cartões, ocupação por splitter, detalhe, cidade, matriz |
 | `GET /api/premiacoes` | faixas de premiação |
-| `POST /api/refresh?group=hot\|full\|dims` | força releitura |
+| `POST /api/refresh?group=hot\|full\|dims\|cond` | força releitura |
 | `GET /api/auth/config` | client_id do Google e domínio (público) |
 | `GET /api/me` | e-mail, papel, atributo de power user e telas liberadas |
 | `GET/PUT/DELETE /api/access/users` | papéis (admin) |
@@ -593,6 +681,17 @@ hoje.
 Todos aceitam os filtros: `de`, `ate`, `vendedor`, `equipe`, `tecnologia`, `situacao`,
 `cidade`, `canal`, `cliente` (listas separadas por vírgula) e `g=mes|dia` (granularidade
 da série dos gráficos de coluna).
+
+As rotas de condomínio têm o seu próprio conjunto, porque as dimensões não se cruzam:
+`criadoDe`, `criadoAte` (criação do splitter), `condominio`, `splitter`, `concentrador`,
+`ponto`, `site`, `cidadeCond`, `faixa` e `buscaCond`. O nome `cidadeCond` não é enfeite —
+`cidade` já existe no lado comercial com uma lista de valores diferente, e como os filtros
+vivem na URL, o mesmo nome faria a tela herdar da outra um valor que não existe na lista
+dela: tela vazia, sem explicação nenhuma.
+
+As duas rotas de condomínio são as únicas que **não** esperam a carga comercial: têm modelo
+próprio e devolvem o seu próprio 503 enquanto os splitters não chegam. Quem só tem acesso a
+essa tela não fica preso a uma carga que não lhe serve.
 
 ---
 
@@ -661,7 +760,7 @@ Duas formas de tirar o dado da tela:
 * **Botão `CSV` no cabeçalho de cada tabela** — baixa exatamente o que está no visual,
   com as mesmas colunas, os filtros aplicados e a ordenação escolhida. É processado no
   navegador, sem ida ao servidor.
-* **Aba `Exportações`** — sete conjuntos completos gerados pelo servidor, sem o corte que
+* **Aba `Exportações`** — dez conjuntos completos gerados pelo servidor, sem o corte que
   as telas aplicam. O relatório de primeiros pagamentos, por exemplo, mostra 1.500 linhas
   na tela e exporta as 18.723 do período.
 
@@ -675,9 +774,16 @@ Duas formas de tirar o dado da tela:
 | Vendas (contratos criados) | vendas |
 | Ativações | ativacoes |
 | Primeiro pagamento | primeiro-pagamento |
+| Vendas canceladas | vendas-canceladas |
 | Premiações (>60 e ≤60 dias) | premiacoes |
 | Rampagem (novatos) | rampagem |
 | Resumo por vendedor | vendas |
+| Condomínios — portas dos splitters | condominios |
+| Condomínios — ocupação por splitter | condominios |
+
+Os dois conjuntos de condomínio leem os filtros **daquela** tela, não os comerciais: cada
+conjunto declara o seu escopo e `filtrosDoConjunto()` escolhe o parser. Sem essa marca, um
+conjunto novo receberia `de`/`ate` de vendas e exportaria o recorte errado calado.
 
 O ACL por tela vale para o download: quem não vê Premiações recebe 403 ao tentar exportá-la,
 e o conjunto nem aparece na lista.

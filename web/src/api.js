@@ -25,6 +25,18 @@ export function buildQuery(filtros = {}) {
   add('canal', filtros.canal);
   add('cliente', filtros.cliente);
   add('g', filtros.g);
+  // condomínios — nomes iguais aos da URL, então o link compartilhado e a
+  // chamada de API falam a mesma língua
+  add('condominio', filtros.condominio);
+  add('splitter', filtros.splitter);
+  add('concentrador', filtros.concentrador);
+  add('ponto', filtros.ponto);
+  add('site', filtros.site);
+  add('cidadeCond', filtros.cidadeCond);
+  add('faixa', filtros.faixa);
+  add('criadoDe', filtros.criadoDe);
+  add('criadoAte', filtros.criadoAte);
+  add('buscaCond', filtros.buscaCond);
   return p.toString();
 }
 
@@ -119,6 +131,17 @@ export function useFiltros() {
     queryFn: () => apiGet('/filters'),
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
+  });
+}
+
+/** Opções dos seletores da tela de condomínios (endpoint próprio). */
+export function useFiltrosCondominios() {
+  return useQuery({
+    queryKey: ['/condominios/filtros'],
+    queryFn: () => apiGet('/condominios/filtros'),
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    retry: 1,
   });
 }
 

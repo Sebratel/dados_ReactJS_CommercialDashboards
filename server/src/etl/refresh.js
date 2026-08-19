@@ -3,14 +3,19 @@ import { queryFile } from '../db/pg.js';
 import * as maria from '../db/maria.js';
 import { SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
 import { build, mergeSource, setSource, setSourceError } from '../model/store.js';
+import {
+  construirCondominios, setFonteCondominios, setFonteErroCondominios,
+} from '../model/condominios.js';
 
 /**
- * Três cadências:
+ * Quatro cadências:
  *  - hot   : janela dos últimos N dias (consultas leves) -> vendas, ativações e
  *            primeiro pagamento ficam quase em tempo real
  *  - full  : recarga completa desde DATA_SINCE (corrige qualquer alteração
  *            retroativa)
  *  - dims  : equipes, RH e usuários
+ *  - cond  : splitters de condomínio e a ocupação das portas (modelo próprio,
+ *            em `model/condominios.js`)
  */
 function corte() {
   const d = new Date();
@@ -37,10 +42,39 @@ const SOURCES = {
   sellers: { grupo: 'dims', alvo: 'sellers', run: () => queryFile('sellers', []) },
   teams: { grupo: 'dims', alvo: 'teams', run: () => maria.query(TEAMS_SQL) },
   senior: { grupo: 'dims', alvo: 'senior', run: () => maria.query(SENIOR_SQL) },
+
+  // --- condomínios (modelo próprio) ---
+  // Sem recorte por data: a rede de splitters é um retrato do agora, e um
+  // splitter instalado em 2019 continua valendo hoje. Recarga completa mesmo.
+  splitters: { grupo: 'cond', destino: 'condominios', alvo: 'portas', run: () => queryFile('splitters', []) },
+  ocupacao: { grupo: 'cond', destino: 'condominios', alvo: 'ocupacao', run: () => queryFile('splitter_ocupacao', []) },
 };
 
 const rodando = new Map();
-let rebuildTimer = null;
+const rebuildTimers = {};
+
+/**
+ * Para onde vai o resultado de cada fonte. Existem dois modelos em memória —
+ * o comercial e o de condomínios — e eles não se cruzam; o `destino` diz qual
+ * dos dois recebe as linhas e qual deles precisa ser reconstruído.
+ */
+const DESTINOS = {
+  comercial: {
+    set: setSource,
+    merge: mergeSource,
+    erro: setSourceError,
+    construir: build,
+    resumo: (s) => `${s.facts.length} contratos · ${s.sellersByName.size} vendedores no RH · ${s.teamsByName.size} em equipes`,
+  },
+  condominios: {
+    set: setFonteCondominios,
+    erro: setFonteErroCondominios,
+    construir: construirCondominios,
+    resumo: (s) => `${s.fatos.length} portas em ${s.splitters.length} splitters · ${s.dims.condominios.length} condomínios`,
+  },
+};
+
+const destinoDe = (src) => DESTINOS[src.destino || 'comercial'];
 
 /**
  * Assinatura do recorte em vigor. Uma consulta de carga completa leva dezenas de
@@ -50,39 +84,45 @@ let rebuildTimer = null;
  */
 const assinaturaJanela = () => `${config.since}|${config.phoneSince}`;
 
-function agendarRebuild() {
-  if (rebuildTimer) return;
-  rebuildTimer = setTimeout(() => {
-    rebuildTimer = null;
+function agendarRebuild(chave) {
+  if (rebuildTimers[chave]) return;
+  rebuildTimers[chave] = setTimeout(() => {
+    rebuildTimers[chave] = null;
+    const destino = DESTINOS[chave];
     try {
-      const s = build();
-      console.log(`[etl] modelo reconstruído: ${s.facts.length} contratos · ${s.sellersByName.size} vendedores no RH · ${s.teamsByName.size} em equipes (${s.buildMs}ms, v${s.version})`);
+      const s = destino.construir();
+      console.log(`[etl] modelo ${chave} reconstruído: ${destino.resumo(s)} (${s.buildMs}ms, v${s.version ?? s.versao})`);
     } catch (err) {
-      console.error('[etl] falha ao reconstruir o modelo:', err);
+      console.error(`[etl] falha ao reconstruir o modelo ${chave}:`, err);
     }
   }, 250);
 }
 
 /** Uma passada na fonte. Devolve true se o resultado foi descartado e precisa refazer. */
 async function executar(nome, src) {
+  const chave = src.destino || 'comercial';
+  const destino = destinoDe(src);
   const janela = assinaturaJanela();
   try {
     const { rows, ms } = await src.run();
-    if (assinaturaJanela() !== janela) {
+    // O recorte histórico só vale para as consultas que o recebem por parâmetro.
+    // As de condomínio não têm recorte: descartar o resultado delas porque o
+    // admin mexeu na janela comercial seria refazer trabalho por nada.
+    if (chave === 'comercial' && assinaturaJanela() !== janela) {
       console.log(`[etl] ${nome}: resultado descartado — o recorte mudou durante a consulta`);
       return true;
     }
     if (src.incremental) {
-      mergeSource(src.alvo, rows, { ms, cutoff: corte() });
+      destino.merge(src.alvo, rows, { ms, cutoff: corte() });
       console.log(`[etl] ${nome}: +${rows.length} linhas (janela ${config.incrementalDays}d) em ${ms}ms`);
     } else {
-      setSource(src.alvo, rows, { ms });
+      destino.set(src.alvo, rows, { ms });
       console.log(`[etl] ${nome}: ${rows.length} linhas em ${ms}ms`);
     }
-    agendarRebuild();
+    agendarRebuild(chave);
     return false;
   } catch (err) {
-    setSourceError(src.alvo, err);
+    destino.erro(src.alvo, err);
     console.error(`[etl] ${nome} falhou:`, err.message);
     return false;
   }
@@ -121,9 +161,11 @@ export async function refreshGroup(grupo) {
   await Promise.all(nomes.map(refreshSource));
 }
 
-/** Carga inicial: completa + cadastros. */
+/** Carga inicial: completa + cadastros + condomínios. */
 export async function refreshAll() {
-  await Promise.all([refreshGroup('dims'), refreshGroup('full'), refreshSource('phone')]);
+  await Promise.all([
+    refreshGroup('dims'), refreshGroup('full'), refreshSource('phone'), refreshGroup('cond'),
+  ]);
 }
 
 export function startScheduler() {
@@ -131,6 +173,7 @@ export function startScheduler() {
     hot: config.refresh.hot,
     full: config.refresh.full,
     dims: config.refresh.dims,
+    cond: config.refresh.cond,
   };
   for (const [grupo, intervalo] of Object.entries(grupos)) {
     if (!intervalo || intervalo <= 0) continue;

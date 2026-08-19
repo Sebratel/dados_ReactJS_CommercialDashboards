@@ -4,7 +4,20 @@ import { addDias, addMeses, fimDoMes, hoje, inicioDoMes } from './format';
 
 const Ctx = createContext(null);
 
-const LISTAS = ['vendedor', 'equipe', 'tecnologia', 'situacao', 'cidade', 'canal'];
+/** Seletores de lista do dashboard comercial. */
+export const LISTAS = ['vendedor', 'equipe', 'tecnologia', 'situacao', 'cidade', 'canal'];
+
+/**
+ * Seletores da tela de condomínios. Ficam no MESMO provider porque o mecanismo é
+ * o mesmo (filtro na URL, compartilhável por link), mas em campos próprios: a
+ * cidade daqui é `cidadeCond` porque a lista de valores é outra, e herdar a
+ * cidade de Vendas deixaria a tela vazia sem dizer por quê.
+ */
+export const LISTAS_CONDOMINIO = [
+  'condominio', 'splitter', 'concentrador', 'ponto', 'site', 'cidadeCond', 'faixa',
+];
+
+const TODAS_AS_LISTAS = [...LISTAS, ...LISTAS_CONDOMINIO];
 
 /** período padrão ao abrir o dashboard (equivale ao slicer Ano do Power BI) */
 export const PADRAO = 'ano';
@@ -34,8 +47,14 @@ export function FiltersProvider({ children }) {
       cliente: params.get('cliente') || '',
       // granularidade dos gráficos de coluna (não conta como filtro)
       g: params.get('g') === 'dia' ? 'dia' : 'mes',
+      // condomínios: período sobre a criação do splitter. Sem padrão, porque um
+      // splitter instalado em 2019 continua valendo hoje — "este ano" esconderia
+      // quase toda a rede.
+      criadoDe: params.get('criadoDe') || '',
+      criadoAte: params.get('criadoAte') || '',
+      buscaCond: params.get('buscaCond') || '',
     };
-    for (const k of LISTAS) {
+    for (const k of TODAS_AS_LISTAS) {
       const v = params.get(k);
       f[k] = v ? v.split(',').filter(Boolean) : [];
     }
@@ -86,16 +105,26 @@ export function FiltersProvider({ children }) {
     return p?.id || null;
   }, [filtros.de, filtros.ate]);
 
-  const ativos = useMemo(() => {
+  /**
+   * Quantos filtros estão valendo — mas só os da barra que está perguntando.
+   * Cada tela conta os seus: sem isso, um filtro de condomínio deixado para trás
+   * fazia a barra de Vendas oferecer "limpar 1 filtro" que não aparece em lugar
+   * nenhum daquela tela.
+   */
+  const contar = useCallback((campos) => {
     let n = 0;
-    for (const k of LISTAS) n += filtros[k].length ? 1 : 0;
-    if (filtros.cliente) n += 1;
+    for (const k of campos) {
+      const v = filtros[k];
+      n += (Array.isArray(v) ? v.length : v) ? 1 : 0;
+    }
     return n;
   }, [filtros]);
 
+  const ativos = useMemo(() => contar([...LISTAS, 'cliente']), [contar]);
+
   const value = useMemo(
-    () => ({ filtros, setFiltro, alternar, limpar, presetAtivo, ativos }),
-    [filtros, setFiltro, alternar, limpar, presetAtivo, ativos],
+    () => ({ filtros, setFiltro, alternar, limpar, presetAtivo, ativos, contar }),
+    [filtros, setFiltro, alternar, limpar, presetAtivo, ativos, contar],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

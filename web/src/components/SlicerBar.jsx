@@ -15,7 +15,7 @@ const TITULOS = {
 };
 
 /** Fecha o popover ao clicar fora ou apertar Esc. */
-function usarFechamento(aberto, fechar) {
+export function usarFechamento(aberto, fechar) {
   const ref = useRef(null);
   useEffect(() => {
     if (!aberto) return undefined;
@@ -31,7 +31,13 @@ function usarFechamento(aberto, fechar) {
   return ref;
 }
 
-function FiltroLista({ campo, opcoes = [], valor = [], onChange, alinhar }) {
+/**
+ * Um seletor de lista com busca interna. `titulo` existe para as telas que não
+ * estão no mapa `TITULOS` acima — a de condomínios tem sete campos que só ela usa,
+ * e cadastrá-los num mapa global só para dar nome a eles espalharia o rótulo
+ * longe de quem o mostra.
+ */
+export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, alinhar }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const ref = usarFechamento(aberto, () => setAberto(false));
@@ -47,7 +53,7 @@ function FiltroLista({ campo, opcoes = [], valor = [], onChange, alinhar }) {
   return (
     <div className={`filtro${valor.length ? ' ativo' : ''}`} ref={ref}>
       <button type="button" onClick={() => setAberto((a) => !a)} title={valor.join(', ') || 'todos'}>
-        <span className="nome">{TITULOS[campo]}</span>
+        <span className="nome">{titulo || TITULOS[campo]}</span>
         <span className="valor">{resumo}</span>
         {valor.length > 1 && <span className="contador">{valor.length}</span>}
         <Icone nome="baixo" tamanho={12} className="seta" />
@@ -81,10 +87,10 @@ function FiltroLista({ campo, opcoes = [], valor = [], onChange, alinhar }) {
   );
 }
 
-function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo }) {
+export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets = PRESETS }) {
   const [aberto, setAberto] = useState(false);
   const ref = usarFechamento(aberto, () => setAberto(false));
-  const preset = PRESETS.find((p) => p.id === presetAtivo);
+  const preset = presets.find((p) => p.id === presetAtivo);
   const resumo = preset
     ? preset.label
     : de && ate ? `${labelData(de)} – ${labelData(ate)}` : 'todo o período';
@@ -105,7 +111,7 @@ function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo }) {
             <input type="date" value={ate || ''} onChange={(e) => onChange({ ate: e.target.value })} />
           </div>
           <div className="presets">
-            {PRESETS.map((p) => (
+            {presets.map((p) => (
               <button
                 key={p.id}
                 type="button"

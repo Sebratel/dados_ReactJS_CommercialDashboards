@@ -10,6 +10,10 @@ export const dec2 = (v) => nf2.format(Number(v) || 0);
 export const brl = (v) => cf.format(Number(v) || 0);
 export const brl2 = (v) => cf2.format(Number(v) || 0);
 
+/** Fração (0..1) em porcentagem — os mesmos formatos do Power BI: 0% e 0,00%. */
+export const pct = (v) => `${nf0.format((Number(v) || 0) * 100)}%`;
+export const pct2 = (v) => `${nf2.format((Number(v) || 0) * 100)}%`;
+
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];

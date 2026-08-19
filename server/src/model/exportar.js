@@ -5,8 +5,9 @@
  * BOM UTF-8 (senão os acentos quebram), decimal com vírgula e datas dd/mm/aaaa.
  */
 import { getState } from './store.js';
-import { premiacoes, rampagem, rows } from './measures.js';
+import { parseFilters, premiacoes, rampagem, rows } from './measures.js';
 import { diffDays, today } from './dates.js';
+import { linhasCondominios, parseFiltrosCondominios, splittersCondominios } from './condominios.js';
 
 const BOM = '﻿';
 
@@ -188,12 +189,105 @@ export const CONJUNTOS = {
       return [...mapa.values()].sort((a, b) => b.vendas - a.vendas);
     },
   },
+
+  // ---------------------------------------------------------- condomínios
+  // `escopo: 'condominios'` avisa às rotas que estes dois conjuntos leem os
+  // filtros da tela de condomínios, não os comerciais. Sem essa marca eles
+  // receberiam `de`/`ate` de vendas e exportariam o recorte errado calados.
+  condominios: {
+    titulo: 'Condomínios — portas dos splitters',
+    descricao: 'Uma linha por porta de splitter de condomínio, com o cliente da porta quando existe e as coordenadas do splitter e do cliente.',
+    tela: 'condominios',
+    arquivo: 'condominios-portas',
+    escopo: 'condominios',
+    colunas: () => [
+      { titulo: 'CONDOMÍNIO', valor: (f) => f.condominio },
+      { titulo: 'SPLITTER', valor: (f) => f.splitter },
+      { titulo: 'CÓDIGO DO SPLITTER', valor: (f) => f.splitterCodigo },
+      { titulo: 'PORTA', valor: (f) => inteiro(f.porta) },
+      { titulo: 'PORTA COM CLIENTE', valor: (f) => (f.temCliente ? 'Sim' : 'Não') },
+      { titulo: 'USUÁRIO', valor: (f) => f.usuario },
+      { titulo: 'CLIENTE', valor: (f) => f.cliente },
+      { titulo: 'CONTRATO', valor: (f) => f.contrato },
+      { titulo: 'DATA DE APROVAÇÃO', valor: (f) => dataBR(f.dataAprovacao) },
+      { titulo: 'STATUS DO CONTRATO', valor: (f) => f.statusContrato },
+      { titulo: 'CIDADE DO SPLITTER', valor: (f) => f.cidade },
+      { titulo: 'CIDADE DO CLIENTE', valor: (f) => f.cidadeCliente },
+      { titulo: 'RUA', valor: (f) => f.rua },
+      { titulo: 'NÚMERO', valor: (f) => f.numero },
+      { titulo: 'BAIRRO', valor: (f) => f.bairro },
+      { titulo: 'PONTO DE ACESSO', valor: (f) => f.pontoAcesso },
+      { titulo: 'CONCENTRADOR', valor: (f) => f.concentrador },
+      { titulo: 'SITE', valor: (f) => f.site },
+      { titulo: 'SPLITTER PRIMÁRIO', valor: (f) => f.primario },
+      { titulo: 'SPLITTER CRIADO EM', valor: (f) => dataBR(f.criado) },
+      { titulo: 'DIAS DE VIDA', valor: (f) => inteiro(f.diasDeVida) },
+      { titulo: 'CAPACIDADE', valor: (f) => inteiro(f.capacidade) },
+      { titulo: 'PORTAS OCUPADAS', valor: (f) => inteiro(f.ocupadas) },
+      { titulo: 'PORTAS DISPONÍVEIS', valor: (f) => inteiro(f.disponiveis) },
+      { titulo: 'OCUPAÇÃO (%)', valor: (f) => numBR(f.percentual * 100, 2) },
+      { titulo: 'FAIXA', valor: (f) => f.classificacao },
+      { titulo: 'PLACA', valor: (f) => inteiro(f.placa) },
+      { titulo: 'PON', valor: (f) => inteiro(f.pon) },
+      // as coordenadas saem aqui porque a tela não tem mapa: quem precisa da
+      // localização joga o CSV no mapa que já usa
+      { titulo: 'LATITUDE DO SPLITTER', valor: (f) => f.splitterLat },
+      { titulo: 'LONGITUDE DO SPLITTER', valor: (f) => f.splitterLng },
+      { titulo: 'LATITUDE DO CLIENTE', valor: (f) => f.clienteLat },
+      { titulo: 'LONGITUDE DO CLIENTE', valor: (f) => f.clienteLng },
+    ],
+    linhas: (flt) => linhasCondominios(flt)
+      .slice()
+      .sort((a, b) => a.condominio.localeCompare(b.condominio, 'pt-BR')
+        || a.splitter.localeCompare(b.splitter, 'pt-BR')
+        || a.porta - b.porta),
+  },
+  'condominios-ocupacao': {
+    titulo: 'Condomínios — ocupação por splitter',
+    descricao: 'Uma linha por splitter de condomínio: capacidade, portas ocupadas, percentual, faixa e localização.',
+    tela: 'condominios',
+    arquivo: 'condominios-ocupacao',
+    escopo: 'condominios',
+    colunas: () => [
+      { titulo: 'CONDOMÍNIO', valor: (s) => s.condominio },
+      { titulo: 'SPLITTER', valor: (s) => s.splitter },
+      { titulo: 'PONTO DE ACESSO', valor: (s) => s.pontoAcesso },
+      { titulo: 'CONCENTRADOR', valor: (s) => s.concentrador },
+      { titulo: 'SITE', valor: (s) => s.site },
+      { titulo: 'CIDADE', valor: (s) => s.cidade },
+      { titulo: 'CAPACIDADE', valor: (s) => inteiro(s.capacidade) },
+      { titulo: 'PORTAS CADASTRADAS', valor: (s) => inteiro(s.portas) },
+      { titulo: 'PORTAS OCUPADAS', valor: (s) => inteiro(s.ocupadas) },
+      { titulo: 'PORTAS DISPONÍVEIS', valor: (s) => inteiro(s.disponiveis) },
+      { titulo: 'CLIENTES', valor: (s) => inteiro(s.clientes) },
+      { titulo: 'OCUPAÇÃO (%)', valor: (s) => numBR(s.percentual * 100, 2) },
+      { titulo: 'FAIXA', valor: (s) => s.classificacao },
+      { titulo: 'CRIADO EM', valor: (s) => dataBR(s.criado) },
+      { titulo: 'DIAS DE VIDA', valor: (s) => inteiro(s.diasDeVida) },
+      { titulo: 'LATITUDE', valor: (s) => s.lat },
+      { titulo: 'LONGITUDE', valor: (s) => s.lng },
+    ],
+    linhas: (flt) => splittersCondominios(flt),
+  },
 };
 
-export function listarConjuntos(usuarioPodeVer, flt) {
+/**
+ * Cada conjunto lê os filtros da SUA tela. A tela de exportações manda a query
+ * inteira e quem decide o que é filtro é o conjunto — se ela decidisse, um dia
+ * alguém acrescentaria um conjunto novo e ele receberia `de`/`ate` de vendas
+ * sem ninguém notar, exportando o recorte errado em silêncio.
+ */
+export function filtrosDoConjunto(conjunto, query = {}) {
+  return conjunto?.escopo === 'condominios'
+    ? parseFiltrosCondominios(query)
+    : parseFilters(query);
+}
+
+export function listarConjuntos(usuarioPodeVer, query) {
   return Object.entries(CONJUNTOS)
     .filter(([, c]) => usuarioPodeVer(c.tela))
     .map(([id, c]) => {
+      const flt = filtrosDoConjunto(c, query);
       const colunas = c.colunas();
       // a contagem já sai aqui: o usuário precisa saber o tamanho antes de baixar
       let linhas = null;

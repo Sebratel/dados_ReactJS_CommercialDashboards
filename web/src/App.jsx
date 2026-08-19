@@ -20,6 +20,7 @@ import Configuracoes from './pages/Configuracoes';
 import Exportacoes from './pages/Exportacoes';
 import Preditivo from './pages/Preditivo';
 import VendasCanceladas from './pages/VendasCanceladas';
+import Condominios from './pages/Condominios';
 import { Icone } from './components/Icone';
 
 const PAGINAS = [
@@ -33,6 +34,7 @@ const PAGINAS = [
   { id: 'rampagem', path: '/rampagem', label: 'Rampagem', el: <Rampagem /> },
   { id: 'premiacoes', path: '/premiacoes', label: 'Premiações', el: <Premiacoes /> },
   { id: 'vendas-canceladas', path: '/vendas-canceladas', label: 'Vendas Canceladas', el: <VendasCanceladas /> },
+  { id: 'condominios', path: '/condominios', label: 'Condomínios', el: <Condominios /> },
   { id: 'preditivo', path: '/preditivo', label: 'Análise Preditiva', el: <Preditivo /> },
 ];
 
