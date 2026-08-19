@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFiltros } from '../api';
 import { PRESETS, useFilters } from '../filters';
+import { useSession } from '../auth/session.jsx';
 import { labelData } from '../format';
 import { Icone } from './Icone';
 
