@@ -34,8 +34,9 @@ import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
  *  - Sem emojis. O original marca a faixa com 🔴🟡🟢 e a porta com 🚹/👤 — emoji
  *    renderiza diferente por sistema operacional e desalinha a coluna. Aqui a
  *    faixa é a cor da célula e a porta é a coluna "com cliente".
- *  - A tela mostra TODAS as cidades; o relatório fixa cinco. O recorte de lá
- *    ficou a um clique na barra de filtros, em vez de escondido no código.
+ *  - A tela mostra TODAS as cidades; o relatório fixa cinco (Canoas, Novo
+ *    Hamburgo, São Leopoldo, Sapucaia do Sul e Esteio) nas tabelas de detalhe.
+ *    Quem quiser aquele recorte escolhe as cidades no seletor, que tem busca.
  *  - O filtro de cidade é a do EQUIPAMENTO, não a do cliente como no relatório.
  *    Porta livre não tem conexão e portanto não tem cidade: filtrando pela do
  *    cliente, escolher uma cidade descartava todas as portas livres e "portas"

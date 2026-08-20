@@ -637,10 +637,40 @@ que é o prédio onde ele está. Empate resolve em ordem alfabética, para o res
 depender da ordem em que o banco devolveu as linhas.
 
 **As cinco cidades saíram do código.** O relatório fixa Canoas, Novo Hamburgo, São
-Leopoldo, Sapucaia do Sul e Esteio como filtro nas tabelas de detalhe. A tela mostra todas
-e oferece esse recorte num botão na barra de filtros. Filtro escondido em constante é a
-receita de "o dashboard está com número errado": quem abre não tem como saber que cinco
-cidades foram escolhidas dentro de um arquivo `.js`.
+Leopoldo, Sapucaia do Sul e Esteio como filtro nas tabelas de detalhe. A tela mostra todas;
+quem quiser aquele recorte escolhe as cidades no seletor, que tem busca. Filtro escondido em
+constante é a receita de "o dashboard está com número errado": quem abre não tem como saber
+que cinco cidades foram escolhidas dentro de um arquivo `.js`.
+
+### Condomínios: de onde vem cada número da diferença com o Power BI
+
+Os três cartões do topo não batem com os do relatório, e a diferença é inteiramente
+explicada pelas divergências acima. Medido no banco, com a mesma cadeia de joins e cada
+filtro nosso ligado e desligado:
+
+| | primários | splitters | portas |
+|---|---|---|---|
+| **A** — nosso, todos os filtros | **777** | **3.887** | **55.050** |
+| **B** — sem `porta_sec.deleted IS FALSE` | 777 | 3.887 | 55.489 |
+| **C** — sem os filtros do splitter secundário | 779 | 3.902 | 55.274 |
+| **D** — sem nenhum dos dois | 779 | 3.902 | 55.729 |
+| **Power BI** (`SPLITTER PRIMARIO` / `SPLITTER SECUNDARIO` / `USUARIO (s)`) | 779 | 3.902 | 55.906 |
+
+Lendo a tabela:
+
+* **Primários e splitters** fecham em D. Os **2 primários** e os **15 splitters** de
+  diferença são os secundários inativos, apagados ou de tipo diferente de 1, que o Power
+  Query não filtra e nós filtramos.
+* **Portas**: 55.050 + **439** (portas marcadas como apagadas em splitters válidos) + **240**
+  (portas dos 15 splitters excluídos) = 55.729 = D. Faltam **177** para o número do
+  relatório, e elas não são dados — são **duplicatas**: o `Table.ExpandTableColumn` de
+  `CONTRATOS_BLOQUEADOS` casa por número de contrato contra uma tabela deduplicada por
+  USUÁRIO, então um contrato com duas conexões vira duas linhas. Reproduzindo a expansão em
+  SQL, o total dá **55.906** — exatamente o card `USUARIO (s)` de lá.
+
+Ou seja: as 856 portas de diferença são **679 linhas que não deveriam contar** (porta ou
+equipamento fora de operação) e **177 linhas contadas duas vezes**. Nenhuma delas é porta
+que exista e esteja faltando aqui.
 
 **O que não veio.** Os dois mapas (`LOCALIZAÇÃO SPLITTERS` e `LOCALIZAÇÃO CLIENTE`): o
 dashboard não tem biblioteca de mapa, e não vale acoplá-lo a um servidor de tiles externo

@@ -22,16 +22,12 @@
 import { diffDays, monthKey, toIso, today } from './dates.js';
 
 /**
- * As cinco cidades que o relatório de origem fixa como filtro nas tabelas de
- * detalhe e na matriz. Aqui NÃO são aplicadas por padrão — a tela mostra todas e
- * oferece este recorte a um clique. Filtro escondido em código é a receita de
- * "o dashboard está com número errado": quem abre não tem como saber que cinco
- * cidades foram escolhidas dentro de uma constante.
+ * O relatório de origem fixa cinco cidades (Canoas, Novo Hamburgo, São Leopoldo,
+ * Sapucaia do Sul e Esteio) como filtro nas tabelas de detalhe. Aqui a tela
+ * mostra TODAS e não oferece esse atalho: filtro escondido em código é a receita
+ * de "o dashboard está com número errado", e quem quiser o recorte de lá escolhe
+ * as cidades no seletor, que já tem busca.
  */
-export const CIDADES_DO_RELATORIO = [
-  'Canoas', 'Novo Hamburgo', 'São Leopoldo', 'Sapucaia do Sul', 'Esteio',
-];
-
 export const CLASSIFICACOES = ['CRÍTICO', 'ALERTA', 'OK', 'SEM CAPACIDADE'];
 
 const estado = {
@@ -369,11 +365,7 @@ export function filtrosCondominios() {
     if (!min || s.criado < min) min = s.criado;
     if (!max || s.criado > max) max = s.criado;
   }
-  return {
-    ...estado.dims,
-    cidadesDoRelatorio: CIDADES_DO_RELATORIO.filter((c) => estado.dims.cidades.includes(c)),
-    periodo: { min, max, hoje: today() },
-  };
+  return { ...estado.dims, periodo: { min, max, hoje: today() } };
 }
 
 // ---------------------------------------------------------------- PAINEL
@@ -571,6 +563,5 @@ export function painelCondominios(flt) {
       .filter((c) => c.clientes > 0)
       .map((c) => ({ key: c.key, clientes: c.clientes }))
       .sort((a, b) => b.clientes - a.clientes),
-    cidadesDoRelatorio: CIDADES_DO_RELATORIO,
   };
 }

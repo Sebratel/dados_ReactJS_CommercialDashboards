@@ -78,11 +78,6 @@ export function SlicerBarCondominios() {
   const ativos = contar([...LISTAS_CONDOMINIO, 'buscaCond'])
     + (filtros.criadoDe || filtros.criadoAte ? 1 : 0);
 
-  const cidadesDoRelatorio = dims?.cidadesDoRelatorio || [];
-  const recorteAplicado = cidadesDoRelatorio.length > 0
-    && filtros.cidadeCond.length === cidadesDoRelatorio.length
-    && cidadesDoRelatorio.every((c) => filtros.cidadeCond.includes(c));
-
   return (
     <div className="filtros">
       <span className="rotulo">Filtros</span>
@@ -117,21 +112,6 @@ export function SlicerBarCondominios() {
           onChange={(e) => setBusca(e.target.value)}
         />
       </label>
-
-      {/* O relatório de origem fixa cinco cidades nas tabelas de detalhe. Aqui a
-          tela mostra todas — e o recorte de lá fica a um clique, para conferência,
-          em vez de escondido dentro do código. */}
-      {cidadesDoRelatorio.length > 0 && (
-        <button
-          type="button"
-          className={`atalho-recorte${recorteAplicado ? ' on' : ''}`}
-          title={`${recorteAplicado ? 'Remover' : 'Aplicar'} o recorte do relatório do Power BI: ${cidadesDoRelatorio.join(', ')}`}
-          onClick={() => setFiltro({ cidadeCond: recorteAplicado ? [] : cidadesDoRelatorio })}
-        >
-          <Icone nome={recorteAplicado ? 'ok' : 'tela'} tamanho={12} />
-          recorte do Power BI
-        </button>
-      )}
 
       {ativos > 0 && (
         <button type="button" className="limpar" onClick={limpar}>
