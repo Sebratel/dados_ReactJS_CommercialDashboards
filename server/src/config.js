@@ -64,6 +64,11 @@ export const config = {
   // Janela (em dias) das cargas incrementais
   incrementalDays: num(process.env.INCREMENTAL_DAYS, 60),
 
+  // Recorte das consultas de CRM (leads e negociações). No `.pbip` é a constante
+  // '2026-01-01' escrita dentro das duas consultas; aqui é o mesmo valor, mas
+  // ajustável sem editar SQL.
+  crmSince: process.env.CRM_SINCE || '2026-01-01',
+
   // Frequência de atualização (ms)
   refresh: {
     // janela incremental: vendas, ativações e primeiro pagamento recentes
@@ -75,6 +80,12 @@ export const config = {
     // condomínios: rede de splitters e ocupação das portas. Muda quando alguém
     // instala equipamento ou conecta cliente — dá minutos, não segundos.
     cond: num(process.env.REFRESH_COND_MS, 600000), // 10 min
+    // CRM: leads e negociações. Medido no banco de produção, o par de consultas
+    // custa ~25 s (68 mil leads e 31 mil negociações, ambas com subconsulta
+    // EXISTS por linha). A 5 minutos isso seria 8% do tempo com o Voalle
+    // ocupado só com esta tela; a 10 vira 4%, e um lead que entrou agora aparece
+    // em no máximo dez minutos — que é o tempo de alguém abrir a tela.
+    crm: num(process.env.REFRESH_CRM_MS, 600000), // 10 min
   },
 };
 

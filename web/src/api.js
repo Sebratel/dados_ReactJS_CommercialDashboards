@@ -37,6 +37,16 @@ export function buildQuery(filtros = {}) {
   add('criadoDe', filtros.criadoDe);
   add('criadoAte', filtros.criadoAte);
   add('buscaCond', filtros.buscaCond);
+  // leads e negociações
+  add('lde', filtros.leadDe);
+  add('late', filtros.leadAte);
+  add('lvend', filtros.lvendedor);
+  add('lequipe', filtros.lequipe);
+  add('lstatus', filtros.lstatus);
+  add('lcidade', filtros.lcidade);
+  add('lorigem', filtros.lorigem);
+  add('lforma', filtros.lforma);
+  add('lbusca', filtros.buscaLead);
   return p.toString();
 }
 
@@ -139,6 +149,17 @@ export function useFiltrosCondominios() {
   return useQuery({
     queryKey: ['/condominios/filtros'],
     queryFn: () => apiGet('/condominios/filtros'),
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Opções dos seletores da tela de leads (endpoint próprio). */
+export function useFiltrosLeads() {
+  return useQuery({
+    queryKey: ['/leads/filtros'],
+    queryFn: () => apiGet('/leads/filtros'),
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
     retry: 1,

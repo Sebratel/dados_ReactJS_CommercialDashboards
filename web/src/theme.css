@@ -202,6 +202,48 @@ body {
 @media (max-width: 1150px) { .linha-seis { grid-template-columns: repeat(3, minmax(190px, 1fr)); } }
 @media (max-width: 760px)  { .linha-seis { grid-template-columns: repeat(2, minmax(170px, 1fr)); } }
 
+/* Proporções da faixa y=1764 do relatório de Leads: dois gráficos de 1011px e
+   uma tabela de 629px. Abaixo de 1250 a tabela desce, porque com menos de 240px
+   a coluna de motivo fica só com reticências. */
+.linha-38-38-24 {
+  grid-template-columns: minmax(300px, 38fr) minmax(300px, 38fr) minmax(240px, 24fr);
+}
+@media (max-width: 1250px) { .linha-38-38-24 { grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr); } }
+@media (max-width: 820px)  { .linha-38-38-24 { grid-template-columns: 1fr; } }
+
+/* Cinco tabelinhas de perfil (faixa y=2401 do relatório de Leads), nas
+   proporções de lá: cidade e rua mais largas, gênero e tipo estreitas. */
+.linha-cinco {
+  grid-template-columns:
+    minmax(190px, 22fr) minmax(175px, 20fr) minmax(200px, 24fr)
+    minmax(140px, 15fr) minmax(150px, 19fr);
+}
+@media (max-width: 1400px) { .linha-cinco { grid-template-columns: repeat(3, minmax(190px, 1fr)); } }
+@media (max-width: 900px)  { .linha-cinco { grid-template-columns: repeat(2, minmax(170px, 1fr)); } }
+
+/* Sub-navegação de uma tela que replica um relatório de várias páginas. Fica
+   DENTRO da página, abaixo da barra de filtros, para não competir com a
+   navegação principal — e porque os filtros valem para todas as sub-páginas. */
+.subnav {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+.subnav button {
+  border: 1px solid var(--pbi-borda); border-radius: 999px; cursor: pointer;
+  background: #fff; color: var(--pbi-muted);
+  font-family: var(--font); font-size: 12.5px; font-weight: 600;
+  padding: 5px 14px;
+}
+.subnav button:hover { border-color: var(--pbi-primary); color: var(--pbi-primary); }
+.subnav button.on {
+  background: var(--pbi-primary); border-color: var(--pbi-primary); color: #fff;
+}
+.subnav-aviso {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
+  font-size: 11.5px; color: var(--pbi-muted); cursor: help;
+}
+.subnav-aviso svg { flex: none; }
+
 /* KPI em faixa fina: o relatório não tem indicador aqui, mas total e valor perdido
    são a primeira pergunta de quem abre a tela. Em faixa custa ~70px, contra os
    ~330px de uma coluna de KPI ao lado de um gráfico. */

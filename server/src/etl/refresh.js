@@ -6,6 +6,7 @@ import { build, mergeSource, setSource, setSourceError } from '../model/store.js
 import {
   construirCondominios, setFonteCondominios, setFonteErroCondominios,
 } from '../model/condominios.js';
+import { construirLeads, setFonteErroLeads, setFonteLeads } from '../model/leads.js';
 
 /**
  * Quatro cadências:
@@ -16,6 +17,7 @@ import {
  *  - dims  : equipes, RH e usuários
  *  - cond  : splitters de condomínio e a ocupação das portas (modelo próprio,
  *            em `model/condominios.js`)
+ *  - crm   : leads e negociações (modelo próprio, em `model/leads.js`)
  */
 function corte() {
   const d = new Date();
@@ -48,6 +50,10 @@ const SOURCES = {
   // splitter instalado em 2019 continua valendo hoje. Recarga completa mesmo.
   splitters: { grupo: 'cond', destino: 'condominios', alvo: 'portas', run: () => queryFile('splitters', []) },
   ocupacao: { grupo: 'cond', destino: 'condominios', alvo: 'ocupacao', run: () => queryFile('splitter_ocupacao', []) },
+
+  // --- CRM: leads e negociações (modelo próprio) ---
+  leads: { grupo: 'crm', destino: 'leads', alvo: 'leads', run: () => queryFile('leads', [config.crmSince]) },
+  negociacoes: { grupo: 'crm', destino: 'leads', alvo: 'negociacoes', run: () => queryFile('negotiations', [config.crmSince]) },
 };
 
 const rodando = new Map();
@@ -71,6 +77,12 @@ const DESTINOS = {
     erro: setFonteErroCondominios,
     construir: construirCondominios,
     resumo: (s) => `${s.fatos.length} portas em ${s.splitters.length} splitters · ${s.dims.condominios.length} condomínios`,
+  },
+  leads: {
+    set: setFonteLeads,
+    erro: setFonteErroLeads,
+    construir: construirLeads,
+    resumo: (s) => `${s.leads.length} leads · ${s.negociacoes.length} negociações · ${s.vendedores.length} vendedores`,
   },
 };
 
@@ -161,10 +173,18 @@ export async function refreshGroup(grupo) {
   await Promise.all(nomes.map(refreshSource));
 }
 
-/** Carga inicial: completa + cadastros + condomínios. */
+/**
+ * Carga inicial: completa + cadastros + condomínios + CRM.
+ *
+ * `dims` primeiro e sozinho: o modelo de leads lê a equipe do vendedor de
+ * `teamsByName`, que é construído por ele. Rodando em paralelo, a primeira
+ * montagem dos leads sairia sem equipe nenhuma e só se corrigiria no ciclo
+ * seguinte — quinze minutos de tela com o filtro de equipe vazio.
+ */
 export async function refreshAll() {
+  await refreshGroup('dims');
   await Promise.all([
-    refreshGroup('dims'), refreshGroup('full'), refreshSource('phone'), refreshGroup('cond'),
+    refreshGroup('full'), refreshSource('phone'), refreshGroup('cond'), refreshGroup('crm'),
   ]);
 }
 
@@ -174,6 +194,7 @@ export function startScheduler() {
     full: config.refresh.full,
     dims: config.refresh.dims,
     cond: config.refresh.cond,
+    crm: config.refresh.crm,
   };
   for (const [grupo, intervalo] of Object.entries(grupos)) {
     if (!intervalo || intervalo <= 0) continue;

@@ -9,6 +9,7 @@ import * as maria from '../db/maria.js';
 import { SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
 import { getState } from './store.js';
 import { getEstadoCondominios } from './condominios.js';
+import { getEstadoLeads } from './leads.js';
 
 export const CATALOGO = [
   {
@@ -94,16 +95,38 @@ export const CATALOGO = [
     origemPbi: 'SPLITTER_(OCUPADA_/_DISPONIVEIS) + SPLITTER_(OCUPACAO)',
     params: () => [],
   },
+  {
+    id: 'leads',
+    titulo: 'Leads (CRM)',
+    descricao: 'Réplica da consulta "leads": uma linha por pessoa no CRM, com a classificação do lead decidida na mesma ordem de cláusulas do relatório. Os rótulos de situação, tipo de documento e gênero saem prontos do SQL, no lugar dos 16 passos de substituição de texto do Power Query.',
+    banco: 'voalle',
+    fonte: 'leads',
+    modelo: 'leads',
+    origemPbi: 'leads (dsn=dbVoalle)',
+    params: () => [config.crmSince],
+  },
+  {
+    id: 'negotiations',
+    titulo: 'Negociações (CRM)',
+    descricao: 'Réplica da consulta "negotiations": uma linha por etapa de venda, com fase do funil, motivo do desfecho, serviço negociado e o primeiro/último relatório técnico, que delimitam a duração da negociação.',
+    banco: 'voalle',
+    fonte: 'negociacoes',
+    modelo: 'leads',
+    origemPbi: 'negotiations (dsn=dbVoalle)',
+    params: () => [config.crmSince],
+  },
 ];
 
 const sqlDe = (item) => (item.sql != null ? item.sql : loadSql(item.id));
 
 export function listarQueries() {
   const { sources } = getState();
-  const { fontes } = getEstadoCondominios();
+  const fontesCond = getEstadoCondominios().fontes;
+  const fontesLeads = getEstadoLeads().fontes;
+  const POR_MODELO = { condominios: fontesCond, leads: fontesLeads };
   return CATALOGO.map((item) => {
     // as estatísticas de execução vivem no modelo que a consulta alimenta
-    const s = (item.modelo === 'condominios' ? fontes[item.fonte] : sources[item.fonte]) || {};
+    const s = (item.modelo ? POR_MODELO[item.modelo] : sources)[item.fonte] || {};
     return {
       id: item.id,
       titulo: item.titulo,

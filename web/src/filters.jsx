@@ -17,7 +17,17 @@ export const LISTAS_CONDOMINIO = [
   'condominio', 'splitter', 'concentrador', 'ponto', 'site', 'cidadeCond', 'faixa',
 ];
 
-const TODAS_AS_LISTAS = [...LISTAS, ...LISTAS_CONDOMINIO];
+/**
+ * Seletores da tela de Leads e Negociações. Mesmo motivo do prefixo de
+ * condomínios: `vendedor`, `equipe` e `cidade` existem no lado comercial com
+ * listas de valores diferentes — lá o vendedor é quem fechou o contrato, aqui é o
+ * dono do lead no CRM.
+ */
+export const LISTAS_LEADS = [
+  'lvendedor', 'lequipe', 'lstatus', 'lcidade', 'lorigem', 'lforma',
+];
+
+const TODAS_AS_LISTAS = [...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS];
 
 /** período padrão ao abrir o dashboard (equivale ao slicer Ano do Power BI) */
 export const PADRAO = 'ano';
@@ -53,6 +63,14 @@ export function FiltersProvider({ children }) {
       criadoDe: params.get('criadoDe') || '',
       criadoAte: params.get('criadoAte') || '',
       buscaCond: params.get('buscaCond') || '',
+      // leads: período sobre a data de cadastro do lead, que é a única data ligada
+      // ao Calendario no modelo de origem. Sem padrão: o recorte da consulta
+      // (CRM_SINCE) já limita o histórico, e um padrão aqui esconderia meses.
+      leadDe: params.get('leadDe') || '',
+      leadAte: params.get('leadAte') || '',
+      buscaLead: params.get('buscaLead') || '',
+      // sub-página da tela de Leads (o relatório tem quatro)
+      lpag: params.get('lpag') || '',
     };
     for (const k of TODAS_AS_LISTAS) {
       const v = params.get(k);

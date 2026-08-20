@@ -20,6 +20,9 @@ import {
   condominiosPronto, filtrosCondominios, getEstadoCondominios,
   painelCondominios, parseFiltrosCondominios,
 } from '../model/condominios.js';
+import {
+  filtrosLeads, getEstadoLeads, leadsPronto, painelLeads, parseFiltrosLeads,
+} from '../model/leads.js';
 
 export const api = Router();
 
@@ -41,11 +44,12 @@ const authVisual = (req, res, next) => {
 
 api.use((req, res, next) => {
   if (req.path === '/health' || req.path === '/meta') return next();
-  // Condomínios tem modelo próprio e carrega em paralelo: quem só tem acesso a
-  // essa tela não pode ficar esperando a carga comercial, e uma falha lá não
-  // pode derrubar uma tela que não depende dela. Cada rota de condomínio checa
-  // o SEU estado logo abaixo.
+  // Condomínios e Leads têm modelo próprio e carregam em paralelo: quem só tem
+  // acesso a uma dessas telas não pode ficar esperando a carga comercial, e uma
+  // falha lá não pode derrubar uma tela que não depende dela. Cada uma checa o
+  // SEU estado nos guardas logo abaixo.
   if (req.path.startsWith('/condominios')) return next();
+  if (req.path.startsWith('/leads')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
     return res.status(503).json({ error: 'Carregando dados do Voalle/MariaDB…', carregando: true });
@@ -61,9 +65,17 @@ const exigirCondominios = (req, res, next) => {
   return next();
 };
 
+const exigirLeads = (req, res, next) => {
+  if (!leadsPronto()) {
+    return res.status(503).json({ error: 'Carregando os leads e as negociações do Voalle…', carregando: true });
+  }
+  return next();
+};
+
 function meta() {
   const s = getState();
   const c = getEstadoCondominios();
+  const l = getEstadoLeads();
   return {
     version: s.version,
     builtAt: s.builtAt,
@@ -71,7 +83,15 @@ function meta() {
     contratos: s.facts.length,
     // as fontes dos dois modelos no mesmo lugar: o indicador do topo já acende
     // quando qualquer uma falha, e condomínios não fica com falha invisível
-    sources: { ...s.sources, ...c.fontes },
+    sources: { ...s.sources, ...c.fontes, ...l.fontes },
+    leads: {
+      version: l.versao,
+      builtAt: l.geradoEm,
+      buildMs: l.buildMs ?? null,
+      leads: l.leads.length,
+      negociacoes: l.negociacoes.length,
+      ready: leadsPronto(),
+    },
     condominios: {
       version: c.versao,
       builtAt: c.geradoEm,
@@ -188,6 +208,16 @@ api.get('/condominios/filtros', auth('condominios'), exigirCondominios, (req, re
 
 api.get('/condominios', auth('condominios'), exigirCondominios, (req, res) => {
   res.json(withMeta(painelCondominios(parseFiltrosCondominios(req.query))));
+});
+
+// --------------------------------------------------------- LEADS E NEGOCIAÇÕES
+/** Opções dos seletores da tela de leads (dimensões próprias, endpoint próprio). */
+api.get('/leads/filtros', auth('leads'), exigirLeads, (req, res) => {
+  res.json(withMeta(filtrosLeads()));
+});
+
+api.get('/leads', auth('leads'), exigirLeads, (req, res) => {
+  res.json(withMeta(painelLeads(parseFiltrosLeads(req.query))));
 });
 
 // -------------------------------------------------------------- PREMIAÇÕES

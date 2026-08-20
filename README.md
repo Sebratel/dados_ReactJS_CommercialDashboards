@@ -31,20 +31,30 @@ dashboard/
 | `senior_admitted` | `src/sql/maria.js` | MariaDB |
 | `SPLITTER_(GERAL)` ¹ | `src/sql/splitters.sql` | Voalle |
 | `SPLITTER_(OCUPADA_/_DISPONIVEIS)` + `SPLITTER_(OCUPACAO)` ¹ | `src/sql/splitter_ocupacao.sql` | Voalle |
+| `leads` ² | `src/sql/leads.sql` | Voalle |
+| `negotiations` ² | `src/sql/negotiations.sql` | Voalle |
 
 ¹ do relatório **COM - Condomínios**, um `.pbip` separado. Ver a seção *Condomínios*.
+² do relatório **COM - Leads & Negociações**. Ver a seção *Leads e Negociações*.
 
 O servidor carrega essas consultas, faz os mesmos *merges* que o Power Query fazia
 (`src/model/store.js`) e mantém a tabela de fatos em memória (~120 mil contratos, ~60 MB).
 As páginas consultam a API, que agrega em milissegundos.
 
-**Dois modelos, não um.** Condomínios tem estado próprio em `src/model/condominios.js`,
-porque não existe relação entre os dois: o modelo comercial é um fato por contrato vendido;
-o de condomínios é um fato por *porta de splitter* (~55 mil portas, ~3.900 splitters). Na
-mesma tabela de fatos, toda medida comercial passaria a precisar excluir linhas que não são
-venda — e a primeira que esquecesse contaria porta de splitter como contrato. Consequência
-prática: a tela de Condomínios abre mesmo que a carga comercial ainda esteja rodando ou
-tenha falhado, e vice-versa.
+**Três modelos, não um.** Cada relatório replicado tem o seu estado em memória, porque o
+grão é diferente em cada um:
+
+| Modelo | Arquivo | Grão | Tamanho hoje |
+|---|---|---|---|
+| comercial | `src/model/store.js` | um contrato vendido | ~120 mil contratos |
+| condomínios | `src/model/condominios.js` | uma porta de splitter | ~55 mil portas, 3.885 splitters |
+| CRM | `src/model/leads.js` | um lead + uma negociação | ~68 mil leads, ~31 mil negociações |
+
+Na mesma tabela de fatos, toda medida comercial passaria a precisar excluir linhas que não
+são venda — e a primeira que esquecesse contaria porta de splitter como contrato.
+Consequência prática: cada tela abre mesmo que a carga das outras esteja rodando ou tenha
+falhado. O modelo de CRM tem a única dependência entre eles: lê a equipe do vendedor da
+fonte `teams` que o modelo comercial já carrega (ver a seção *Leads e Negociações*).
 
 ### Frequência de atualização
 
@@ -54,6 +64,7 @@ tenha falhado, e vice-versa.
 | `full` | recarga completa desde `DATA_SINCE` | ~25 s | **30 min** | `REFRESH_FULL_MS` |
 | `dims` | equipes, RH, usuários | < 1 s | **15 min** | `REFRESH_DIMS_MS` |
 | `cond` | splitters de condomínio e ocupação das portas | ~15 s | **10 min** | `REFRESH_COND_MS` |
+| `crm` | leads e negociações | ~25 s | **10 min** | `REFRESH_CRM_MS` |
 
 A carga incremental é o que mantém **novas vendas, ativações e primeiro pagante** quase em
 tempo real sem pesar no Voalle: em vez de reler 120 mil contratos (≈20 s de consulta), lê só
@@ -347,6 +358,7 @@ O container expõe:
 | **Rampagem** | combo VENDA 90 × ATIVO 90, cartões, cidade, tabelas de novatos | `VENDAS_RAMPAGEM`, `ATIVOS_RAMPAGEM`, `Dias_Trabalhados` |
 | **Premiações** | duas tabelas (>60 dias e ≤60 dias) | `ValorFaixa`, `FaixaPorPagamento`, `ValorPorTempoDeCasa`, `ValorFinal`, `ValorFaixaAtivo`, `FaixaPorAtivo` |
 | **Condomínios** | 6 cartões, ocupação por splitter, detalhe porta a porta, resumos por condomínio e por cidade, matriz mês × cidade, colunas por cidade | `SPLITTER_CONDOMINIO`, `CLASSIFICACAO`, `TEMPO_DE_VIDA`, `TOTAL_USUARIOS`, `PORCENT_OCUPACAO_CIDADE` |
+| **Leads e Negociações** · sub-página *Leads* | 8 cartões, status por lead, colunas por mês × status, detalhe completo, origem e forma de contato por mês, motivos, 5 tabelas de perfil, matriz vendedor × status | `Leads`, `Leads_Disponíveis`, `Leads_Qualificado`, `Leads_Em_Andamento`, `Leads_Ganho`, `Leads_Perda`, `Leads_Descartados`, `Leads_Outros`, `Dono do Lead Final`, `Tempo Vida Lead Formatado` |
 
 ### Cores das faixas de premiação
 
@@ -664,8 +676,10 @@ total, e os dois CSVs do cabeçalho trazem o conjunto inteiro.
 | `GET /api/canceladas` | vendas canceladas sem ativação |
 | `GET /api/condominios/filtros` | listas dos slicers da tela de condomínios |
 | `GET /api/condominios` | cartões, ocupação por splitter, detalhe, cidade, matriz |
+| `GET /api/leads/filtros` | listas dos slicers da tela de leads |
+| `GET /api/leads` | cartões, status, séries por mês, perfil, matriz vendedor |
 | `GET /api/premiacoes` | faixas de premiação |
-| `POST /api/refresh?group=hot\|full\|dims\|cond` | força releitura |
+| `POST /api/refresh?group=hot\|full\|dims\|cond\|crm` | força releitura |
 | `GET /api/auth/config` | client_id do Google e domínio (público) |
 | `GET /api/me` | e-mail, papel, atributo de power user e telas liberadas |
 | `GET/PUT/DELETE /api/access/users` | papéis (admin) |
@@ -689,9 +703,12 @@ As rotas de condomínio têm o seu próprio conjunto, porque as dimensões não 
 vivem na URL, o mesmo nome faria a tela herdar da outra um valor que não existe na lista
 dela: tela vazia, sem explicação nenhuma.
 
-As duas rotas de condomínio são as únicas que **não** esperam a carga comercial: têm modelo
-próprio e devolvem o seu próprio 503 enquanto os splitters não chegam. Quem só tem acesso a
-essa tela não fica preso a uma carga que não lhe serve.
+As rotas de leads têm o seu próprio conjunto: `lde`, `late` (cadastro do lead), `lvend`,
+`lequipe`, `lstatus`, `lcidade`, `lorigem`, `lforma` e `lbusca`.
+
+As rotas de condomínio e de leads são as que **não** esperam a carga comercial: têm modelo
+próprio e devolvem o seu próprio 503 enquanto os dados delas não chegam. Quem só tem acesso a
+uma dessas telas não fica preso a uma carga que não lhe serve.
 
 ---
 
@@ -760,7 +777,7 @@ Duas formas de tirar o dado da tela:
 * **Botão `CSV` no cabeçalho de cada tabela** — baixa exatamente o que está no visual,
   com as mesmas colunas, os filtros aplicados e a ordenação escolhida. É processado no
   navegador, sem ida ao servidor.
-* **Aba `Exportações`** — dez conjuntos completos gerados pelo servidor, sem o corte que
+* **Aba `Exportações`** — onze conjuntos completos gerados pelo servidor, sem o corte que
   as telas aplicam. O relatório de primeiros pagamentos, por exemplo, mostra 1.500 linhas
   na tela e exporta as 18.723 do período.
 
@@ -780,10 +797,11 @@ Duas formas de tirar o dado da tela:
 | Resumo por vendedor | vendas |
 | Condomínios — portas dos splitters | condominios |
 | Condomínios — ocupação por splitter | condominios |
+| Leads (CRM) | leads |
 
-Os dois conjuntos de condomínio leem os filtros **daquela** tela, não os comerciais: cada
-conjunto declara o seu escopo e `filtrosDoConjunto()` escolhe o parser. Sem essa marca, um
-conjunto novo receberia `de`/`ate` de vendas e exportaria o recorte errado calado.
+Os conjuntos de condomínio e de leads leem os filtros **daquela** tela, não os comerciais:
+cada conjunto declara o seu escopo e `filtrosDoConjunto()` escolhe o parser. Sem essa marca,
+um conjunto novo receberia `de`/`ate` de vendas e exportaria o recorte errado calado.
 
 O ACL por tela vale para o download: quem não vê Premiações recebe 403 ao tentar exportá-la,
 e o conjunto nem aparece na lista.

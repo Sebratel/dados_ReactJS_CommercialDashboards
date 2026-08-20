@@ -45,6 +45,7 @@ export const TELAS = [
   { id: 'premiacoes', curto: 'Premiações', label: 'Premiações', rota: '/premiacoes', descricao: 'Faixas e valores de premiação (dado sensível)' },
   { id: 'vendas-canceladas', curto: 'Canceladas', label: 'Vendas Canceladas', rota: '/vendas-canceladas', descricao: 'Contratos cancelados que nunca chegaram a ser ativados' },
   { id: 'condominios', curto: 'Condomínios', label: 'Condomínios', rota: '/condominios', descricao: 'Ocupação das portas dos splitters instalados em condomínios' },
+  { id: 'leads', curto: 'Leads', label: 'Leads e Negociações', rota: '/leads', descricao: 'Funil de CRM: leads cadastrados, negociações e desempenho por vendedor e cidade' },
   { id: 'preditivo', curto: 'Preditiva', label: 'Análise Preditiva', rota: '/preditivo', descricao: 'Projeções, carteira em risco e leitura por IA' },
 ];
 

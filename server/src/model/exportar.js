@@ -8,10 +8,22 @@ import { getState } from './store.js';
 import { parseFilters, premiacoes, rampagem, rows } from './measures.js';
 import { diffDays, today } from './dates.js';
 import { linhasCondominios, parseFiltrosCondominios, splittersCondominios } from './condominios.js';
+import { duracaoTexto, linhasLeads, parseFiltrosLeads } from './leads.js';
 
 const BOM = '﻿';
 
 const dataBR = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '');
+/**
+ * Data COM hora, para o CRM: lead e negociação acontecem várias vezes no mesmo
+ * dia, e sem a hora a planilha perde a ordem dos eventos do dia.
+ */
+const dataHoraBR = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 const numBR = (v, casas = 2) => (v === null || v === undefined || v === '' ? '' : Number(v).toFixed(casas).replace('.', ','));
 const inteiro = (v) => (v === null || v === undefined || v === '' ? '' : String(Math.round(Number(v))));
 
@@ -269,6 +281,55 @@ export const CONJUNTOS = {
     ],
     linhas: (flt) => splittersCondominios(flt),
   },
+
+  // --------------------------------------------------------- leads (CRM)
+  leads: {
+    titulo: 'Leads (CRM)',
+    descricao: 'Uma linha por lead cadastrado no CRM no período, com endereço, origem, dono, status do funil e coordenadas.',
+    tela: 'leads',
+    arquivo: 'leads',
+    escopo: 'leads',
+    colunas: () => [
+      { titulo: 'ID', valor: (l) => inteiro(l.leadId) },
+      { titulo: 'LEAD', valor: (l) => l.nome },
+      { titulo: 'STATUS', valor: (l) => l.status },
+      { titulo: 'CADASTRADO EM', valor: (l) => dataHoraBR(l.dtCadastro) },
+      { titulo: 'TEMPO DE VIDA', valor: (l) => duracaoTexto(l.tempoDeVidaMin, '') },
+      { titulo: 'DONO DO LEAD', valor: (l) => l.dono },
+      { titulo: 'EQUIPE', valor: (l) => l.equipe },
+      { titulo: 'CRIADO POR', valor: (l) => l.criadoPor },
+      { titulo: 'PROPRIETÁRIO DA VENDA', valor: (l) => l.proprietarioVenda },
+      { titulo: 'TIME', valor: (l) => l.time },
+      { titulo: 'ORIGEM', valor: (l) => l.origem },
+      { titulo: 'FORMA DE CONTATO', valor: (l) => l.forma },
+      { titulo: 'MOTIVO DA OPORTUNIDADE', valor: (l) => l.motivo },
+      { titulo: 'NEGOCIAÇÕES', valor: (l) => inteiro(l.negociacoes) },
+      { titulo: 'SITUAÇÃO NO CRM', valor: (l) => l.situacao },
+      { titulo: 'DELETADO', valor: (l) => l.deletado },
+      { titulo: 'TIPO DE PESSOA', valor: (l) => l.tipoDocumento },
+      { titulo: 'CPF/CNPJ', valor: (l) => l.cpfCnpj },
+      { titulo: 'GÊNERO', valor: (l) => l.genero },
+      { titulo: 'NASCIMENTO', valor: (l) => dataBR(l.dtNascimento) },
+      { titulo: 'TELEFONE', valor: (l) => l.telefone },
+      { titulo: 'CELULAR', valor: (l) => l.celular },
+      { titulo: 'E-MAIL', valor: (l) => l.email },
+      { titulo: 'CEP', valor: (l) => l.cep },
+      { titulo: 'CIDADE', valor: (l) => l.cidade },
+      { titulo: 'BAIRRO', valor: (l) => l.bairro },
+      { titulo: 'RUA', valor: (l) => l.rua },
+      { titulo: 'NÚMERO', valor: (l) => l.numero },
+      // a tela não tem mapa: quem precisa da localização joga o CSV no mapa que já usa
+      { titulo: 'LATITUDE', valor: (l) => l.lat },
+      { titulo: 'LONGITUDE', valor: (l) => l.lng },
+      { titulo: 'PROTOCOLO', valor: (l) => l.protocolo },
+      { titulo: 'MODIFICADO POR', valor: (l) => l.modificadoPor },
+      { titulo: 'MODIFICADO EM', valor: (l) => dataHoraBR(l.dtModificacao) },
+      { titulo: 'DESCARTADO EM', valor: (l) => dataHoraBR(l.dtDescarte) },
+    ],
+    linhas: (flt) => linhasLeads(flt)
+      .slice()
+      .sort((a, b) => (b.dtCadastro || '').localeCompare(a.dtCadastro || '')),
+  },
 };
 
 /**
@@ -278,9 +339,9 @@ export const CONJUNTOS = {
  * sem ninguém notar, exportando o recorte errado em silêncio.
  */
 export function filtrosDoConjunto(conjunto, query = {}) {
-  return conjunto?.escopo === 'condominios'
-    ? parseFiltrosCondominios(query)
-    : parseFilters(query);
+  if (conjunto?.escopo === 'condominios') return parseFiltrosCondominios(query);
+  if (conjunto?.escopo === 'leads') return parseFiltrosLeads(query);
+  return parseFilters(query);
 }
 
 export function listarConjuntos(usuarioPodeVer, query) {

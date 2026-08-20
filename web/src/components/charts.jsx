@@ -70,6 +70,7 @@ export const CORES = {
   orange: '#E66C37',
   orangeSoft: '#EB895F',
   ink: '#252423',
+  muted: '#605E5C',
   green: '#0E9224',
   grid: '#E1DFDD',
 };
@@ -332,6 +333,95 @@ export function ColunasPorTecnologia({ data, fmt = int }) {
           </Bar>
         ))}
       </ComposedChart>
+      )}
+    </AutoSizer>
+  );
+}
+
+/**
+ * Cores de ESTADO do funil de CRM. É polaridade, não identidade: cada rótulo tem
+ * um significado fixo (ganhou / perdeu / está aberto), então a cor é reservada e
+ * nunca reaproveitada como "série 4". Ganho verde e Perda vermelha são as duas
+ * que a pessoa lê sem legenda; o resto fica na escala da marca.
+ */
+export const COR_STATUS = {
+  Ganho: CORES.green,
+  Perda: '#b3261e',
+  'Em Andamento': CORES.gold,
+  Qualificado: CORES.goldSoft,
+  Disponível: CORES.orange,
+  Descartado: CORES.muted,
+  Outros: '#C8C6C4',
+};
+
+/**
+ * Paleta para dimensões sem significado fixo (origem do lead, forma de contato).
+ * Ordem FIXA e curta de propósito: a identidade é atribuída pela posição na lista
+ * de séries, que o servidor devolve estável, e não pelo ranking do filtro atual —
+ * se as cores trocassem quando um filtro muda o ranking, o usuário que memorizou
+ * "amarelo é PAP" leria o gráfico errado. Acima de 6 séries o servidor dobra a
+ * cauda em "Outros", que sai sempre no cinza neutro.
+ */
+export const PALETA_CATEGORIAS = [
+  CORES.gold, CORES.orange, CORES.primary, CORES.goldSoft, CORES.ink, CORES.orangeSoft,
+];
+
+/** "Outros" é a soma de uma cauda, não uma categoria: sai da paleta, vai no cinza. */
+export const corDaCategoria = (nome, i) => (
+  nome === 'Outros' || String(nome).startsWith('Outros (')
+    ? '#C8C6C4'
+    : PALETA_CATEGORIAS[i % PALETA_CATEGORIAS.length]
+);
+
+/**
+ * Colunas empilhadas por mês com N séries e rótulo de total no topo.
+ *
+ * O relatório de Leads usa colunas AGRUPADAS com a dimensão em "Series". Com sete
+ * estados de lead (ou uma dúzia de origens) isso vira sete barras finas por mês,
+ * ilegíveis, e esconde o total — que é o número que a pessoa procura primeiro.
+ * Empilhado mostra os dois: a composição e a altura total.
+ */
+export function ColunasEmpilhadas({
+  data, series, cores, fmt = int, mostrarTotal = true, xKey = 'label',
+}) {
+  const denso = data.length > 16;
+  return (
+    <AutoSizer>
+      {({ w, h }) => (
+        <ComposedChart width={w} height={h} data={data} margin={{ top: mostrarTotal ? 24 : 10, right: 12, bottom: 2, left: 4 }}>
+          <CartesianGrid vertical={false} stroke={CORES.grid} strokeDasharray="4 4" />
+          <XAxis
+            dataKey={xKey}
+            tick={{ ...eixoTick, fontSize: denso ? 9.5 : 11 }}
+            axisLine={false}
+            tickLine={false}
+            interval={denso ? Math.ceil(data.length / 18) : 0}
+            angle={denso ? -35 : 0}
+            textAnchor={denso ? 'end' : 'middle'}
+            height={denso ? 40 : 22}
+          />
+          <YAxis hide domain={[0, (d) => d * 1.18]} />
+          <Tooltip cursor={{ fill: 'rgba(136,15,23,0.06)' }} content={<PbiTooltip />} />
+          {series.map((s, i) => (
+            <Bar
+              key={s}
+              dataKey={s}
+              name={s}
+              stackId="e"
+              fill={cores ? cores(s, i) : corDaCategoria(s, i)}
+              maxBarSize={44}
+              isAnimationActive={false}
+              radius={i === series.length - 1 ? [4, 4, 0, 0] : 0}
+              // 2px de folga entre segmentos, como manda o padrão da marca
+              stroke="#fff"
+              strokeWidth={1}
+            >
+              {mostrarTotal && i === series.length - 1 && !denso && (
+                <LabelList dataKey="total" content={(p) => <ChipLabel {...p} fmt={fmt} posicao="acima" fontSize={10.5} />} />
+              )}
+            </Bar>
+          ))}
+        </ComposedChart>
       )}
     </AutoSizer>
   );
