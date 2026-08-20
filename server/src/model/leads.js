@@ -470,11 +470,13 @@ export function painelLeads(flt) {
   const negs = negociacoesDosLeads(leads);
   const contagem = porStatus(leads);
 
-  const recentes = leads
-    .slice()
-    .sort((a, b) => (b.dtCadastro || '').localeCompare(a.dtCadastro || '') || b.leadId - a.leadId);
+  // Ordem do relatório: `leads[lead_id]` DESC nas duas tabelas grandes. O id é
+  // serial, então na prática é o cadastro mais recente primeiro — mas quando dois
+  // leads entram no mesmo segundo, é o id que decide, e é ele que a origem usa.
+  const recentes = leads.slice().sort((a, b) => b.leadId - a.leadId);
 
   const semDono = leads.filter((l) => !l.dono).length;
+  const comMotivo = leads.filter((l) => l.motivo);
 
   return {
     kpis: {
@@ -528,7 +530,14 @@ export function painelLeads(flt) {
     // y=1764: origem, forma de contato e motivos
     serieOrigem: serieMensalPor(leads, (l) => l.origem),
     serieForma: serieMensalPor(leads, (l) => l.forma),
-    porMotivo: agruparComPct(leads, (l) => l.motivo, { limite: 12, rotuloVazio: '(sem motivo)' }),
+    // O relatório conta a COLUNA do motivo (CountNonNull) e divide pelo mesmo
+    // CountNonNull no escopo inteiro — ou seja, a base é quem TEM motivo, e lead
+    // sem motivo não aparece nem no numerador nem no denominador. As cinco
+    // tabelinhas abaixo são diferentes: lá o contado é `lead_id`, e a base é o
+    // total de leads. Usar a mesma base nas seis deixava este percentual menor
+    // que o de lá em toda linha.
+    porMotivo: agruparComPct(comMotivo, (l) => l.motivo, { limite: 12 }),
+    leadsComMotivo: comMotivo.length,
     // y=2401: as cinco tabelinhas
     porCidade: agruparComPct(leads, (l) => l.cidade, { limite: 20, rotuloVazio: '(sem cidade)' }),
     porBairro: agruparComPct(leads, (l) => l.bairro, { limite: 20, rotuloVazio: '(sem bairro)' }),

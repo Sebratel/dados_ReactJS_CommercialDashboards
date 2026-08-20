@@ -274,6 +274,9 @@ function PaginaLeads({ filtros }) {
         </Visual>
         <Visual
           title="MOTIVOS POR LEAD"
+          sub={data
+            ? `base: ${int(data.leadsComMotivo)} leads com motivo registrado, de ${int(data.kpis?.total || 0)} — é a base que o relatório usa nesta tabela`
+            : ''}
           ia="leads:motivo"
           flush
           className="v-meia"

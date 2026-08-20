@@ -358,8 +358,12 @@ export const VISUAIS = {
     tela: 'leads',
     modelo: 'leads',
     titulo: 'Motivos por lead',
-    oQueE: 'Motivo da oportunidade registrado no CRM, com a participação de cada um no total. A lista vem cortada nos 12 maiores; o resto está em "Outros".',
-    recorte: (p) => ({ totalLeads: p.kpis?.total, porMotivo: p.porMotivo }),
+    oQueE: 'Motivo da oportunidade registrado no CRM. A participação de cada motivo é calculada sobre os leads QUE TÊM motivo, não sobre o total — é a base que o relatório usa aqui. A lista vem cortada nos 12 maiores; o resto está em "Outros".',
+    recorte: (p) => ({
+      totalLeads: p.kpis?.total,
+      leadsComMotivo: p.leadsComMotivo,
+      porMotivo: p.porMotivo,
+    }),
   },
   'leads:perfil': {
     tela: 'leads',
