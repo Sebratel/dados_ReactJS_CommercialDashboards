@@ -511,7 +511,11 @@ export function painelCondominios(flt) {
   const mapaMatriz = new Map();
   const totalPorCidade = {};
   let totalMatriz = 0;
+  // Cliente sem data de aprovação é a diferença exata entre o cartão CLIENTES e o
+  // total da matriz. Sem esse número na tela, os dois se contradizem em silêncio.
+  let semDataAprovacao = 0;
   for (const f of fatos) {
+    if (f.temCliente && !f.dataAprovacao) semDataAprovacao += 1;
     if (!f.temCliente || !f.dataAprovacao) continue;
     if (!cidadesDaMatriz.includes(f.cidade)) continue;
     const mes = monthKey(f.dataAprovacao);
@@ -550,6 +554,7 @@ export function painelCondominios(flt) {
     porCondominioTotal: porCondominioOrdenado.length,
     porCidade,
     porClassificacao,
+    clientesSemDataAprovacao: semDataAprovacao,
     matriz: {
       colunas: cidadesDaMatriz,
       linhas: [...mapaMatriz.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),

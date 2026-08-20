@@ -119,20 +119,21 @@ export default function Condominios() {
   const colunasCondominio = [
     { key: 'key', titulo: 'CONDOMÍNIO', align: 'left' },
     { key: 'splitters', titulo: 'SPLITTERS', fmt: int },
-    { key: 'capacidade', titulo: 'CAPACIDADE', fmt: int },
     { key: 'clientes', titulo: 'CLIENTES', fmt: int, databar: { cor: CORES.gold } },
+    { key: 'capacidade', titulo: 'CAPACIDADE', fmt: int },
     { key: 'ocupadas', titulo: 'PORTAS OCUPADAS', fmt: int },
     { key: 'percentual', titulo: 'OCUPAÇÃO', fmt: pct, align: 'center', corFundo: corDaOcupacao },
     { key: 'classificacao', titulo: 'FAIXA', align: 'center', corFundo: corDaFaixa },
   ];
 
   // ---- y=1759 direita: resumo por cidade -------------------------------
+  // ordem das colunas do relatório: capacidade, disponíveis, ocupadas, splitters, %
   const colunasCidade = [
     { key: 'key', titulo: 'CIDADE', align: 'left' },
-    { key: 'splitters', titulo: 'SPLITTERS', fmt: int },
     { key: 'capacidade', titulo: 'CAPACIDADE', fmt: int },
-    { key: 'ocupadas', titulo: 'OCUPADAS', fmt: int, databar: { cor: CORES.gold } },
-    { key: 'disponiveis', titulo: 'DISPONÍVEIS', fmt: int, databar: { cor: CORES.goldSoft } },
+    { key: 'disponiveis', titulo: 'PORTAS DISPONÍVEIS', fmt: int, databar: { cor: CORES.goldSoft } },
+    { key: 'ocupadas', titulo: 'PORTAS OCUPADAS', fmt: int, databar: { cor: CORES.gold } },
+    { key: 'splitters', titulo: 'SPLITTERS', fmt: int },
     { key: 'percentual', titulo: '% DE OCUPAÇÃO', fmt: pct2, align: 'center', corFundo: corDaOcupacao },
   ];
 
@@ -310,8 +311,11 @@ export default function Condominios() {
         <Visual
           title="CLIENTES POR MÊS DE APROVAÇÃO E CIDADE"
           sub={data?.matriz?.linhas?.length
-            ? `${int(data.matriz.total)} clientes com contrato aprovado nas ${cidadesMatriz.length} cidades com mais portas ocupadas`
-            : 'porta sem contrato aprovado não tem data de aprovação e fica fora desta matriz, como no relatório'}
+            ? `${int(data.matriz.total)} clientes nas ${cidadesMatriz.length} cidades com mais portas ocupadas`
+              + (data.clientesSemDataAprovacao
+                ? ` — ${int(data.clientesSemDataAprovacao)} sem data de aprovação ficam fora, e é essa a diferença para o cartão de CLIENTES`
+                : '')
+            : 'porta sem data de aprovação do contrato fica fora desta matriz, como no relatório'}
           flush
           className="v-meia"
           actions={(
