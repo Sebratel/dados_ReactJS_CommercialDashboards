@@ -231,6 +231,7 @@ function PaginaLeads({ filtros }) {
 
         <Visual
           title="STATUS POR LEAD / MÊS"
+          ia="leads:status"
           sub="empilhado: o relatório usa colunas agrupadas, que com sete estados viram sete barras finas por mês e escondem o total"
           className="v-meia"
         >
@@ -265,14 +266,15 @@ function PaginaLeads({ filtros }) {
 
       {/* y=1764: origem, forma de contato e motivos */}
       <div className="grid linha-38-38-24">
-        <Visual title="ORIGEM POR LEAD / MÊS" sub="as 6 origens com mais leads; o resto soma em Outros" className="v-meia">
+        <Visual title="ORIGEM POR LEAD / MÊS" sub="as 6 origens com mais leads; o resto soma em Outros" className="v-meia" ia="leads:origem">
           {grafico(sOrigem, corDaCategoria)}
         </Visual>
-        <Visual title="FORMA DE CONTATO POR LEAD / MÊS" sub="as 6 formas com mais leads; o resto soma em Outros" className="v-meia">
+        <Visual title="FORMA DE CONTATO POR LEAD / MÊS" sub="as 6 formas com mais leads; o resto soma em Outros" className="v-meia" ia="leads:forma">
           {grafico(sForma, corDaCategoria)}
         </Visual>
         <Visual
           title="MOTIVOS POR LEAD"
+          ia="leads:motivo"
           flush
           className="v-meia"
           actions={(
@@ -288,7 +290,7 @@ function PaginaLeads({ filtros }) {
 
       {/* y=2401: as cinco tabelinhas de perfil */}
       <div className="grid linha-cinco">
-        <Visual title="CIDADE" flush className="v-meia">
+        <Visual title="CIDADE" flush className="v-meia" ia="leads:perfil">
           {vazio ? <Loading /> : <Tabela colunas={contagem('CIDADE')} dados={data?.porCidade || []} />}
         </Visual>
         <Visual title="BAIRRO" flush className="v-meia">
@@ -308,6 +310,7 @@ function PaginaLeads({ filtros }) {
       {/* y=2971: matriz vendedor x status (o mapa do relatório não veio) */}
       <Visual
         title="STATUS DE LEAD POR VENDEDOR"
+        ia="leads:vendedor"
         sub={data?.matrizVendedor
           ? `${int(data.matrizVendedor.linhas.length)} donos de lead. O mapa de geolocalização do relatório não veio: as coordenadas estão no CSV acima`
           : ''}

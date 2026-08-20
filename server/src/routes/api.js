@@ -302,9 +302,9 @@ api.get('/insights/visuais', auth(), (req, res) => {
  */
 api.post('/insights/visual/:id', authVisual, async (req, res) => {
   try {
-    const insights = await gerarInsightsVisual(
-      req.params.id, parseFilters(req.query), parseGranularidade(req.query),
-    );
+    // A query vai crua: quem sabe quais filtros o visual entende é o catálogo,
+    // porque cada modelo em memória tem o seu conjunto.
+    const insights = await gerarInsightsVisual(req.params.id, req.query);
     console.log(`[ia] leitura de ${req.params.id} para ${req.usuario.email} (${insights.modelo})`);
     return res.json(insights);
   } catch (err) {

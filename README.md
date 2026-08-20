@@ -650,10 +650,11 @@ e rolar milhares de logins é mais lento que digitar três letras — e o segund
 data (`DT. CRIAÇÃO SPLITTER PRIM.`) saiu, porque a idade do primário é da rede e não do
 prédio.
 
-**Leitura por IA ainda não.** Os visuais desta tela não estão no catálogo de
-`ia/visuais.js`: aquele caminho monta o painel com `parseFilters` (os filtros comerciais), e
-registrar aqui sem adaptá-lo produziria uma leitura sobre dados **não filtrados** com cara
-de resposta autoritativa. Prefiro sem botão a um botão que mente.
+**Leitura por IA em quatro visuais.** Ocupação por splitter, por condomínio, por cidade e a
+matriz de aprovações têm o botão. O detalhamento porta a porta **não** — ele tem nome de
+cliente e endereço, e `recorte` é o filtro de privacidade desta tela. Para isso funcionar, o
+catálogo de `ia/visuais.js` passou a saber de qual modelo cada visual vem; ver a seção
+*Insights por gráfico*.
 
 **Amostra na tela, conjunto no CSV.** São 3.885 splitters, 870 condomínios e 55 mil portas.
 A tela mostra 300, 300 e 400 — sem o corte, chegava a 54 mil células no DOM e cada clique de
@@ -753,10 +754,24 @@ O que vai para o modelo são **apenas os agregados** — nenhum nome de cliente 
 
 ### Insights por gráfico
 
-Cada gráfico das telas de Diretoria, Vendas, Ativações, Primeiro Pagamento, Rampagem e
-Premiações tem um botão **Insights** no cabeçalho: 17 visuais ao todo. Ele abre uma gaveta
-lateral com a leitura daquele gráfico — o que salta aos olhos, o que passa despercebido e o
-que os números não respondem.
+Os visuais das telas de Diretoria, Vendas, Ativações, Primeiro Pagamento, Rampagem,
+Premiações, Vendas Canceladas, Condomínios e Leads têm um botão **Insights** no cabeçalho:
+**32 visuais** ao todo. Ele abre uma gaveta lateral com a leitura daquele gráfico — o que
+salta aos olhos, o que passa despercebido e o que os números não respondem.
+
+**Cada visual declara de qual modelo ele vem** (`modelo: 'comercial' | 'condominios' |
+'leads'` em `ia/visuais.js`), e o modelo declara três coisas: como ler os filtros da query,
+como montar o painel e como descrever o recorte em português para o prompt. Isso não é
+cerimônia: quando existia um modelo só, a rota parseava os filtros comerciais para todo
+mundo, e um visual de condomínio registrado sem adaptação receberia um `parseFilters` que
+não conhece `cidadeCond` nem `faixa` — a IA leria a **base inteira** achando que estava
+lendo o recorte da tela, e escreveria isso com toda a autoridade de uma análise. Por isso a
+rota passa a query CRUA: quem sabe interpretá-la é o catálogo.
+
+O vocabulário do prompt também muda por tela, porque o recorte é outro: em Vendas o período
+é a data do indicador, em Condomínios é a criação do splitter e em Leads é o cadastro do
+lead. O painel mostra a mesma descrição no cabeçalho — dizer "todo o histórico" num visual
+filtrado por data seria contar uma coisa e o número mostrar outra.
 
 > **O navegador não envia dados para serem interpretados.** Manda só o ID do visual e os
 > filtros da tela; quem remonta os números é o servidor, pela **mesma função** que alimenta

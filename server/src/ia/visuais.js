@@ -12,6 +12,80 @@
  * — por isso o detalhamento do primeiro pagamento não tem visual cadastrado.
  */
 import { PAINEIS } from '../model/paineis.js';
+import { parseFilters, parseGranularidade } from '../model/measures.js';
+import { painelCondominios, parseFiltrosCondominios } from '../model/condominios.js';
+import { painelLeads, parseFiltrosLeads } from '../model/leads.js';
+
+/**
+ * De qual MODELO o visual vem.
+ *
+ * Existia um só quando isto foi escrito, e o caminho da IA parseava os filtros
+ * comerciais direto na rota. Com três modelos em memória — cada um com o seu
+ * conjunto de filtros — isso passou a ser uma armadilha: um visual de condomínio
+ * registrado sem adaptação receberia `parseFilters`, que não conhece
+ * `cidadeCond` nem `faixa`, e a IA leria a base INTEIRA achando que estava lendo
+ * o recorte da tela. Leitura errada com cara de autoridade é pior que nenhuma.
+ *
+ * Então cada modelo declara três coisas: como ler os filtros da query, como
+ * montar o painel, e como descrever o recorte em português para o prompt — o
+ * vocabulário é diferente em cada tela ("tecnologia" não existe em condomínios,
+ * "faixa de ocupação" não existe em vendas).
+ */
+const MODELOS = {
+  comercial: {
+    parse: (q) => ({ flt: parseFilters(q), g: parseGranularidade(q) }),
+    montar: (visual, ctx) => {
+      const painel = PAINEIS[visual.tela];
+      if (!painel) {
+        const erro = new Error(`Tela sem painel registrado: ${visual.tela}.`);
+        erro.status = 500;
+        throw erro;
+      }
+      return painel(ctx.flt, ctx.g);
+    },
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período filtrado pela data do indicador: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período: o visual mostra todo o histórico carregado.'),
+    recortes: ({ flt }) => [
+      flt.vendedor?.length && `vendedores: ${flt.vendedor.join(', ')}`,
+      flt.equipe?.length && `equipes: ${flt.equipe.join(', ')}`,
+      flt.tecnologia?.length && `tecnologias: ${flt.tecnologia.join(', ')}`,
+      flt.cidade?.length && `cidades: ${flt.cidade.join(', ')}`,
+      flt.canal?.length && `canais: ${flt.canal.join(', ')}`,
+    ],
+  },
+  condominios: {
+    parse: (q) => ({ flt: parseFiltrosCondominios(q) }),
+    montar: (visual, ctx) => painelCondominios(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período filtrado pela data de CRIAÇÃO DO SPLITTER: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período: entram os splitters de qualquer época.'),
+    recortes: ({ flt }) => [
+      flt.condominio?.length && `condomínios: ${flt.condominio.join(', ')}`,
+      flt.cidade?.length && `cidades: ${flt.cidade.join(', ')}`,
+      flt.classificacao?.length && `faixas de ocupação: ${flt.classificacao.join(', ')}`,
+      flt.concentrador?.length && `concentradores: ${flt.concentrador.join(', ')}`,
+      flt.pontoAcesso?.length && `pontos de acesso: ${flt.pontoAcesso.join(', ')}`,
+      flt.site?.length && `sites: ${flt.site.join(', ')}`,
+      flt.splitter?.length && `splitters: ${flt.splitter.join(', ')}`,
+    ],
+  },
+  leads: {
+    parse: (q) => ({ flt: parseFiltrosLeads(q) }),
+    montar: (visual, ctx) => painelLeads(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período filtrado pela data de CADASTRO DO LEAD: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período: entram todos os leads carregados (o recorte da consulta começa em 2026-01-01).'),
+    recortes: ({ flt }) => [
+      flt.vendedor?.length && `donos de lead: ${flt.vendedor.join(', ')}`,
+      flt.equipe?.length && `equipes: ${flt.equipe.join(', ')}`,
+      flt.status?.length && `status do lead: ${flt.status.join(', ')}`,
+      flt.cidade?.length && `cidades: ${flt.cidade.join(', ')}`,
+      flt.origem?.length && `origens: ${flt.origem.join(', ')}`,
+      flt.forma?.length && `formas de contato: ${flt.forma.join(', ')}`,
+    ],
+  },
+};
 
 const topo = (lista, n) => (Array.isArray(lista) ? lista.slice(0, n) : []);
 
@@ -181,32 +255,170 @@ export const VISUAIS = {
       ativos: topo(p.ativos, 40),
     }),
   },
+
+  // ----------------------------------------------------------- condomínios
+  // O detalhamento porta a porta NÃO está aqui, de propósito: ele tem nome de
+  // cliente e endereço. `recorte` é o filtro de privacidade desta tela, e só
+  // passa por ele o que já é agregado.
+  'condominios:ocupacao': {
+    tela: 'condominios',
+    modelo: 'condominios',
+    titulo: 'Ocupação dos splitters de condomínio',
+    oQueE: 'Um splitter por linha: capacidade declarada, portas ocupadas e livres, percentual e a faixa (OK abaixo de 70%, ALERTA de 70 a 90%, CRÍTICO acima de 90%). Ordenado pelos mais ocupados; a lista vem cortada no topo, então o último não é o menos ocupado da rede.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      porFaixa: p.porClassificacao,
+      splittersNoFiltro: p.porSplitterTotal,
+      topoOcupacao: topo(p.porSplitter, 40).map((s) => ({
+        condominio: s.condominio,
+        splitter: s.splitter,
+        pontoAcesso: s.pontoAcesso,
+        site: s.site,
+        cidade: s.cidade,
+        capacidade: s.capacidade,
+        ocupadas: s.ocupadas,
+        disponiveis: s.disponiveis,
+        percentual: s.percentual,
+        faixa: s.classificacao,
+        criadoEm: s.criado,
+        diasDeVida: s.diasDeVida,
+      })),
+    }),
+  },
+  'condominios:condominio': {
+    tela: 'condominios',
+    modelo: 'condominios',
+    titulo: 'Ocupação por condomínio',
+    oQueE: 'Os condomínios agrupados por nome, somando a capacidade e as portas ocupadas dos splitters distintos de cada um. Um condomínio pode ter vários splitters.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      condominiosNoFiltro: p.porCondominioTotal,
+      topo: topo(p.porCondominio, 30),
+    }),
+  },
+  'condominios:cidade': {
+    tela: 'condominios',
+    modelo: 'condominios',
+    titulo: 'Ocupação por cidade',
+    oQueE: 'Capacidade, portas livres e ocupadas por cidade do equipamento. Cada splitter conta em uma cidade só; quando o cadastro do splitter não tem cidade, vale a mais frequente entre os clientes dele.',
+    recorte: (p) => ({ kpis: p.kpis, porCidade: p.porCidade }),
+  },
+  'condominios:matriz': {
+    tela: 'condominios',
+    modelo: 'condominios',
+    titulo: 'Clientes por mês de aprovação e cidade',
+    oQueE: 'Quantos clientes de condomínio tiveram contrato aprovado em cada mês, por cidade. Porta sem data de aprovação fica fora.',
+    recorte: (p) => ({
+      cidades: p.matriz?.colunas,
+      total: p.matriz?.total,
+      totalPorCidade: p.matriz?.totalPorColuna,
+      porMes: serieEnxuta(p.matriz?.linhas, 36),
+      clientesSemDataAprovacao: p.clientesSemDataAprovacao,
+    }),
+  },
+
+  // ------------------------------------------------- leads e negociações
+  // Fora daqui, também de propósito: as tabelas "Status por lead" e "Leads
+  // completo". Elas têm nome, CPF, e-mail e telefone — nada disso sai do
+  // servidor para um provedor de IA.
+  'leads:status': {
+    tela: 'leads',
+    modelo: 'leads',
+    titulo: 'Status por lead / mês',
+    oQueE: 'Composição mensal dos leads cadastrados pelos sete estados do funil. A ordem dos estados é a regra de classificação: quem tem negociação ganha conta como Ganho mesmo que também esteja descartado. "Outros" é cadastro fora da situação "Lead" e sem negociação nenhuma.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      estados: p.serieStatus?.series,
+      porMes: serieEnxuta(p.serieStatus?.dados, 36),
+    }),
+  },
+  'leads:origem': {
+    tela: 'leads',
+    modelo: 'leads',
+    titulo: 'Origem por lead / mês',
+    oQueE: 'De onde vieram os leads, mês a mês. Só as 6 origens com mais leads aparecem como série; o resto está somado em "Outros".',
+    recorte: (p) => ({
+      totalLeads: p.kpis?.total,
+      origens: p.serieOrigem?.series,
+      porMes: serieEnxuta(p.serieOrigem?.dados, 36),
+    }),
+  },
+  'leads:forma': {
+    tela: 'leads',
+    modelo: 'leads',
+    titulo: 'Forma de contato por lead / mês',
+    oQueE: 'Por qual canal o lead chegou, mês a mês. Só as 6 formas com mais leads aparecem como série; o resto está somado em "Outros".',
+    recorte: (p) => ({
+      totalLeads: p.kpis?.total,
+      formas: p.serieForma?.series,
+      porMes: serieEnxuta(p.serieForma?.dados, 36),
+    }),
+  },
+  'leads:motivo': {
+    tela: 'leads',
+    modelo: 'leads',
+    titulo: 'Motivos por lead',
+    oQueE: 'Motivo da oportunidade registrado no CRM, com a participação de cada um no total. A lista vem cortada nos 12 maiores; o resto está em "Outros".',
+    recorte: (p) => ({ totalLeads: p.kpis?.total, porMotivo: p.porMotivo }),
+  },
+  'leads:perfil': {
+    tela: 'leads',
+    modelo: 'leads',
+    titulo: 'Perfil dos leads',
+    oQueE: 'Distribuição dos leads por cidade, gênero e tipo de pessoa, com a participação de cada faixa no total.',
+    // bairro e rua ficam fora: rua com um lead só, somada à cidade, chega perto
+    // de um endereço — e não muda a leitura que a IA faz do perfil.
+    recorte: (p) => ({
+      totalLeads: p.kpis?.total,
+      porCidade: topo(p.porCidade, 20),
+      porGenero: p.porGenero,
+      porTipoPessoa: p.porTipoPessoa,
+    }),
+  },
+  'leads:vendedor': {
+    tela: 'leads',
+    modelo: 'leads',
+    titulo: 'Status de lead por vendedor',
+    oQueE: 'Quantos leads cada dono tem em cada estado do funil. O dono é o proprietário da venda quando existe, senão quem cadastrou o lead.',
+    recorte: (p) => ({
+      estados: p.matrizVendedor?.colunas,
+      total: p.matrizVendedor?.total,
+      totalPorEstado: p.matrizVendedor?.totalPorColuna,
+      vendedores: topo(p.matrizVendedor?.linhas, 40),
+      leadsSemDono: p.semDono,
+    }),
+  },
 };
 
 export const listarVisuais = () => Object.entries(VISUAIS)
-  .map(([id, v]) => ({ id, tela: v.tela, titulo: v.titulo }));
+  .map(([id, v]) => ({ id, tela: v.tela, titulo: v.titulo, modelo: v.modelo || 'comercial' }));
 
 /**
- * Remonta o visual e devolve só o recorte que vai para a IA.
+ * Remonta o visual a partir da QUERY CRUA e devolve só o recorte que vai para a
+ * IA, mais o recorte descrito em português para o prompt.
+ *
+ * Recebe a query, e não os filtros já interpretados, porque quem sabe COMO
+ * interpretá-los é o visual: cada modelo tem o seu conjunto. Deixar isso na rota
+ * era o que impedia registrar aqui os visuais de condomínios e de leads.
+ *
  * Lança se o id não existir — a rota traduz em 404.
  */
-export function recortarVisual(id, flt, g) {
+export function recortarVisual(id, query = {}) {
   const visual = VISUAIS[id];
   if (!visual) {
     const erro = new Error('Visual desconhecido.');
     erro.status = 404;
     throw erro;
   }
-  const montar = PAINEIS[visual.tela];
-  if (!montar) {
-    const erro = new Error(`Tela sem painel registrado: ${visual.tela}.`);
-    erro.status = 500;
-    throw erro;
-  }
+  const modelo = MODELOS[visual.modelo || 'comercial'];
+  const ctx = modelo.parse(query);
+  const painel = modelo.montar(visual, ctx);
   return {
     tela: visual.tela,
     titulo: visual.titulo,
     oQueE: visual.oQueE,
-    dados: visual.recorte(montar(flt, g)),
+    dados: visual.recorte(painel),
+    periodo: modelo.periodo(ctx),
+    recortes: modelo.recortes(ctx).filter(Boolean),
   };
 }

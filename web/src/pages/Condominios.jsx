@@ -218,6 +218,7 @@ export default function Condominios() {
       {/* y=484 no relatório: a ocupação de cada splitter, largura inteira */}
       <Visual
         title="OCUPAÇÃO DOS SPLITTERS DE CONDOMÍNIO"
+        ia="condominios:ocupacao"
         sub={data
           ? `${int(data.porSplitterTotal)} splitters${resumoFaixas ? ` · ${resumoFaixas}` : ''}`
             + (data.porSplitterTotal > data.porSplitter.length
@@ -272,6 +273,7 @@ export default function Condominios() {
       <div className="grid linha-dupla">
         <Visual
           title="POR CONDOMÍNIO"
+          ia="condominios:condominio"
           sub={data && data.porCondominioTotal > data.porCondominio.length
             ? `${int(data.porCondominioTotal)} condomínios — os ${int(data.porCondominio.length)} com mais clientes. Capacidade somada por splitter distinto`
             : 'capacidade e portas ocupadas somadas por splitter distinto do condomínio'}
@@ -292,6 +294,7 @@ export default function Condominios() {
 
         <Visual
           title="OCUPAÇÃO POR CIDADE"
+          ia="condominios:cidade"
           sub="cidade do equipamento: quando o splitter não tem cidade cadastrada, vale a mais frequente entre os clientes dele. Cada splitter conta em uma cidade só"
           flush
           className="v-meia"
@@ -310,6 +313,7 @@ export default function Condominios() {
       <div className="grid linha-dupla">
         <Visual
           title="CLIENTES POR MÊS DE APROVAÇÃO E CIDADE"
+          ia="condominios:matriz"
           sub={data?.matriz?.linhas?.length
             ? `${int(data.matriz.total)} clientes nas ${cidadesMatriz.length} cidades com mais portas ocupadas`
               + (data.clientesSemDataAprovacao

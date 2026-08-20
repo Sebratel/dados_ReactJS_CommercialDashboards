@@ -118,21 +118,20 @@ export async function gerarInsights(analise) {
 }
 
 /**
- * Leitura de um único visual. Recebe o ID e os filtros — nunca os dados: quem
- * remonta os números é o servidor, pela mesma função que desenha o gráfico.
+ * Leitura de um único visual. Recebe o ID e a QUERY com os filtros da tela —
+ * nunca os dados: quem remonta os números é o servidor, pela mesma função que
+ * desenha o gráfico.
+ *
+ * A query vai crua porque cada modelo em memória (comercial, condomínios, CRM)
+ * tem o seu conjunto de filtros, e quem sabe interpretá-los é o catálogo de
+ * visuais. Antes disso a rota parseava os filtros comerciais para todo mundo, e
+ * era o que impedia dar o botão de IA às telas de condomínios e de leads: elas
+ * receberiam um recorte vazio e a IA leria a base inteira achando que estava
+ * lendo a tela — leitura errada com cara de autoridade.
  */
-export async function gerarInsightsVisual(id, flt, g) {
+export async function gerarInsightsVisual(id, query) {
   const ativo = exigirProvedor();
-  const { titulo, oQueE, dados, tela } = recortarVisual(id, flt, g);
-
-  const periodo = flt.de || flt.ate
-    ? `Período filtrado: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
-    : 'Sem filtro de período: o visual mostra todo o histórico carregado.';
-  const recortes = [
-    flt.vendedor?.length && `vendedores: ${flt.vendedor.join(', ')}`,
-    flt.equipe?.length && `equipes: ${flt.equipe.join(', ')}`,
-    flt.tecnologia?.length && `tecnologias: ${flt.tecnologia.join(', ')}`,
-  ].filter(Boolean);
+  const { titulo, oQueE, dados, tela, periodo, recortes } = recortarVisual(id, query);
 
   const texto = await ativo.provedor.conversar(
     SISTEMA_VISUAL,
@@ -140,7 +139,7 @@ export async function gerarInsightsVisual(id, flt, g) {
       `Visual: ${titulo}`,
       `O que ele mostra: ${oQueE}`,
       periodo,
-      recortes.length ? `Filtros ativos — ${recortes.join(' | ')}.` : 'Sem filtros de vendedor, equipe ou tecnologia.',
+      recortes.length ? `Filtros ativos — ${recortes.join(' | ')}.` : 'Nenhum outro filtro ativo.',
       '',
       'Dados desenhados no visual:',
       JSON.stringify(dados, null, 1),

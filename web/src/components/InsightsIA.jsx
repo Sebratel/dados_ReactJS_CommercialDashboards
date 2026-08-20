@@ -19,6 +19,31 @@ const GRAVIDADE = {
   positivo: { rotulo: 'positivo', icone: 'ok' },
 };
 
+/**
+ * Qual par de datas descreve o recorte deste visual.
+ *
+ * O período não é o mesmo campo em toda tela: no comercial é a data do
+ * indicador (`de`/`ate`), em condomínios é a criação do splitter e em leads é o
+ * cadastro do lead. Mostrar "todo o histórico" num visual de condomínio filtrado
+ * por data seria contar uma coisa e o número mostrar outra.
+ *
+ * O prefixo do id do visual é a chave porque é o que o cabeçalho já tem em mão —
+ * e o servidor manda a mesma descrição para o prompt, a partir do catálogo.
+ */
+const PERIODO_DO_VISUAL = {
+  condominios: { de: 'criadoDe', ate: 'criadoAte', rotulo: 'criação do splitter' },
+  leads: { de: 'leadDe', ate: 'leadAte', rotulo: 'cadastro do lead' },
+};
+
+function descreverPeriodo(visual, filtros) {
+  const cfg = PERIODO_DO_VISUAL[String(visual).split(':')[0]];
+  const de = filtros[cfg?.de || 'de'];
+  const ate = filtros[cfg?.ate || 'ate'];
+  const sufixo = cfg ? ` · por ${cfg.rotulo}` : '';
+  if (!de && !ate) return `todo o histórico${sufixo}`;
+  return `${labelData(de) || 'início'} a ${labelData(ate) || 'hoje'}${sufixo}`;
+}
+
 function Painel({ visual, titulo, filtros, aberto, fechar }) {
   const { ehAdmin } = useSession();
   const [estado, setEstado] = useState({ fase: 'inicio' });
@@ -64,9 +89,7 @@ function Painel({ visual, titulo, filtros, aberto, fechar }) {
   if (!aberto) return null;
 
   const { dados } = estado;
-  const periodo = filtros.de || filtros.ate
-    ? `${labelData(filtros.de) || 'início'} a ${labelData(filtros.ate) || 'hoje'}`
-    : 'todo o histórico';
+  const periodo = descreverPeriodo(visual, filtros);
 
   return (
     <>
