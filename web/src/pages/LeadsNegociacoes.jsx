@@ -1,6 +1,8 @@
 import { useDados } from '../api';
 import { useFilters } from '../filters';
 import { SlicerBarLeads } from '../components/SlicerBarLeads';
+import { SlicerBarNegociacoes } from '../components/SlicerBarNegociacoes';
+import { PaginaNegociacoes } from './PaginaNegociacoes';
 import { BotaoExportar, Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../components/ui';
 import {
   COR_STATUS, ColunasEmpilhadas, CORES, corDaCategoria, escalaGradiente,
@@ -21,15 +23,21 @@ import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
  * troca de sub-página (que fica na URL, em `?lpag=`, para o link ser
  * compartilhável).
  *
- * ETAPA 1 desta tela: a sub-página LEADS. As outras três entram em seguida — a
- * sub-navegação só aparece quando existe mais de uma, para não mostrar um
- * alternador de um item só.
+ * Prontas: LEADS e NEGOCIAÇÕES. As duas de Desempenho entram em seguida — a
+ * sub-navegação só lista o que existe, para não oferecer um caminho que não leva
+ * a nada.
+ *
+ * Cada sub-página tem a SUA barra de filtros, e não é preciosismo: em Leads o
+ * período é o cadastro do lead e o vendedor é o dono dele; em Negociações o
+ * período é a criação da negociação e o vendedor é o responsável por ela. São
+ * campos diferentes no modelo de origem, e 21% das negociações são de leads
+ * cadastrados antes do recorte — reusar uma barra só perderia um quinto delas.
  */
 
 /** Sub-páginas do relatório. `pronta: false` fica fora da navegação. */
 const SUBPAGINAS = [
   { id: 'leads', label: 'Leads', pronta: true },
-  { id: 'negociacoes', label: 'Negociações', pronta: false },
+  { id: 'negociacoes', label: 'Negociações', pronta: true },
   { id: 'vendedor', label: 'Desempenho do vendedor', pronta: false },
   { id: 'cidade', label: 'Desempenho por cidade', pronta: false },
 ];
@@ -91,9 +99,10 @@ export default function LeadsNegociacoes() {
 
   return (
     <main className="page">
-      <SlicerBarLeads />
+      {sub === 'negociacoes' ? <SlicerBarNegociacoes /> : <SlicerBarLeads />}
       <SubNav atual={sub} onChange={(id) => setFiltro({ lpag: id })} />
       {sub === 'leads' && <PaginaLeads filtros={filtros} />}
+      {sub === 'negociacoes' && <PaginaNegociacoes filtros={filtros} />}
     </main>
   );
 }

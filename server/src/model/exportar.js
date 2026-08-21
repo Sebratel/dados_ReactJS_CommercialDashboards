@@ -8,7 +8,10 @@ import { getState } from './store.js';
 import { parseFilters, premiacoes, rampagem, rows } from './measures.js';
 import { diffDays, today } from './dates.js';
 import { linhasCondominios, parseFiltrosCondominios, splittersCondominios } from './condominios.js';
-import { duracaoTexto, linhasLeads, parseFiltrosLeads } from './leads.js';
+import {
+  duracaoTexto, linhasLeads, linhasNegociacoes, parseFiltrosLeads,
+  parseFiltrosNegociacoes,
+} from './leads.js';
 
 const BOM = '﻿';
 
@@ -330,6 +333,43 @@ export const CONJUNTOS = {
       .slice()
       .sort((a, b) => (b.dtCadastro || '').localeCompare(a.dtCadastro || '')),
   },
+  negociacoes: {
+    titulo: 'Negociações (CRM)',
+    descricao: 'Uma linha por etapa de venda criada no período, com responsável, fase do funil, motivo do desfecho, duração, plano e valor. O recorte é a data de criação da NEGOCIAÇÃO.',
+    tela: 'leads',
+    arquivo: 'negociacoes',
+    escopo: 'negociacoes',
+    colunas: () => [
+      { titulo: 'ID', valor: (n) => inteiro(n.negociacaoId) },
+      { titulo: 'NEGOCIAÇÃO', valor: (n) => n.titulo },
+      { titulo: 'STATUS', valor: (n) => n.status },
+      { titulo: 'MOTIVO', valor: (n) => n.motivo },
+      { titulo: 'FASE DO FUNIL', valor: (n) => n.faseFunil },
+      { titulo: 'LEAD', valor: (n) => n.nome },
+      { titulo: 'LEAD ID', valor: (n) => inteiro(n.leadId) },
+      { titulo: 'RESPONSÁVEL', valor: (n) => n.responsavel },
+      { titulo: 'EQUIPE DO RESPONSÁVEL', valor: (n) => n.equipe },
+      { titulo: 'TIME', valor: (n) => n.time },
+      { titulo: 'CAMPANHA', valor: (n) => n.campanha },
+      { titulo: 'ORIGEM', valor: (n) => n.origem },
+      { titulo: 'FORMA DE CONTATO', valor: (n) => n.forma },
+      { titulo: 'REGIÃO', valor: (n) => n.regiao },
+      { titulo: 'CRIADA EM', valor: (n) => dataHoraBR(n.dtCriacao) },
+      { titulo: 'INÍCIO', valor: (n) => dataHoraBR(n.dtInicio) },
+      { titulo: 'FIM', valor: (n) => dataHoraBR(n.dtFim) },
+      { titulo: 'DURAÇÃO', valor: (n) => duracaoTexto(n.duracaoMin, '') },
+      { titulo: 'PROBABILIDADE (%)', valor: (n) => inteiro(n.probabilidade) },
+      { titulo: 'PREVISÃO DE FECHAMENTO', valor: (n) => dataBR(n.dtProvavelFechamento) },
+      { titulo: 'CONTRATO', valor: (n) => n.contrato },
+      { titulo: 'TIPO DE CONTRATO', valor: (n) => n.tipoContrato },
+      { titulo: 'PLANO', valor: (n) => n.servico },
+      { titulo: 'VALOR DO PLANO', valor: (n) => numBR(n.valor) },
+      { titulo: 'PROTOCOLO', valor: (n) => n.protocolo },
+    ],
+    linhas: (flt) => linhasNegociacoes(flt)
+      .slice()
+      .sort((a, b) => b.negociacaoId - a.negociacaoId),
+  },
 };
 
 /**
@@ -341,6 +381,7 @@ export const CONJUNTOS = {
 export function filtrosDoConjunto(conjunto, query = {}) {
   if (conjunto?.escopo === 'condominios') return parseFiltrosCondominios(query);
   if (conjunto?.escopo === 'leads') return parseFiltrosLeads(query);
+  if (conjunto?.escopo === 'negociacoes') return parseFiltrosNegociacoes(query);
   return parseFilters(query);
 }
 

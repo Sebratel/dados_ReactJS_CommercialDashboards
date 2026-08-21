@@ -143,6 +143,7 @@ export function construirLeads() {
   // ---- negociações --------------------------------------------------------
   const negociacoes = [];
   const negociacoesPorLead = new Map();
+  const equipeDe = (nome) => equipePorVendedor.get(norm(nome).toUpperCase())?.equipe || '';
   for (const r of estado.raw.negociacoes) {
     const inicio = paraData(r.data_inicio_negociacao);
     const fim = paraData(r.data_fim_negociacao);
@@ -154,6 +155,12 @@ export function construirLeads() {
       campanha: norm(r.campanha),
       origem: norm(r.origem),
       responsavel: norm(r.responsavel),
+      // equipe do RESPONSÁVEL. No modelo de origem a relação com dVendedores que
+      // está ativa é a do dono do LEAD, então lá a página de negociações filtra
+      // equipe pelo dono do lead, não pelo responsável — o que faz o rótulo
+      // "EQUIPE" ao lado de "VENDEDOR" significar duas pessoas diferentes na
+      // mesma barra. Aqui os dois se referem à mesma pessoa.
+      equipe: equipeDe(r.responsavel),
       motivo: norm(r.motivo),
       status: norm(r.status_negociacao),
       faseFunil: norm(r.fase_funil),
@@ -321,6 +328,85 @@ export function parseFiltrosLeads(q = {}) {
     origem: lista(q.lorigem),
     forma: lista(q.lforma),
     busca: q.lbusca ? String(q.lbusca).trim().toUpperCase() : null,
+  };
+}
+
+/**
+ * Filtros da sub-página de NEGOCIAÇÕES.
+ *
+ * Base própria, e isso é o ponto central desta tela: o período é a data de
+ * criação da NEGOCIAÇÃO (é a ela que o slicer DATA do relatório está ligado,
+ * via `LocalDateTable` de `data_criacao_negociacao`), não a do cadastro do lead.
+ * Medido no banco, 6.694 negociações — 21% do total — são de leads cadastrados
+ * antes do recorte; filtrar pelo lead perderia uma em cada cinco.
+ *
+ * VENDEDOR aqui é o `responsavel` da negociação, enquanto na sub-página de Leads
+ * é o dono do lead. São campos diferentes no modelo de origem (na verdade duas
+ * relações com dVendedores, uma ativa e uma que as medidas ativam com
+ * USERELATIONSHIP), e cada página usa o seu. A barra de filtros mostra o rótulo
+ * certo para cada uma em vez de fingir que é o mesmo campo.
+ */
+export function parseFiltrosNegociacoes(q = {}) {
+  return {
+    de: q.nde || null,                    // criação da negociação
+    ate: q.nate || null,
+    responsavel: lista(q.nvend),
+    equipe: lista(q.nequipe),
+    status: lista(q.nstatus),
+    fase: lista(q.nfase),
+    tipoContrato: lista(q.ntipo),
+    origem: lista(q.norigem),
+    forma: lista(q.nforma),
+    regiao: lista(q.nregiao),
+    busca: q.nbusca ? String(q.nbusca).trim().toUpperCase() : null,
+  };
+}
+
+function combinaNegociacao(n, flt) {
+  const dia = n.dtCriacao ? n.dtCriacao.slice(0, 10) : null;
+  if (flt.de && (!dia || dia < flt.de)) return false;
+  if (flt.ate && (!dia || dia > flt.ate)) return false;
+  if (flt.responsavel && !flt.responsavel.includes(n.responsavel)) return false;
+  if (flt.equipe && !flt.equipe.includes(n.equipe)) return false;
+  if (flt.status && !flt.status.some((x) => mesmo(x, n.status))) return false;
+  if (flt.fase && !flt.fase.includes(n.faseFunil)) return false;
+  if (flt.tipoContrato && !flt.tipoContrato.includes(n.tipoContrato)) return false;
+  if (flt.origem && !flt.origem.includes(n.origem)) return false;
+  if (flt.forma && !flt.forma.includes(n.forma)) return false;
+  if (flt.regiao && !flt.regiao.includes(n.regiao)) return false;
+  if (flt.busca) {
+    const alvo = `${n.nome} ${n.titulo} ${n.contrato} ${n.protocolo}`.toUpperCase();
+    if (!alvo.includes(flt.busca)) return false;
+  }
+  return true;
+}
+
+export function linhasNegociacoes(flt) {
+  return estado.negociacoes.filter((n) => combinaNegociacao(n, flt));
+}
+
+/** Opções dos seletores da sub-página de negociações. */
+export function filtrosNegociacoes() {
+  let min = null;
+  let max = null;
+  for (const n of estado.negociacoes) {
+    const dia = n.dtCriacao ? n.dtCriacao.slice(0, 10) : null;
+    if (!dia) continue;
+    if (!min || dia < min) min = dia;
+    if (!max || dia > max) max = dia;
+  }
+  const de = (fn) => unico(estado.negociacoes.map(fn));
+  return {
+    responsaveis: de((n) => n.responsavel),
+    equipes: de((n) => n.equipe),
+    status: STATUS_NEGOCIACAO.filter((x) => estado.negociacoes.some((n) => mesmo(n.status, x))),
+    fases: de((n) => n.faseFunil),
+    tiposContrato: de((n) => n.tipoContrato),
+    origens: de((n) => n.origem),
+    formas: de((n) => n.forma),
+    regioes: de((n) => n.regiao),
+    times: de((n) => n.time),
+    periodo: { min, max, hoje: today() },
   };
 }
 
@@ -556,6 +642,231 @@ export function painelLeads(flt) {
     // y=2971: matriz vendedor x status
     matrizVendedor: matrizVendedorStatus(leads),
     semDono,
+  };
+}
+
+// ------------------------------------------------- PAINEL DE NEGOCIAÇÕES
+
+const AMOSTRA_NEGOCIACOES = 300;
+
+/**
+ * Uma linha da consulta de negociações NÃO é uma negociação.
+ *
+ * O `GROUP BY` da consulta de origem inclui `sp.title` e `ccsssp.unit_amount`,
+ * então uma negociação com dois planos vira duas linhas. Medido no banco: 31.108
+ * linhas para 30.714 negociações distintas — 394 a mais, 1,3%.
+ *
+ * É exatamente por isso que o relatório tem DUAS medidas que parecem redundantes:
+ * `Medidas_old[Negociacoes]` é `DISTINCTCOUNT(negociacao_id)` e
+ * `Medidas[Total Negociacoes]` é `COUNT(titulo_negociacao)`, ou seja, linhas. Os
+ * cartões usam a distinta; as tabelas de dimensão, a de linhas.
+ *
+ * Aqui a contagem é sempre a DISTINTA, para a tabela não contradizer o cartão
+ * logo acima dela. A exceção honesta é o valor: cada linha é um plano com o seu
+ * `unit_amount`, então receita se soma por LINHA — somar por negociação perderia
+ * o segundo plano.
+ */
+const contarDistintas = (negs) => new Set(negs.map((n) => n.negociacaoId)).size;
+
+function agruparNegociacoes(negs, chaveFn, { limite = null, rotuloVazio = '(sem informação)' } = {}) {
+  const mapa = new Map();
+  for (const n of negs) {
+    const k = norm(chaveFn(n)) || rotuloVazio;
+    let cur = mapa.get(k);
+    if (!cur) {
+      cur = { key: k, ids: new Set(), idsGanhas: new Set(), valor: 0 };
+      mapa.set(k, cur);
+    }
+    cur.ids.add(n.negociacaoId);
+    cur.valor += n.valor;
+    if (mesmo(n.status, 'Ganho')) cur.idsGanhas.add(n.negociacaoId);
+  }
+  const total = contarDistintas(negs) || 1;
+  let out = [...mapa.values()].map((g) => ({
+    key: g.key, qtd: g.ids.size, ganhas: g.idsGanhas.size, valor: g.valor, pct: g.ids.size / total,
+  }));
+  out.sort((a, b) => b.qtd - a.qtd || a.key.localeCompare(b.key, 'pt-BR'));
+  if (limite && out.length > limite) {
+    const cabeca = out.slice(0, limite);
+    const cauda = out.slice(limite);
+    const soma = cauda.reduce((a, c) => a + c.qtd, 0);
+    cabeca.push({
+      key: `Outros (${cauda.length} itens)`,
+      qtd: soma,
+      ganhas: cauda.reduce((a, c) => a + c.ganhas, 0),
+      valor: cauda.reduce((a, c) => a + c.valor, 0),
+      pct: soma / total,
+      agrupado: true,
+    });
+    out = cabeca;
+  }
+  return out;
+}
+
+export function painelNegociacoes(flt) {
+  const negs = linhasNegociacoes(flt);
+
+  // Cada status conta negociações DISTINTAS, como as medidas de origem
+  // (Negociacoes_Ganhas e companhia são todas DISTINCTCOUNT). Contando linhas, a
+  // soma dos três estados passava do total e a tela se contradizia sozinha.
+  const idsPorStatus = {};
+  for (const s of STATUS_NEGOCIACAO) idsPorStatus[s] = new Set();
+  let receita = 0;
+  const leadsGanhos = new Set();
+  const leadsComNegociacao = new Set();
+  for (const n of negs) {
+    const achado = STATUS_NEGOCIACAO.find((s) => mesmo(s, n.status));
+    if (achado) idsPorStatus[achado].add(n.negociacaoId);
+    if (n.leadId != null) leadsComNegociacao.add(n.leadId);
+    if (mesmo(n.status, 'Ganho')) {
+      // receita soma por LINHA: cada linha é um plano com o seu valor
+      receita += n.valor;
+      if (n.leadId != null) leadsGanhos.add(n.leadId);
+    }
+  }
+  const contagem = {};
+  for (const s of STATUS_NEGOCIACAO) contagem[s] = idsPorStatus[s].size;
+
+  // y=355 esquerda: negociações por lead (o relatório agrupa por nome + lead_id)
+  const porLeadMapa = new Map();
+  for (const n of negs) {
+    const chave = n.leadId != null ? `l${n.leadId}` : `t${n.titulo}`;
+    let linha = porLeadMapa.get(chave);
+    if (!linha) {
+      linha = { __key: chave, leadId: n.leadId, nome: n.nome, total: 0, ids: new Set() };
+      for (const s of STATUS_NEGOCIACAO) linha[s] = new Set();
+      porLeadMapa.set(chave, linha);
+    }
+    const achado = STATUS_NEGOCIACAO.find((s) => mesmo(s, n.status));
+    if (achado) linha[achado].add(n.negociacaoId);
+    linha.ids.add(n.negociacaoId);
+  }
+  for (const linha of porLeadMapa.values()) {
+    for (const s of STATUS_NEGOCIACAO) linha[s] = linha[s].size;
+    linha.total = linha.ids.size;
+    delete linha.ids;
+  }
+  const porLead = [...porLeadMapa.values()]
+    .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  // y=355 meio: status x motivo. O relatório conta LEADS aqui (CountNonNull do
+  // lead_id), não negociações, e a base do percentual é o mesmo CountNonNull no
+  // escopo inteiro — quem tem negociação, não o total de leads do CRM.
+  const motivoMapa = new Map();
+  for (const n of negs) {
+    if (n.leadId == null) continue;
+    const chave = `${n.status}||${n.motivo || '(sem motivo)'}`;
+    let linha = motivoMapa.get(chave);
+    if (!linha) {
+      linha = { __key: chave, status: n.status, motivo: n.motivo || '(sem motivo)', leads: new Set() };
+      motivoMapa.set(chave, linha);
+    }
+    linha.leads.add(n.leadId);
+  }
+  const baseMotivo = leadsComNegociacao.size || 1;
+  const porMotivo = [...motivoMapa.values()]
+    .map((l) => ({
+      __key: l.__key, status: l.status, motivo: l.motivo,
+      leads: l.leads.size, pct: l.leads.size / baseMotivo,
+    }))
+    .sort((a, b) => b.leads - a.leads || a.motivo.localeCompare(b.motivo, 'pt-BR'));
+
+  // y=355 direita: status por mês de CRIAÇÃO da negociação
+  const meses = new Map();
+  for (const n of negs) {
+    const mes = monthKey(n.dtCriacao ? n.dtCriacao.slice(0, 10) : null);
+    if (!mes) continue;
+    let linha = meses.get(mes);
+    if (!linha) {
+      linha = { periodo: mes, total: 0, ids: new Set() };
+      for (const s of STATUS_NEGOCIACAO) linha[s] = new Set();
+      meses.set(mes, linha);
+    }
+    const achado = STATUS_NEGOCIACAO.find((s) => mesmo(s, n.status));
+    if (achado) linha[achado].add(n.negociacaoId);
+    linha.ids.add(n.negociacaoId);
+  }
+  for (const linha of meses.values()) {
+    for (const s of STATUS_NEGOCIACAO) linha[s] = linha[s].size;
+    linha.total = linha.ids.size;
+    delete linha.ids;
+  }
+
+  const recentes = negs.slice().sort((a, b) => b.negociacaoId - a.negociacaoId);
+
+  return {
+    kpis: {
+      total: contarDistintas(negs),
+      // linhas da consulta: uma negociação com dois planos aparece duas vezes.
+      // Exposto para a tela poder explicar a diferença em vez de esconder.
+      linhas: negs.length,
+      Ganho: contagem.Ganho,
+      Perda: contagem.Perda,
+      'Em Andamento': contagem['Em Andamento'],
+      // 'Receita Total' e 'Ticket Medio' de Medidas: só as ganhas entram, e o
+      // ticket divide por LEADS ganhos, não por negociações ganhas
+      receita,
+      ticketMedio: leadsGanhos.size ? receita / leadsGanhos.size : 0,
+      leadsGanhos: leadsGanhos.size,
+      leadsComNegociacao: leadsComNegociacao.size,
+    },
+    porLead: porLead.slice(0, AMOSTRA_NEGOCIACOES),
+    porLeadTotal: porLead.length,
+    porMotivo,
+    serieStatus: {
+      series: STATUS_NEGOCIACAO.filter((s) => negs.some((n) => mesmo(n.status, s))),
+      dados: [...meses.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),
+    },
+    // A chave leva o índice porque negociacao_id NÃO é único aqui: a negociação
+    // com dois planos vem em duas linhas, e o React reclamou de chave duplicada
+    // exatamente nessas — o mesmo fato que os dois contadores do relatório
+    // escondiam.
+    completo: recentes.slice(0, AMOSTRA_NEGOCIACOES).map((n, i) => ({
+      __key: `n${n.negociacaoId}-${i}`,
+      nome: n.nome,
+      status: n.status,
+      titulo: n.titulo,
+      responsavel: n.responsavel,
+      equipe: n.equipe,
+      time: n.time,
+      protocolo: n.protocolo,
+      campanha: n.campanha,
+      origem: n.origem,
+      forma: n.forma,
+      faseFunil: n.faseFunil,
+      motivo: n.motivo,
+      dtInicio: n.dtInicio,
+      dtFim: n.dtFim,
+      duracao: duracaoTexto(n.duracaoMin, 'N/A'),
+      contrato: n.contrato,
+      servico: n.servico,
+      valor: n.valor,
+    })),
+    total: negs.length,
+    // y=1669: as cinco tabelas
+    porResponsavel: agruparNegociacoes(negs, (n) => n.responsavel, { limite: 30, rotuloVazio: '(sem responsável)' }),
+    porFase: agruparNegociacoes(negs, (n) => n.faseFunil, { rotuloVazio: '(sem fase)' }),
+    porOrigem: agruparNegociacoes(negs, (n) => n.origem, { limite: 15 }),
+    porForma: agruparNegociacoes(negs, (n) => n.forma, { limite: 15 }),
+    porRegiao: agruparNegociacoes(negs, (n) => n.regiao, { limite: 15, rotuloVazio: '(sem região)' }),
+    // y=2322: as quatro tabelas
+    porTime: agruparNegociacoes(negs, (n) => n.time, { limite: 15, rotuloVazio: '(sem time)' }),
+    porTipoContrato: agruparNegociacoes(negs, (n) => n.tipoContrato, { limite: 20, rotuloVazio: '(sem contrato)' }),
+    porServico: agruparNegociacoes(negs, (n) => n.servico, { limite: 20, rotuloVazio: '(sem plano)' }),
+    porValorStatus: STATUS_NEGOCIACAO
+      .map((s) => {
+        const doStatus = negs.filter((n) => mesmo(n.status, s));
+        const qtd = contarDistintas(doStatus);
+        return {
+          key: s,
+          qtd,
+          // valor por LINHA: cada plano da negociação entra com o seu
+          valor: doStatus.reduce((a, n) => a + n.valor, 0),
+          pct: qtd / (contarDistintas(negs) || 1),
+        };
+      })
+      .filter((x) => x.qtd > 0)
+      .sort((a, b) => b.qtd - a.qtd),
   };
 }
 

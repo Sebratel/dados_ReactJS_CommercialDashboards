@@ -47,6 +47,18 @@ export function buildQuery(filtros = {}) {
   add('lorigem', filtros.lorigem);
   add('lforma', filtros.lforma);
   add('lbusca', filtros.buscaLead);
+  // negociações — base própria: data de criação da negociação e responsável
+  add('nde', filtros.negDe);
+  add('nate', filtros.negAte);
+  add('nvend', filtros.nvendedor);
+  add('nequipe', filtros.nequipe);
+  add('nstatus', filtros.nstatus);
+  add('nfase', filtros.nfase);
+  add('ntipo', filtros.ntipo);
+  add('norigem', filtros.norigem);
+  add('nforma', filtros.nforma);
+  add('nregiao', filtros.nregiao);
+  add('nbusca', filtros.buscaNeg);
   return p.toString();
 }
 
@@ -160,6 +172,17 @@ export function useFiltrosLeads() {
   return useQuery({
     queryKey: ['/leads/filtros'],
     queryFn: () => apiGet('/leads/filtros'),
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Opções dos seletores da sub-página de negociações (endpoint próprio). */
+export function useFiltrosNegociacoes() {
+  return useQuery({
+    queryKey: ['/negociacoes/filtros'],
+    queryFn: () => apiGet('/negociacoes/filtros'),
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
     retry: 1,

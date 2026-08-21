@@ -358,6 +358,7 @@ O container expõe:
 | **Rampagem** | combo VENDA 90 × ATIVO 90, cartões, cidade, tabelas de novatos | `VENDAS_RAMPAGEM`, `ATIVOS_RAMPAGEM`, `Dias_Trabalhados` |
 | **Premiações** | duas tabelas (>60 dias e ≤60 dias) | `ValorFaixa`, `FaixaPorPagamento`, `ValorPorTempoDeCasa`, `ValorFinal`, `ValorFaixaAtivo`, `FaixaPorAtivo` |
 | **Condomínios** | 6 cartões, ocupação por splitter, detalhe porta a porta, resumos por condomínio e por cidade, matriz mês × cidade, colunas por cidade | `SPLITTER_CONDOMINIO`, `CLASSIFICACAO`, `TEMPO_DE_VIDA`, `TOTAL_USUARIOS`, `PORCENT_OCUPACAO_CIDADE` |
+| **Leads e Negociações** · sub-página *Negociações* | 6 cartões, negociações por lead, status × motivo, colunas por mês, detalhe de 18 colunas, 9 tabelas de dimensão | `Negociacoes`, `Negociacoes_Ganhas`, `Negociacoes_Perdas`, `Negociacoes_Andamento`, `Receita Total`, `Ticket Medio`, `Duracao Total Formatada` |
 | **Leads e Negociações** · sub-página *Leads* | 8 cartões, status por lead, colunas por mês × status, detalhe completo, origem e forma de contato por mês, motivos, 5 tabelas de perfil, matriz vendedor × status | `Leads`, `Leads_Disponíveis`, `Leads_Qualificado`, `Leads_Em_Andamento`, `Leads_Ganho`, `Leads_Perda`, `Leads_Descartados`, `Leads_Outros`, `Dono do Lead Final`, `Tempo Vida Lead Formatado` |
 
 ### Cores das faixas de premiação
@@ -692,6 +693,38 @@ ordenação repintava todas. Cada visual diz no subtítulo quantas linhas está 
 total, e os dois CSVs do cabeçalho trazem o conjunto inteiro.
 
 
+### Negociações: uma linha não é uma negociação
+
+A consulta de negociações agrupa por `sp.title` e `ccsssp.unit_amount` — o plano e o valor
+dele. Uma negociação com **dois planos** vira **duas linhas**. Medido no banco: **31.108
+linhas para 30.714 negociações distintas**, 394 a mais (1,3%).
+
+É por isso que o relatório tem duas medidas que parecem redundantes:
+`Medidas_old[Negociacoes]` é `DISTINCTCOUNT(negociacao_id)` e `Medidas[Total Negociacoes]` é
+`COUNT(titulo_negociacao)`, ou seja, linhas. Lá os cartões usam a distinta e as nove tabelas
+de dimensão usam a de linhas — então a tabela pode mostrar 31.108 dois centímetros abaixo de
+um cartão que diz 30.714.
+
+Aqui **toda contagem é a distinta**, para tabela e cartão não se contradizerem, e a tela diz
+no cartão quantas linhas a consulta devolveu. As duas exceções são deliberadas:
+
+* **Receita soma por LINHA.** Cada linha é um plano com o seu `unit_amount`; somar por
+  negociação perderia o segundo plano.
+* **A tabela de PLANO soma acima do total**, porque uma negociação com dois planos conta nos
+  dois. Está dito no subtítulo dela — é a informação correta, não um erro de fechamento.
+
+**A base da tela é a NEGOCIAÇÃO, não o lead.** O período filtra a data de criação da
+negociação e o vendedor é o `responsavel` por ela. Medido: 6.694 negociações, de 5.660 leads,
+têm o lead cadastrado antes do recorte de 01/01/2026 — 21% do total. Herdar a base da
+sub-página de Leads faria os quatro cartões nascerem um quinto abaixo do relatório. Por isso
+as duas sub-páginas têm barras de filtro separadas, com campos próprios na URL.
+
+**EQUIPE é a do responsável.** No modelo de origem a relação ativa com a dimensão de
+vendedores é a do dono do LEAD, e a do responsável pela negociação é inativa (as medidas a
+ligam com `USERELATIONSHIP`). O efeito lá é que "EQUIPE" e "VENDEDOR", lado a lado na mesma
+barra, podem se referir a duas pessoas diferentes. Aqui os dois falam da mesma pessoa.
+
+
 ## 7. Endpoints
 
 | Endpoint | Retorna |
@@ -709,6 +742,8 @@ total, e os dois CSVs do cabeçalho trazem o conjunto inteiro.
 | `GET /api/condominios` | cartões, ocupação por splitter, detalhe, cidade, matriz |
 | `GET /api/leads/filtros` | listas dos slicers da tela de leads |
 | `GET /api/leads` | cartões, status, séries por mês, perfil, matriz vendedor |
+| `GET /api/negociacoes/filtros` | listas dos slicers da sub-página de negociações |
+| `GET /api/negociacoes` | cartões, por lead, motivo, série, dimensões, valores |
 | `GET /api/premiacoes` | faixas de premiação |
 | `POST /api/refresh?group=hot\|full\|dims\|cond\|crm` | força releitura |
 | `GET /api/auth/config` | client_id do Google e domínio (público) |
@@ -736,6 +771,10 @@ dela: tela vazia, sem explicação nenhuma.
 
 As rotas de leads têm o seu próprio conjunto: `lde`, `late` (cadastro do lead), `lvend`,
 `lequipe`, `lstatus`, `lcidade`, `lorigem`, `lforma` e `lbusca`.
+
+As de negociações têm outro, e não é duplicação: `nde`/`nate` é a data de **criação da
+negociação**, `nvend` é o **responsável** por ela, e `nstatus` tem três valores em vez de
+sete. Mais `nequipe`, `nfase`, `ntipo`, `norigem`, `nforma`, `nregiao` e `nbusca`.
 
 As rotas de condomínio e de leads são as que **não** esperam a carga comercial: têm modelo
 próprio e devolvem o seu próprio 503 enquanto os dados delas não chegam. Quem só tem acesso a
@@ -822,7 +861,7 @@ Duas formas de tirar o dado da tela:
 * **Botão `CSV` no cabeçalho de cada tabela** — baixa exatamente o que está no visual,
   com as mesmas colunas, os filtros aplicados e a ordenação escolhida. É processado no
   navegador, sem ida ao servidor.
-* **Aba `Exportações`** — onze conjuntos completos gerados pelo servidor, sem o corte que
+* **Aba `Exportações`** — doze conjuntos completos gerados pelo servidor, sem o corte que
   as telas aplicam. O relatório de primeiros pagamentos, por exemplo, mostra 1.500 linhas
   na tela e exporta as 18.723 do período.
 
@@ -843,6 +882,7 @@ Duas formas de tirar o dado da tela:
 | Condomínios — portas dos splitters | condominios |
 | Condomínios — ocupação por splitter | condominios |
 | Leads (CRM) | leads |
+| Negociações (CRM) | leads |
 
 Os conjuntos de condomínio e de leads leem os filtros **daquela** tela, não os comerciais:
 cada conjunto declara o seu escopo e `filtrosDoConjunto()` escolhe o parser. Sem essa marca,

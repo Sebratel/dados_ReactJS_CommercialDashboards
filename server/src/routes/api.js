@@ -21,7 +21,8 @@ import {
   painelCondominios, parseFiltrosCondominios,
 } from '../model/condominios.js';
 import {
-  filtrosLeads, getEstadoLeads, leadsPronto, painelLeads, parseFiltrosLeads,
+  filtrosLeads, filtrosNegociacoes, getEstadoLeads, leadsPronto, painelLeads,
+  painelNegociacoes, parseFiltrosLeads, parseFiltrosNegociacoes,
 } from '../model/leads.js';
 
 export const api = Router();
@@ -50,6 +51,7 @@ api.use((req, res, next) => {
   // SEU estado nos guardas logo abaixo.
   if (req.path.startsWith('/condominios')) return next();
   if (req.path.startsWith('/leads')) return next();
+  if (req.path.startsWith('/negociacoes')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
     return res.status(503).json({ error: 'Carregando dados do Voalle/MariaDB…', carregando: true });
@@ -218,6 +220,18 @@ api.get('/leads/filtros', auth('leads'), exigirLeads, (req, res) => {
 
 api.get('/leads', auth('leads'), exigirLeads, (req, res) => {
   res.json(withMeta(painelLeads(parseFiltrosLeads(req.query))));
+});
+
+/**
+ * Sub-página de negociações. Mesma tela e mesmo ACL, base DIFERENTE: aqui o
+ * recorte é a data de criação da negociação e o vendedor é o responsável por ela.
+ */
+api.get('/negociacoes/filtros', auth('leads'), exigirLeads, (req, res) => {
+  res.json(withMeta(filtrosNegociacoes()));
+});
+
+api.get('/negociacoes', auth('leads'), exigirLeads, (req, res) => {
+  res.json(withMeta(painelNegociacoes(parseFiltrosNegociacoes(req.query))));
 });
 
 // -------------------------------------------------------------- PREMIAÇÕES

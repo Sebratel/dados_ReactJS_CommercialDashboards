@@ -27,7 +27,17 @@ export const LISTAS_LEADS = [
   'lvendedor', 'lequipe', 'lstatus', 'lcidade', 'lorigem', 'lforma',
 ];
 
-const TODAS_AS_LISTAS = [...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS];
+/**
+ * Seletores da sub-página de Negociações. Campos PRÓPRIOS, e não os de leads:
+ * o vendedor aqui é o responsável pela negociação (na de leads é o dono do lead)
+ * e o status tem três valores em vez de sete. Reusar os mesmos campos faria a
+ * troca de sub-página carregar um valor que não existe na lista da outra.
+ */
+export const LISTAS_NEGOCIACAO = [
+  'nvendedor', 'nequipe', 'nstatus', 'nfase', 'ntipo', 'norigem', 'nforma', 'nregiao',
+];
+
+const TODAS_AS_LISTAS = [...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO];
 
 /** período padrão ao abrir o dashboard (equivale ao slicer Ano do Power BI) */
 export const PADRAO = 'ano';
@@ -69,6 +79,10 @@ export function FiltersProvider({ children }) {
       leadDe: params.get('leadDe') || '',
       leadAte: params.get('leadAte') || '',
       buscaLead: params.get('buscaLead') || '',
+      // negociações: período sobre a data de CRIAÇÃO da negociação
+      negDe: params.get('negDe') || '',
+      negAte: params.get('negAte') || '',
+      buscaNeg: params.get('buscaNeg') || '',
       // sub-página da tela de Leads (o relatório tem quatro)
       lpag: params.get('lpag') || '',
     };

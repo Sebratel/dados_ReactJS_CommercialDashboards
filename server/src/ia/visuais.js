@@ -14,7 +14,9 @@
 import { PAINEIS } from '../model/paineis.js';
 import { parseFilters, parseGranularidade } from '../model/measures.js';
 import { painelCondominios, parseFiltrosCondominios } from '../model/condominios.js';
-import { painelLeads, parseFiltrosLeads } from '../model/leads.js';
+import {
+  painelLeads, painelNegociacoes, parseFiltrosLeads, parseFiltrosNegociacoes,
+} from '../model/leads.js';
 
 /**
  * De qual MODELO o visual vem.
@@ -68,6 +70,23 @@ const MODELOS = {
       flt.pontoAcesso?.length && `pontos de acesso: ${flt.pontoAcesso.join(', ')}`,
       flt.site?.length && `sites: ${flt.site.join(', ')}`,
       flt.splitter?.length && `splitters: ${flt.splitter.join(', ')}`,
+    ],
+  },
+  negociacoes: {
+    parse: (q) => ({ flt: parseFiltrosNegociacoes(q) }),
+    montar: (visual, ctx) => painelNegociacoes(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período filtrado pela data de CRIAÇÃO DA NEGOCIAÇÃO: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período: entram todas as negociações carregadas (o recorte da consulta começa em 2026-01-01).'),
+    recortes: ({ flt }) => [
+      flt.responsavel?.length && `responsáveis: ${flt.responsavel.join(', ')}`,
+      flt.equipe?.length && `equipes: ${flt.equipe.join(', ')}`,
+      flt.status?.length && `status: ${flt.status.join(', ')}`,
+      flt.fase?.length && `fases do funil: ${flt.fase.join(', ')}`,
+      flt.tipoContrato?.length && `tipos de contrato: ${flt.tipoContrato.join(', ')}`,
+      flt.origem?.length && `origens: ${flt.origem.join(', ')}`,
+      flt.forma?.length && `formas de contato: ${flt.forma.join(', ')}`,
+      flt.regiao?.length && `regiões: ${flt.regiao.join(', ')}`,
     ],
   },
   leads: {
@@ -379,6 +398,75 @@ export const VISUAIS = {
       porTipoPessoa: p.porTipoPessoa,
     }),
   },
+  // ---------------------------------------------------- negociações (CRM)
+  // "Negociações por lead" fica FORA: é uma linha por cliente, com o nome dele.
+  'negociacoes:serie': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Status por negociação / mês',
+    oQueE: 'Composição mensal das negociações pelos três estados, pelo mês de CRIAÇÃO da negociação. O estado sai do tipo do motivo: 1 é ganho, 0 é perda, e motivo em branco ou de outro tipo é Em Andamento.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      estados: p.serieStatus?.series,
+      porMes: serieEnxuta(p.serieStatus?.dados, 36),
+    }),
+  },
+  'negociacoes:motivo': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Negociações por status e motivo',
+    oQueE: 'Cruzamento de estado com o motivo registrado no CRM. Conta LEADS, não negociações, e a participação é sobre os leads que negociaram — não sobre o total de leads do CRM.',
+    recorte: (p) => ({
+      leadsComNegociacao: p.kpis?.leadsComNegociacao,
+      totalNegociacoes: p.kpis?.total,
+      porMotivo: topo(p.porMotivo, 40),
+    }),
+  },
+  'negociacoes:responsavel': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Negociações por responsável',
+    oQueE: 'Quantas negociações cada responsável conduziu, quantas ganhou e a participação dele no total. A lista vem cortada nos 30 maiores.',
+    recorte: (p) => ({ kpis: p.kpis, porResponsavel: topo(p.porResponsavel, 30) }),
+  },
+  'negociacoes:fase': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Negociações por fase do funil',
+    oQueE: 'Em que fase do funil as negociações estão, com quantas de cada fase acabaram ganhas.',
+    recorte: (p) => ({ kpis: p.kpis, porFase: p.porFase }),
+  },
+  'negociacoes:origem': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Negociações por origem',
+    oQueE: 'De onde veio a negociação, com quantas de cada origem acabaram ganhas. As 15 maiores; o resto soma em Outros.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      porOrigem: p.porOrigem,
+      porForma: p.porForma,
+      porRegiao: p.porRegiao,
+    }),
+  },
+  'negociacoes:plano': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Negociações por plano',
+    oQueE: 'Qual plano foi negociado, quantas vezes, quantas ganhas e a soma do valor. O valor é a mensalidade do plano, não o acumulado.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      porServico: p.porServico,
+      porTipoContrato: p.porTipoContrato,
+    }),
+  },
+  'negociacoes:valores': {
+    tela: 'leads',
+    modelo: 'negociacoes',
+    titulo: 'Valores por status',
+    oQueE: 'Quantidade e soma do plano negociado em cada estado. A receita da tela conta apenas as ganhas; os outros estados mostram o que está em jogo ou o que se perdeu.',
+    recorte: (p) => ({ kpis: p.kpis, porValorStatus: p.porValorStatus, porTime: p.porTime }),
+  },
+
   'leads:vendedor': {
     tela: 'leads',
     modelo: 'leads',
