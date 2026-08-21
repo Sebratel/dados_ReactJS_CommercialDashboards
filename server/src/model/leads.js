@@ -344,7 +344,15 @@ export function linhasLeads(flt) {
   return estado.leads.filter((l) => combina(l, flt));
 }
 
-/** Negociações dos leads que sobraram no filtro. */
+/**
+ * Negociações dos leads que sobraram no filtro.
+ *
+ * ATENÇÃO ao usar isto na página de NEGOCIAÇÕES: são duas perguntas diferentes.
+ * Aqui a base são os LEADS, então uma negociação de lead cadastrado antes do
+ * recorte fica de fora — e são muitas: medido no banco, 6.694 negociações de
+ * 5.660 leads antigos, 21% do total. Para a página de Negociações a base tem de
+ * ser a data da NEGOCIAÇÃO, senão um em cada cinco desaparece do cartão.
+ */
 export function negociacoesDosLeads(leads) {
   const ids = new Set(leads.map((l) => l.leadId));
   return estado.negociacoes.filter((n) => n.leadId != null && ids.has(n.leadId));
@@ -482,9 +490,10 @@ export function painelLeads(flt) {
     kpis: {
       total: totalLeads(leads),
       ...contagem,
-      // as duas medidas que o relatório usa nas outras páginas, úteis já aqui
+      // 'Leads Trabalhados' do relatório: DISTINCTCOUNT(negotiations[lead_id])
+      // dentro do contexto dos leads. É bem definido aqui — quantos DESTES leads
+      // já têm negociação.
       trabalhados: new Set(negs.map((n) => n.leadId)).size,
-      negociacoes: new Set(negs.map((n) => n.negociacaoId)).size,
     },
     // y=487 esquerda: a lista curta de status por lead
     statusPorLead: recentes.slice(0, AMOSTRA_STATUS).map((l) => ({
