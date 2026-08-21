@@ -3,6 +3,8 @@ import { useFilters } from '../filters';
 import { SlicerBarLeads } from '../components/SlicerBarLeads';
 import { SlicerBarNegociacoes } from '../components/SlicerBarNegociacoes';
 import { PaginaNegociacoes } from './PaginaNegociacoes';
+import { PaginaDesempenho } from './PaginaDesempenho';
+import { SlicerBarDesempenho } from '../components/SlicerBarDesempenho';
 import { BotaoExportar, Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../components/ui';
 import {
   COR_STATUS, ColunasEmpilhadas, CORES, corDaCategoria, escalaGradiente,
@@ -23,9 +25,9 @@ import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
  * troca de sub-página (que fica na URL, em `?lpag=`, para o link ser
  * compartilhável).
  *
- * Prontas: LEADS e NEGOCIAÇÕES. As duas de Desempenho entram em seguida — a
- * sub-navegação só lista o que existe, para não oferecer um caminho que não leva
- * a nada.
+ * As quatro sub-páginas do relatório estão prontas. As duas de Desempenho são o
+ * MESMO componente com `por` diferente: comparadas visual por visual, as páginas
+ * de origem só divergem na dimensão de linha.
  *
  * Cada sub-página tem a SUA barra de filtros, e não é preciosismo: em Leads o
  * período é o cadastro do lead e o vendedor é o dono dele; em Negociações o
@@ -38,8 +40,8 @@ import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
 const SUBPAGINAS = [
   { id: 'leads', label: 'Leads', pronta: true },
   { id: 'negociacoes', label: 'Negociações', pronta: true },
-  { id: 'vendedor', label: 'Desempenho do vendedor', pronta: false },
-  { id: 'cidade', label: 'Desempenho por cidade', pronta: false },
+  { id: 'vendedor', label: 'Desempenho do vendedor', pronta: true },
+  { id: 'cidade', label: 'Desempenho por cidade', pronta: true },
 ];
 
 const DISPONIVEIS = SUBPAGINAS.filter((s) => s.pronta);
@@ -99,10 +101,15 @@ export default function LeadsNegociacoes() {
 
   return (
     <main className="page">
-      {sub === 'negociacoes' ? <SlicerBarNegociacoes /> : <SlicerBarLeads />}
+      {sub === 'negociacoes' && <SlicerBarNegociacoes />}
+      {sub === 'leads' && <SlicerBarLeads />}
+      {(sub === 'vendedor' || sub === 'cidade') && <SlicerBarDesempenho por={sub} />}
       <SubNav atual={sub} onChange={(id) => setFiltro({ lpag: id })} />
       {sub === 'leads' && <PaginaLeads filtros={filtros} />}
       {sub === 'negociacoes' && <PaginaNegociacoes filtros={filtros} />}
+      {(sub === 'vendedor' || sub === 'cidade') && (
+        <PaginaDesempenho filtros={filtros} por={sub} />
+      )}
     </main>
   );
 }

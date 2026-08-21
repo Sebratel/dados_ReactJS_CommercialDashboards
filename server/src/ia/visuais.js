@@ -15,7 +15,8 @@ import { PAINEIS } from '../model/paineis.js';
 import { parseFilters, parseGranularidade } from '../model/measures.js';
 import { painelCondominios, parseFiltrosCondominios } from '../model/condominios.js';
 import {
-  painelLeads, painelNegociacoes, parseFiltrosLeads, parseFiltrosNegociacoes,
+  painelDesempenho, painelLeads, painelNegociacoes, parseFiltrosDesempenho,
+  parseFiltrosLeads, parseFiltrosNegociacoes,
 } from '../model/leads.js';
 
 /**
@@ -70,6 +71,30 @@ const MODELOS = {
       flt.pontoAcesso?.length && `pontos de acesso: ${flt.pontoAcesso.join(', ')}`,
       flt.site?.length && `sites: ${flt.site.join(', ')}`,
       flt.splitter?.length && `splitters: ${flt.splitter.join(', ')}`,
+    ],
+  },
+  desempenho: {
+    parse: (q) => ({ flt: parseFiltrosDesempenho(q), por: q.por === 'cidade' ? 'cidade' : 'vendedor' }),
+    montar: (visual, ctx) => painelDesempenho(ctx.flt, visual.por || ctx.por),
+    // Esta tela tem DOIS períodos, um para cada lado do funil. Descrever só um
+    // deles faria a IA achar que o recorte é metade do que é.
+    periodo: ({ flt }) => {
+      const partes = [];
+      partes.push(flt.leadDe || flt.leadAte
+        ? `cadastro do lead de ${flt.leadDe || 'início'} a ${flt.leadAte || 'hoje'}`
+        : 'cadastro do lead sem recorte');
+      partes.push(flt.negDe || flt.negAte
+        ? `criação da negociação de ${flt.negDe || 'início'} a ${flt.negAte || 'hoje'}`
+        : 'criação da negociação sem recorte');
+      return `Dois períodos independentes — ${partes.join('; ')}.`;
+    },
+    recortes: ({ flt }) => [
+      flt.vendedor?.length && `vendedores: ${flt.vendedor.join(', ')}`,
+      flt.equipe?.length && `equipes: ${flt.equipe.join(', ')}`,
+      flt.status?.length && `status do lead: ${flt.status.join(', ')}`,
+      flt.tipoContrato?.length && `tipos de contrato: ${flt.tipoContrato.join(', ')}`,
+      flt.cidade?.length && `cidades: ${flt.cidade.join(', ')}`,
+      flt.bairro?.length && `bairros: ${flt.bairro.join(', ')}`,
     ],
   },
   negociacoes: {
@@ -465,6 +490,139 @@ export const VISUAIS = {
     titulo: 'Valores por status',
     oQueE: 'Quantidade e soma do plano negociado em cada estado. A receita da tela conta apenas as ganhas; os outros estados mostram o que está em jogo ou o que se perdeu.',
     recorte: (p) => ({ kpis: p.kpis, porValorStatus: p.porValorStatus, porTime: p.porTime }),
+  },
+
+  'desempenho:vendedor': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'vendedor',
+    titulo: 'Produtividade por vendedor',
+    oQueE: 'Os dois lados do funil na mesma linha: leads cadastrados e ganhos de um lado, negociações conduzidas e ganhas do outro, com as três taxas. ATENÇÃO às bases: a conversão de CADASTRO é sobre os leads que ele cadastrou, e a de NEGOCIAÇÃO é sobre as negociações que ele conduziu — são conjuntos diferentes, e comparar as duas taxas como se fossem a mesma escala induz a erro. UMOV ME TECNOLOGIA é a integração que cadastra lead automaticamente, não uma pessoa: aparece com muitos leads e nenhuma negociação.',
+    recorte: (p) => ({ kpis: p.kpis, linhas: p.produtividadeTotal, topo: topo(p.produtividade, 40) }),
+  },
+  'desempenho:vendedor-status': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'vendedor',
+    titulo: 'Status dos leads por vendedor',
+    oQueE: 'Quantos leads de cada vendedor estão ganhos, descartados e em backlog aberto (Em Andamento, Qualificado ou Disponível). A soma dos três não fecha com os cadastrados: falta Perda e Outros.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      topo: topo(p.produtividade, 40).map((x) => ({
+        key: x.key, cadastrados: x.cadastrados, ganhos: x.ganhosLead,
+        descartados: x.descartados, backlog: x.backlog,
+      })),
+    }),
+  },
+  'desempenho:vendedor-resumo': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'vendedor',
+    titulo: 'Resumo financeiro por vendedor',
+    oQueE: 'Receita, ticket médio, duração média da negociação e tempo de vida do lead por vendedor. Receita é a soma da mensalidade dos planos ganhos, não valor acumulado; o ticket divide por LEAD ganho, não por negociação.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      topo: topo(p.produtividade, 40).map((x) => ({
+        key: x.key, receita: x.receita, ticketMedio: x.ticketMedio,
+        duracao: x.duracao, tempoVidaLead: x.vidaLead,
+      })),
+    }),
+  },
+  'desempenho:vendedor-perdaLead': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'vendedor',
+    titulo: 'Onde os leads se perdem',
+    oQueE: 'Leads com classificação Perda ou Descartado, por motivo, origem, forma de contato e time. É o recorte de "onde se perde" do relatório, do lado do lead.',
+    recorte: (p) => ({
+      leadsPerdidos: p.leadsPerdidos,
+      totalLeads: p.kpis?.cadastrados,
+      porMotivo: p.perdaLeadMotivo,
+      porOrigem: p.perdaLeadOrigem,
+      porForma: p.perdaLeadForma,
+      porTime: p.perdaLeadTime,
+    }),
+  },
+  'desempenho:vendedor-perdaNeg': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'vendedor',
+    titulo: 'Onde as negociações se perdem',
+    oQueE: 'Negociações com status Perda, por motivo, origem, forma de contato e time. É o recorte de "onde se perde" do relatório, do lado da negociação.',
+    recorte: (p) => ({
+      negociacoesPerdidas: p.negsPerdidas,
+      totalConduzidas: p.kpis?.conduzidas,
+      porMotivo: p.perdaNegMotivo,
+      porOrigem: p.perdaNegOrigem,
+      porForma: p.perdaNegForma,
+      porTime: p.perdaNegTime,
+    }),
+  },
+  'desempenho:cidade': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'cidade',
+    titulo: 'Produtividade por cidade',
+    oQueE: 'Os dois lados do funil na mesma linha: leads cadastrados e ganhos de um lado, negociações conduzidas e ganhas do outro, com as três taxas. ATENÇÃO às bases: a conversão de CADASTRO é sobre os leads cadastrados nela, e a de NEGOCIAÇÃO é sobre as negociações dos leads dela — são conjuntos diferentes, e comparar as duas taxas como se fossem a mesma escala induz a erro.',
+    recorte: (p) => ({ kpis: p.kpis, linhas: p.produtividadeTotal, topo: topo(p.produtividade, 40) }),
+  },
+  'desempenho:cidade-status': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'cidade',
+    titulo: 'Status dos leads por cidade',
+    oQueE: 'Quantos leads de cada cidade estão ganhos, descartados e em backlog aberto (Em Andamento, Qualificado ou Disponível). A soma dos três não fecha com os cadastrados: falta Perda e Outros.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      topo: topo(p.produtividade, 40).map((x) => ({
+        key: x.key, cadastrados: x.cadastrados, ganhos: x.ganhosLead,
+        descartados: x.descartados, backlog: x.backlog,
+      })),
+    }),
+  },
+  'desempenho:cidade-resumo': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'cidade',
+    titulo: 'Resumo financeiro por cidade',
+    oQueE: 'Receita, ticket médio, duração média da negociação e tempo de vida do lead por cidade. Receita é a soma da mensalidade dos planos ganhos, não valor acumulado; o ticket divide por LEAD ganho, não por negociação.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      topo: topo(p.produtividade, 40).map((x) => ({
+        key: x.key, receita: x.receita, ticketMedio: x.ticketMedio,
+        duracao: x.duracao, tempoVidaLead: x.vidaLead,
+      })),
+    }),
+  },
+  'desempenho:cidade-perdaLead': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'cidade',
+    titulo: 'Onde os leads se perdem',
+    oQueE: 'Leads com classificação Perda ou Descartado, por motivo, origem, forma de contato e time. É o recorte de "onde se perde" do relatório, do lado do lead.',
+    recorte: (p) => ({
+      leadsPerdidos: p.leadsPerdidos,
+      totalLeads: p.kpis?.cadastrados,
+      porMotivo: p.perdaLeadMotivo,
+      porOrigem: p.perdaLeadOrigem,
+      porForma: p.perdaLeadForma,
+      porTime: p.perdaLeadTime,
+    }),
+  },
+  'desempenho:cidade-perdaNeg': {
+    tela: 'leads',
+    modelo: 'desempenho',
+    por: 'cidade',
+    titulo: 'Onde as negociações se perdem',
+    oQueE: 'Negociações com status Perda, por motivo, origem, forma de contato e time. É o recorte de "onde se perde" do relatório, do lado da negociação.',
+    recorte: (p) => ({
+      negociacoesPerdidas: p.negsPerdidas,
+      totalConduzidas: p.kpis?.conduzidas,
+      porMotivo: p.perdaNegMotivo,
+      porOrigem: p.perdaNegOrigem,
+      porForma: p.perdaNegForma,
+      porTime: p.perdaNegTime,
+    }),
   },
 
   'leads:vendedor': {

@@ -882,6 +882,328 @@ export function painelNegociacoes(flt) {
   };
 }
 
+// ------------------------------------------------- PAINEL DE DESEMPENHO
+
+/**
+ * As duas páginas de Desempenho do relatório — DO VENDEDOR e POR CIDADE — são a
+ * MESMA tela com outra dimensão de linha. Mesmos sete slicers, mesmos seis
+ * cartões, mesma matriz de produtividade, mesmos dois funis, mesmas oito tabelas
+ * de perda. Então aqui é uma função só, com `por` escolhendo o agrupamento.
+ *
+ * O que muda de verdade é COMO cada lado é agrupado:
+ *
+ *   por = 'vendedor'  leads pelo DONO DO LEAD, negociações pelo RESPONSÁVEL.
+ *                     É o que o relatório faz: `dVendedores` é a dimensão
+ *                     compartilhada, ligada ao dono por relação ativa e ao
+ *                     responsável por uma relação que as medidas ativam com
+ *                     USERELATIONSHIP. Uma negociação conta para quem a conduziu,
+ *                     mesmo que o lead tenha sido cadastrado por outra pessoa.
+ *
+ *   por = 'cidade'    leads pela CIDADE deles, negociações pela cidade do LEAD a
+ *                     que pertencem. Negociação de lead fora do recorte não tem
+ *                     cidade e fica de fora — diferente da tela de Negociações,
+ *                     onde ela conta. As duas coisas estão certas: lá a pergunta
+ *                     é "quantas negociações houve", aqui é "quanto rendeu cada
+ *                     cidade", e cidade quem tem é o lead.
+ *
+ * Consequência que vale dizer em voz alta: numa linha de vendedor, a taxa de
+ * conversão de CADASTRO e a de NEGOCIAÇÃO têm bases diferentes de propósito — a
+ * primeira é sobre os leads que ele cadastrou, a segunda sobre as negociações que
+ * ele conduziu, e os dois conjuntos não são o mesmo.
+ */
+
+const BACKLOG = ['Em Andamento', 'Qualificado', 'Disponível'];
+
+/** Filtros da tela de Desempenho: dois períodos, um para cada lado do funil. */
+export function parseFiltrosDesempenho(q = {}) {
+  return {
+    leadDe: q.dlde || null,
+    leadAte: q.dlate || null,
+    negDe: q.dnde || null,
+    negAte: q.dnate || null,
+    vendedor: lista(q.dvend),
+    equipe: lista(q.dequipe),
+    status: lista(q.dstatus),
+    tipoContrato: lista(q.dtipo),
+    cidade: lista(q.dcidade),
+    bairro: lista(q.dbairro),
+    busca: q.dbusca ? String(q.dbusca).trim().toUpperCase() : null,
+  };
+}
+
+function leadsDoDesempenho(flt) {
+  return estado.leads.filter((l) => {
+    if (flt.leadDe && (!l.diaCadastro || l.diaCadastro < flt.leadDe)) return false;
+    if (flt.leadAte && (!l.diaCadastro || l.diaCadastro > flt.leadAte)) return false;
+    if (flt.vendedor && !flt.vendedor.includes(l.dono)) return false;
+    if (flt.equipe && !flt.equipe.includes(l.equipe)) return false;
+    if (flt.status && !flt.status.some((x) => mesmo(x, l.status))) return false;
+    if (flt.cidade && !flt.cidade.includes(l.cidade)) return false;
+    if (flt.bairro && !flt.bairro.includes(l.bairro)) return false;
+    if (flt.busca && !`${l.nome} ${l.cpfCnpj} ${l.email}`.toUpperCase().includes(flt.busca)) return false;
+    return true;
+  });
+}
+
+function negociacoesDoDesempenho(flt, leadsVisiveis, por) {
+  // Para o agrupamento por cidade, a negociação só entra se o LEAD dela sobreviveu
+  // ao filtro — é do lead que vem a cidade. Por vendedor, ela entra pelo
+  // responsável, como o USERELATIONSHIP do relatório.
+  const idsLead = por === 'cidade' ? new Set(leadsVisiveis.map((l) => l.leadId)) : null;
+  const cidadePorLead = new Map(leadsVisiveis.map((l) => [l.leadId, { cidade: l.cidade, bairro: l.bairro }]));
+  return estado.negociacoes.filter((n) => {
+    const dia = n.dtCriacao ? n.dtCriacao.slice(0, 10) : null;
+    if (flt.negDe && (!dia || dia < flt.negDe)) return false;
+    if (flt.negAte && (!dia || dia > flt.negAte)) return false;
+    if (flt.tipoContrato && !flt.tipoContrato.includes(n.tipoContrato)) return false;
+    if (por === 'cidade') {
+      if (n.leadId == null || !idsLead.has(n.leadId)) return false;
+    } else {
+      if (flt.vendedor && !flt.vendedor.includes(n.responsavel)) return false;
+      if (flt.equipe && !flt.equipe.includes(n.equipe)) return false;
+    }
+    if (flt.busca && !`${n.nome} ${n.contrato} ${n.titulo}`.toUpperCase().includes(flt.busca)) return false;
+    return true;
+  }).map((n) => (por === 'cidade' ? { ...n, ...cidadePorLead.get(n.leadId) } : n));
+}
+
+/** Média em minutos, formatada como as medidas de tempo do relatório. */
+const mediaMinutos = (valores) => {
+  const uteis = valores.filter((v) => v !== null && v !== undefined && !Number.isNaN(v));
+  if (!uteis.length) return null;
+  return uteis.reduce((a, v) => a + v, 0) / uteis.length;
+};
+
+/** Uma linha da matriz de produtividade: os dois lados do funil na mesma chave. */
+function linhaDesempenho(chave, leadsDaChave, negsDaChave) {
+  const cadastrados = leadsDaChave.length;
+  const ganhosLead = leadsDaChave.filter((l) => mesmo(l.status, 'Ganho')).length;
+  const descartados = leadsDaChave.filter((l) => mesmo(l.status, 'Descartado')).length;
+  const backlog = leadsDaChave.filter((l) => BACKLOG.some((b) => mesmo(b, l.status))).length;
+  const conduzidas = contarDistintas(negsDaChave);
+  const ganhasNeg = contarDistintas(negsDaChave.filter((n) => mesmo(n.status, 'Ganho')));
+  const receita = negsDaChave
+    .filter((n) => mesmo(n.status, 'Ganho'))
+    .reduce((a, n) => a + n.valor, 0);
+  const leadsGanhos = new Set(
+    negsDaChave.filter((n) => mesmo(n.status, 'Ganho')).map((n) => n.leadId).filter((x) => x != null),
+  );
+  const duracao = mediaMinutos(negsDaChave.map((n) => n.duracaoMin));
+  const vida = mediaMinutos(leadsDaChave.map((l) => l.tempoDeVidaMin));
+  return {
+    key: chave,
+    __key: chave,
+    cadastrados,
+    ganhosLead,
+    descartados,
+    backlog,
+    // 'Taxa Conversao Cadastro'
+    taxaCadastro: cadastrados ? ganhosLead / cadastrados : 0,
+    conduzidas,
+    ganhasNeg,
+    // 'Taxa Conversao Negociacao'
+    taxaNegociacao: conduzidas ? ganhasNeg / conduzidas : 0,
+    // 'Taxa Vendas sobre Cadastro' — cruza os dois lados de propósito
+    taxaVendas: cadastrados ? ganhasNeg / cadastrados : 0,
+    receita,
+    ticketMedio: leadsGanhos.size ? receita / leadsGanhos.size : 0,
+    duracaoMin: duracao,
+    duracao: duracaoTexto(duracao),
+    vidaMin: vida,
+    vidaLead: duracaoTexto(vida),
+  };
+}
+
+/** Contagem por dimensão, sobre um subconjunto já filtrado. */
+function contarPor(itens, chaveFn, contaFn, { limite = 15, rotuloVazio = '(sem informação)' } = {}) {
+  const mapa = new Map();
+  for (const x of itens) {
+    const k = norm(chaveFn(x)) || rotuloVazio;
+    mapa.set(k, (mapa.get(k) || []).concat([x]));
+  }
+  const total = contaFn(itens) || 1;
+  let out = [...mapa].map(([key, grupo]) => {
+    const qtd = contaFn(grupo);
+    return { key, __key: key, qtd, pct: qtd / total };
+  });
+  out.sort((a, b) => b.qtd - a.qtd || a.key.localeCompare(b.key, 'pt-BR'));
+  if (limite && out.length > limite) {
+    const cauda = out.slice(limite);
+    const soma = cauda.reduce((a, c) => a + c.qtd, 0);
+    out = out.slice(0, limite).concat([{
+      key: `Outros (${cauda.length} itens)`, __key: '__outros', qtd: soma, pct: soma / total, agrupado: true,
+    }]);
+  }
+  return out;
+}
+
+const contarLeads = (ls) => new Set(ls.map((l) => l.leadId)).size;
+/**
+ * Negociação conta DISTINTA aqui também.
+ *
+ * O relatório usa `Total Negociacoes` nos funis e nas tabelas de perda, que é
+ * `COUNT(titulo_negociacao)` — linhas, e negociação com dois planos vira duas.
+ * Na primeira versão desta tela eu segui a medida, e o funil dizia 31.150
+ * enquanto a matriz logo acima dizia 30.756: a mesma incoerência que eu tinha
+ * apontado no relatório, reproduzida por mim. Uma tela precisa fechar consigo
+ * mesma antes de fechar com a origem.
+ */
+const contarLinhasNeg = (ns) => contarDistintas(ns);
+
+export function painelDesempenho(flt, por = 'vendedor') {
+  const leads = leadsDoDesempenho(flt);
+  const negs = negociacoesDoDesempenho(flt, leads, por);
+
+  const chaveLead = por === 'cidade'
+    ? (l) => l.cidade || '(sem cidade)'
+    : (l) => l.dono || '(sem dono)';
+  const chaveNeg = por === 'cidade'
+    ? (n) => n.cidade || '(sem cidade)'
+    : (n) => n.responsavel || '(sem responsável)';
+
+  // ---- matriz de produtividade: os dois lados na mesma chave -------------
+  const porChaveLead = new Map();
+  for (const l of leads) {
+    const k = chaveLead(l);
+    if (!porChaveLead.has(k)) porChaveLead.set(k, []);
+    porChaveLead.get(k).push(l);
+  }
+  const porChaveNeg = new Map();
+  for (const n of negs) {
+    const k = chaveNeg(n);
+    if (!porChaveNeg.has(k)) porChaveNeg.set(k, []);
+    porChaveNeg.get(k).push(n);
+  }
+  const chaves = [...new Set([...porChaveLead.keys(), ...porChaveNeg.keys()])];
+  const produtividade = chaves
+    .map((k) => linhaDesempenho(k, porChaveLead.get(k) || [], porChaveNeg.get(k) || []))
+    .sort((a, b) => b.cadastrados - a.cadastrados || b.conduzidas - a.conduzidas
+      || a.key.localeCompare(b.key, 'pt-BR'));
+
+  // ---- os seis cartões: o total, não a soma das linhas -------------------
+  const geral = linhaDesempenho('__total', leads, negs);
+
+  // ---- funis: as três etapas do relatório --------------------------------
+  const totalLeads = contarLeads(leads);
+  const totalNeg = contarLinhasNeg(negs);
+  const funilGanhos = [
+    { key: 'Leads', __key: 'f1', qtd: totalLeads },
+    { key: 'Negociações', __key: 'f2', qtd: totalNeg },
+    { key: 'Leads ganhos', __key: 'f3', qtd: geral.ganhosLead },
+  ];
+  const funilDescartes = [
+    { key: 'Leads', __key: 'd1', qtd: totalLeads },
+    { key: 'Negociações', __key: 'd2', qtd: totalNeg },
+    { key: 'Leads descartados', __key: 'd3', qtd: geral.descartados },
+  ];
+
+  // ---- as duas matrizes de taxa de conversão ----------------------------
+  const matrizTaxa = (colunaFn, colunasDe, taxaDe) => {
+    const colunas = [...new Set(colunasDe.map((x) => norm(colunaFn(x)) || '(sem informação)'))]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      .slice(0, 10);
+    const linhas = chaves.map((k) => {
+      const linha = { key: k, __key: k };
+      for (const c of colunas) linha[c] = taxaDe(k, c);
+      return linha;
+    }).filter((l) => colunas.some((c) => l[c] !== null));
+    return { colunas, linhas };
+  };
+
+  // taxa de conversão de CADASTRO por forma de contato do lead
+  const taxaPorForma = matrizTaxa(
+    (l) => l.forma,
+    leads,
+    (k, c) => {
+      const grupo = (porChaveLead.get(k) || []).filter((l) => (norm(l.forma) || '(sem informação)') === c);
+      if (!grupo.length) return null;
+      return grupo.filter((l) => mesmo(l.status, 'Ganho')).length / grupo.length;
+    },
+  );
+
+  // taxa de conversão de NEGOCIAÇÃO por origem da negociação
+  const taxaPorOrigem = matrizTaxa(
+    (n) => n.origem,
+    negs,
+    (k, c) => {
+      const grupo = (porChaveNeg.get(k) || []).filter((n) => (norm(n.origem) || '(sem informação)') === c);
+      if (!grupo.length) return null;
+      return contarDistintas(grupo.filter((n) => mesmo(n.status, 'Ganho'))) / contarDistintas(grupo);
+    },
+  );
+
+  // ---- as oito tabelas de perda -----------------------------------------
+  // Lead: classificacao IN (Perda, Descartado). Negociação: status = Perda.
+  // São os filtros de visual do relatório, lidos do .pbip.
+  const leadsPerdidos = leads.filter((l) => mesmo(l.status, 'Perda') || mesmo(l.status, 'Descartado'));
+  const negsPerdidas = negs.filter((n) => mesmo(n.status, 'Perda'));
+  const perdaLead = (fn, rotulo) => contarPor(leadsPerdidos, fn, contarLeads, { rotuloVazio: rotulo });
+  const perdaNeg = (fn, rotulo) => contarPor(negsPerdidas, fn, contarLinhasNeg, { rotuloVazio: rotulo });
+
+  return {
+    por,
+    kpis: {
+      ticketMedio: geral.ticketMedio,
+      receita: geral.receita,
+      taxaCadastro: geral.taxaCadastro,
+      taxaNegociacao: geral.taxaNegociacao,
+      duracao: geral.duracao,
+      vidaLead: geral.vidaLead,
+      totalLeads,
+      totalNegociacoes: totalNeg,
+      cadastrados: geral.cadastrados,
+      ganhosLead: geral.ganhosLead,
+      descartados: geral.descartados,
+      backlog: geral.backlog,
+      conduzidas: geral.conduzidas,
+      ganhasNeg: geral.ganhasNeg,
+    },
+    produtividade: produtividade.slice(0, 200),
+    produtividadeTotal: produtividade.length,
+    funilGanhos,
+    funilDescartes,
+    taxaPorForma,
+    taxaPorOrigem,
+    perdaLeadMotivo: perdaLead((l) => l.motivo, '(sem motivo)'),
+    perdaLeadOrigem: perdaLead((l) => l.origem, '(sem origem)'),
+    perdaLeadForma: perdaLead((l) => l.forma, '(sem forma)'),
+    perdaLeadTime: perdaLead((l) => l.time, '(sem time)'),
+    perdaNegMotivo: perdaNeg((n) => n.motivo, '(sem motivo)'),
+    perdaNegOrigem: perdaNeg((n) => n.origem, '(sem origem)'),
+    perdaNegForma: perdaNeg((n) => n.forma, '(sem forma)'),
+    perdaNegTime: perdaNeg((n) => n.time, '(sem time)'),
+    leadsPerdidos: contarLeads(leadsPerdidos),
+    negsPerdidas: contarLinhasNeg(negsPerdidas),
+    // Recorte invisível gera chamado: a tela diz quantos vendedores o
+    // Comercial_Teams não conhece, em vez de deixá-los caírem em "(sem equipe)"
+    // sem explicação.
+    semEquipe: conferirEquipes().semEquipe,
+    vendedores: conferirEquipes().vendedores,
+  };
+}
+
+/** Opções dos seletores da tela de Desempenho (os dois lados do funil). */
+export function filtrosDesempenho() {
+  const uniqLead = (fn) => unico(estado.leads.map(fn));
+  return {
+    vendedores: estado.dims.vendedores,
+    equipes: estado.dims.equipes,
+    status: estado.dims.status,
+    cidades: uniqLead((l) => l.cidade),
+    bairros: uniqLead((l) => l.bairro),
+    tiposContrato: unico(estado.negociacoes.map((n) => n.tipoContrato)),
+    periodoLead: (() => {
+      let min = null; let max = null;
+      for (const l of estado.leads) {
+        if (!l.diaCadastro) continue;
+        if (!min || l.diaCadastro < min) min = l.diaCadastro;
+        if (!max || l.diaCadastro > max) max = l.diaCadastro;
+      }
+      return { min, max, hoje: today() };
+    })(),
+  };
+}
+
 /** Matriz "Status de Lead por Vendedor": linhas = dono do lead, colunas = status. */
 function matrizVendedorStatus(leads) {
   const colunas = STATUS_LEAD.filter((s) => leads.some((l) => mesmo(l.status, s)));

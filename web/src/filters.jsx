@@ -33,11 +33,22 @@ export const LISTAS_LEADS = [
  * e o status tem três valores em vez de sete. Reusar os mesmos campos faria a
  * troca de sub-página carregar um valor que não existe na lista da outra.
  */
+/**
+ * Seletores das duas sub-páginas de Desempenho. Campos próprios porque a tela
+ * cruza os DOIS lados do funil: o vendedor filtra o dono do lead E o responsável
+ * pela negociação ao mesmo tempo, e há dois períodos independentes.
+ */
+export const LISTAS_DESEMPENHO = [
+  'dvendedor', 'dequipe', 'dstatus', 'dtipo', 'dcidade', 'dbairro',
+];
+
 export const LISTAS_NEGOCIACAO = [
   'nvendedor', 'nequipe', 'nstatus', 'nfase', 'ntipo', 'norigem', 'nforma', 'nregiao',
 ];
 
-const TODAS_AS_LISTAS = [...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO];
+const TODAS_AS_LISTAS = [
+  ...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO, ...LISTAS_DESEMPENHO,
+];
 
 /** período padrão ao abrir o dashboard (equivale ao slicer Ano do Power BI) */
 export const PADRAO = 'ano';
@@ -83,6 +94,12 @@ export function FiltersProvider({ children }) {
       negDe: params.get('negDe') || '',
       negAte: params.get('negAte') || '',
       buscaNeg: params.get('buscaNeg') || '',
+      // desempenho: DOIS períodos, um para cada lado do funil
+      desLeadDe: params.get('desLeadDe') || '',
+      desLeadAte: params.get('desLeadAte') || '',
+      desNegDe: params.get('desNegDe') || '',
+      desNegAte: params.get('desNegAte') || '',
+      buscaDes: params.get('buscaDes') || '',
       // sub-página da tela de Leads (o relatório tem quatro)
       lpag: params.get('lpag') || '',
     };

@@ -59,6 +59,27 @@ export function buildQuery(filtros = {}) {
   add('nforma', filtros.nforma);
   add('nregiao', filtros.nregiao);
   add('nbusca', filtros.buscaNeg);
+  // desempenho — dois períodos e as dimensões dos dois lados do funil
+  add('dlde', filtros.desLeadDe);
+  add('dlate', filtros.desLeadAte);
+  add('dnde', filtros.desNegDe);
+  add('dnate', filtros.desNegAte);
+  add('dvend', filtros.dvendedor);
+  add('dequipe', filtros.dequipe);
+  add('dstatus', filtros.dstatus);
+  add('dtipo', filtros.dtipo);
+  add('dcidade', filtros.dcidade);
+  add('dbairro', filtros.dbairro);
+  add('dbusca', filtros.buscaDes);
+  /**
+   * `por` escolhe a dimensão das duas sub-páginas de desempenho (vendedor ou
+   * cidade). Precisa vir para a QUERY, não só para o cache: sem isto as duas
+   * telas tinham chaves de cache diferentes — então cada uma buscava de novo — e
+   * chamavam a MESMA URL sem `por`, caindo no padrão do servidor. As duas
+   * mostravam os números do vendedor, e a de cidade parecia certa porque o texto
+   * do banner vem do lado do cliente.
+   */
+  add('por', filtros.por);
   return p.toString();
 }
 
@@ -183,6 +204,17 @@ export function useFiltrosNegociacoes() {
   return useQuery({
     queryKey: ['/negociacoes/filtros'],
     queryFn: () => apiGet('/negociacoes/filtros'),
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Opções dos seletores das sub-páginas de desempenho. */
+export function useFiltrosDesempenho() {
+  return useQuery({
+    queryKey: ['/desempenho/filtros'],
+    queryFn: () => apiGet('/desempenho/filtros'),
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
     retry: 1,

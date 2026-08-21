@@ -367,6 +367,7 @@ O container expõe:
 | **Rampagem** | combo VENDA 90 × ATIVO 90, cartões, cidade, tabelas de novatos | `VENDAS_RAMPAGEM`, `ATIVOS_RAMPAGEM`, `Dias_Trabalhados` |
 | **Premiações** | duas tabelas (>60 dias e ≤60 dias) | `ValorFaixa`, `FaixaPorPagamento`, `ValorPorTempoDeCasa`, `ValorFinal`, `ValorFaixaAtivo`, `FaixaPorAtivo` |
 | **Condomínios** | 6 cartões, ocupação por splitter, detalhe porta a porta, resumos por condomínio e por cidade, matriz mês × cidade, colunas por cidade | `SPLITTER_CONDOMINIO`, `CLASSIFICACAO`, `TEMPO_DE_VIDA`, `TOTAL_USUARIOS`, `PORCENT_OCUPACAO_CIDADE` |
+| **Leads e Negociações** · sub-páginas *Desempenho do vendedor* e *por cidade* | 6 cartões, produtividade, status, resumo financeiro, 2 funis, 2 matrizes de taxa, 8 tabelas de perda | `Leads Cadastrados`, `Leads Cadastrados e Ganhos`, `Taxa Conversao Cadastro`, `Negociacoes Conduzidas`, `Negociacoes Conduzidas Ganhas`, `Taxa Conversao Negociacao`, `Taxa Vendas sobre Cadastro`, `Backlog Leads Aberto`, `Média Duração por Vendedor`, `Média Tempo Vida Lead` |
 | **Leads e Negociações** · sub-página *Negociações* | 6 cartões, negociações por lead, status × motivo, colunas por mês, detalhe de 18 colunas, 9 tabelas de dimensão | `Negociacoes`, `Negociacoes_Ganhas`, `Negociacoes_Perdas`, `Negociacoes_Andamento`, `Receita Total`, `Ticket Medio`, `Duracao Total Formatada` |
 | **Leads e Negociações** · sub-página *Leads* | 8 cartões, status por lead, colunas por mês × status, detalhe completo, origem e forma de contato por mês, motivos, 5 tabelas de perfil, matriz vendedor × status | `Leads`, `Leads_Disponíveis`, `Leads_Qualificado`, `Leads_Em_Andamento`, `Leads_Ganho`, `Leads_Perda`, `Leads_Descartados`, `Leads_Outros`, `Dono do Lead Final`, `Tempo Vida Lead Formatado` |
 
@@ -734,6 +735,46 @@ ligam com `USERELATIONSHIP`). O efeito lá é que "EQUIPE" e "VENDEDOR", lado a 
 barra, podem se referir a duas pessoas diferentes. Aqui os dois falam da mesma pessoa.
 
 
+### Desempenho: duas páginas, um componente
+
+As páginas DESEMPENHO DO VENDEDOR e DESEMPENHO POR CIDADE do relatório têm 5.100px e 32 e 30
+visuais. Comparadas visual por visual, são a **mesma página com outra dimensão de linha**:
+mesmos sete slicers, mesmos seis cartões, mesma matriz de produtividade, mesmos dois funis,
+mesmas oito tabelas de perda. Aqui é um componente com `por`, e uma rota com `?por=` — o que
+também garante que as duas nunca divirjam por descuido de manutenção.
+
+**O que cada lado agrupa** é a decisão central:
+
+* **por vendedor** — leads pelo dono do lead, negociações pelo **responsável**. Uma negociação
+  conta para quem a conduziu, mesmo que o lead seja de outra pessoa. É o `USERELATIONSHIP` que
+  as medidas do relatório usam para trocar a relação com `dVendedores`.
+* **por cidade** — leads pela cidade deles, negociações pela cidade do **lead**. Aqui
+  negociação de lead fora do recorte fica de fora: cidade quem tem é o lead. Por isso a
+  contagem de negociações difere entre os dois agrupamentos (30,7 mil contra 24,1 mil) — e as
+  duas estão certas, para perguntas diferentes.
+
+**Duas taxas, duas bases.** Numa linha de vendedor, a conversão de CADASTRO é sobre os leads
+que ele cadastrou e a de NEGOCIAÇÃO é sobre as negociações que ele conduziu. Os conjuntos não
+são o mesmo, e ler as duas como se fossem a mesma escala induz a erro — está dito no `title`
+dos cartões e no `oQueE` que vai para a IA.
+
+**Contagem distinta, aqui também.** O relatório usa `Total Negociacoes` (linhas) nos funis e
+nas tabelas de perda. Na primeira versão eu segui a medida, e o funil dizia 31.150 enquanto a
+matriz logo acima dizia 30.756 — a mesma incoerência que eu havia apontado no relatório,
+reproduzida por mim. Uma tela precisa fechar consigo mesma antes de fechar com a origem.
+
+**UMOV ME TECNOLOGIA aparece como vendedor**, com 40 mil leads e nenhuma negociação. Não é
+uma pessoa: é a integração que cadastra lead automaticamente. Ela entra porque
+`Dono do Lead Final` cai para `criado_por` quando não há proprietário — e o próprio SQL do
+relatório a conhece, excluindo-a das classificações Disponível e Qualificado. Fica na tabela
+porque é dado real, e está dita no `oQueE` da leitura por IA.
+
+**Os vendedores sem equipe estão contados na tela.** `Comercial_Teams` é a fonte única de
+equipe, por decisão de projeto — sem planilha do Google. Hoje 77 dos 265 vendedores do CRM
+não estão lá, então aparecem agrupados sem equipe e o filtro de Equipe não os alcança. O
+banner da tela diz o número: recorte invisível gera chamado.
+
+
 ## 7. Endpoints
 
 | Endpoint | Retorna |
@@ -753,6 +794,8 @@ barra, podem se referir a duas pessoas diferentes. Aqui os dois falam da mesma p
 | `GET /api/leads` | cartões, status, séries por mês, perfil, matriz vendedor |
 | `GET /api/negociacoes/filtros` | listas dos slicers da sub-página de negociações |
 | `GET /api/negociacoes` | cartões, por lead, motivo, série, dimensões, valores |
+| `GET /api/desempenho/filtros` | listas dos slicers das duas sub-páginas de desempenho |
+| `GET /api/desempenho?por=vendedor\|cidade` | produtividade, status, resumo, funis, taxas, perdas |
 | `GET /api/premiacoes` | faixas de premiação |
 | `POST /api/refresh?group=hot\|full\|dims\|cond\|crm` | força releitura |
 | `GET /api/auth/config` | client_id do Google e domínio (público) |

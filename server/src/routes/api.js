@@ -21,8 +21,9 @@ import {
   painelCondominios, parseFiltrosCondominios,
 } from '../model/condominios.js';
 import {
-  erroNegociacoes, filtrosLeads, filtrosNegociacoes, getEstadoLeads, leadsPronto,
-  negociacoesPronto, painelLeads, painelNegociacoes, parseFiltrosLeads,
+  erroNegociacoes, filtrosDesempenho, filtrosLeads, filtrosNegociacoes,
+  getEstadoLeads, leadsPronto, negociacoesPronto, painelDesempenho, painelLeads,
+  painelNegociacoes, parseFiltrosDesempenho, parseFiltrosLeads,
   parseFiltrosNegociacoes,
 } from '../model/leads.js';
 
@@ -53,6 +54,7 @@ api.use((req, res, next) => {
   if (req.path.startsWith('/condominios')) return next();
   if (req.path.startsWith('/leads')) return next();
   if (req.path.startsWith('/negociacoes')) return next();
+  if (req.path.startsWith('/desempenho')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
     return res.status(503).json({ error: 'Carregando dados do Voalle/MariaDB…', carregando: true });
@@ -251,6 +253,20 @@ api.get('/negociacoes/filtros', auth('leads'), exigirNegociacoes, (req, res) => 
 
 api.get('/negociacoes', auth('leads'), exigirNegociacoes, (req, res) => {
   res.json(withMeta(painelNegociacoes(parseFiltrosNegociacoes(req.query))));
+});
+
+/**
+ * Desempenho. As duas páginas do relatório — do vendedor e por cidade — são a
+ * mesma tela com outra dimensão de linha, então é uma rota com `?por=`. Exige as
+ * duas fontes: a tela cruza os dois lados do funil.
+ */
+api.get('/desempenho/filtros', auth('leads'), exigirNegociacoes, (req, res) => {
+  res.json(withMeta(filtrosDesempenho()));
+});
+
+api.get('/desempenho', auth('leads'), exigirNegociacoes, (req, res) => {
+  const por = req.query.por === 'cidade' ? 'cidade' : 'vendedor';
+  res.json(withMeta(painelDesempenho(parseFiltrosDesempenho(req.query), por)));
 });
 
 // -------------------------------------------------------------- PREMIAÇÕES
