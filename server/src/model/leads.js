@@ -57,6 +57,18 @@ const estado = {
 export const getEstadoLeads = () => estado;
 export const leadsPronto = () => estado.leads.length > 0;
 
+/**
+ * A fonte de negociações carregou alguma vez?
+ *
+ * Olha o registro da FONTE, e não a contagem de linhas, porque as duas coisas são
+ * diferentes: zero negociação pode ser a verdade de um filtro, e "a consulta
+ * falhou" não pode virar zero na tela. Quando a fonte falhou na carga inicial — e
+ * isso acontecia — a tela mostrava seis cartões zerados, que qualquer pessoa lê
+ * como "não houve negociação nenhuma".
+ */
+export const negociacoesPronto = () => Boolean(estado.fontes.negociacoes?.updatedAt);
+export const erroNegociacoes = () => estado.fontes.negociacoes?.error || null;
+
 export function setFonteLeads(nome, rows, meta = {}) {
   estado.raw[nome] = rows;
   estado.fontes[nome] = {

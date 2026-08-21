@@ -21,8 +21,9 @@ import {
   painelCondominios, parseFiltrosCondominios,
 } from '../model/condominios.js';
 import {
-  filtrosLeads, filtrosNegociacoes, getEstadoLeads, leadsPronto, painelLeads,
-  painelNegociacoes, parseFiltrosLeads, parseFiltrosNegociacoes,
+  erroNegociacoes, filtrosLeads, filtrosNegociacoes, getEstadoLeads, leadsPronto,
+  negociacoesPronto, painelLeads, painelNegociacoes, parseFiltrosLeads,
+  parseFiltrosNegociacoes,
 } from '../model/leads.js';
 
 export const api = Router();
@@ -69,7 +70,25 @@ const exigirCondominios = (req, res, next) => {
 
 const exigirLeads = (req, res, next) => {
   if (!leadsPronto()) {
-    return res.status(503).json({ error: 'Carregando os leads e as negociações do Voalle…', carregando: true });
+    return res.status(503).json({ error: 'Carregando os leads do Voalle…', carregando: true });
+  }
+  return next();
+};
+
+/**
+ * A tela de negociações exige a fonte DELA. Sem esta checagem, uma falha na
+ * consulta de negociações virava seis cartões zerados — que se lê como "não houve
+ * negociação", não como "o dado não chegou".
+ */
+const exigirNegociacoes = (req, res, next) => {
+  if (!negociacoesPronto()) {
+    const erro = erroNegociacoes();
+    return res.status(503).json({
+      error: erro
+        ? `A consulta de negociações falhou na última carga: ${erro}`
+        : 'Carregando as negociações do Voalle…',
+      carregando: !erro,
+    });
   }
   return next();
 };
@@ -226,11 +245,11 @@ api.get('/leads', auth('leads'), exigirLeads, (req, res) => {
  * Sub-página de negociações. Mesma tela e mesmo ACL, base DIFERENTE: aqui o
  * recorte é a data de criação da negociação e o vendedor é o responsável por ela.
  */
-api.get('/negociacoes/filtros', auth('leads'), exigirLeads, (req, res) => {
+api.get('/negociacoes/filtros', auth('leads'), exigirNegociacoes, (req, res) => {
   res.json(withMeta(filtrosNegociacoes()));
 });
 
-api.get('/negociacoes', auth('leads'), exigirLeads, (req, res) => {
+api.get('/negociacoes', auth('leads'), exigirNegociacoes, (req, res) => {
   res.json(withMeta(painelNegociacoes(parseFiltrosNegociacoes(req.query))));
 });
 

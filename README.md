@@ -71,6 +71,15 @@ tempo real sem pesar no Voalle: em vez de reler 120 mil contratos (≈20 s de co
 os ~5 mil da janela (≈0,8 s) e faz merge no cache. A recarga completa a cada 30 min corrige
 qualquer alteração retroativa. A janela é ajustável em `INCREMENTAL_DAYS`.
 
+**A carga inicial é uma rajada, e ela precisa de fila.** São dez consultas para um pool de
+cinco conexões, e as pesadas seguram a conexão por 60 a 85 s (`base` 76 s, `leads` 84 s,
+`pagto` 65 s, `portas` 61 s). Com o `connectionTimeoutMillis` de 20 s que estava aqui, quem
+entrava na fila desistia antes da vez: a cada reinício uma fonte diferente falhava, à sorte
+de quem chegava por último — e a tela dela nascia zerada. Agora a espera é de 180 s
+(`DB_VOALLE_CONNECT_TIMEOUT_MS`), porque esperar é o comportamento certo para uma rajada que
+tem fim. O pool continua em cinco: quem manda no limite é o banco de produção, não a nossa
+pressa.
+
 O front revalida a cada 60 s e mostra no topo quando os dados foram lidos pela última vez.
 O botão ⟳ força uma atualização imediata do grupo `hot` (`POST /api/refresh?group=hot`).
 

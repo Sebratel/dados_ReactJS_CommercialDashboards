@@ -30,6 +30,16 @@ export const config = {
     port: num(process.env.DB_VOALLE_PORT || process.env.DB_ELLEVEN_PORT, 5432),
     max: num(process.env.DB_VOALLE_POOL, 5),
     statement_timeout: num(process.env.DB_VOALLE_TIMEOUT_MS, 180000),
+    /**
+     * Quanto tempo uma consulta espera por uma conexão livre do pool.
+     *
+     * Eram 20 s, e isso derrubava fonte na carga inicial: são dez consultas para
+     * cinco conexões, e as pesadas seguram a conexão por 60 a 85 s. Quem entrava
+     * na fila desistia antes da vez — na prática, uma fonte diferente falhava a
+     * cada reinício, à sorte de quem chegava por último. Esperar é o
+     * comportamento certo: a rajada da carga inicial é conhecida e tem fim.
+     */
+    connect_timeout: num(process.env.DB_VOALLE_CONNECT_TIMEOUT_MS, 180000),
   },
 
   // MariaDB — dsn=dbMaria no Power BI

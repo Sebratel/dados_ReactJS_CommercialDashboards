@@ -20,7 +20,7 @@ export const pool = new pg.Pool({
   port: config.voalle.port,
   max: config.voalle.max,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 20000,
+  connectionTimeoutMillis: config.voalle.connect_timeout,
   statement_timeout: config.voalle.statement_timeout,
   application_name: 'comercial-dashboard',
 });
