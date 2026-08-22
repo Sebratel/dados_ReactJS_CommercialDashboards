@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useFiltrosLeads } from '../api';
+import { useFiltrosLeads, useMeta } from '../api';
 import { LISTAS_LEADS, PRESETS, useFilters } from '../filters';
 import { Icone } from './Icone';
 import { FiltroLista, FiltroPeriodo } from './SlicerBar';
@@ -29,6 +29,7 @@ const PRESETS_LEAD = ['tudo', 'mes', 'mesPassado', '30d', '12m', 'ano']
 export function SlicerBarLeads() {
   const { filtros, setFiltro, limpar, contar } = useFilters();
   const { data: dims } = useFiltrosLeads();
+  const { data: meta } = useMeta();
   const [busca, setBusca] = useState(filtros.buscaLead || '');
 
   useEffect(() => setBusca(filtros.buscaLead || ''), [filtros.buscaLead]);
@@ -78,6 +79,7 @@ export function SlicerBarLeads() {
         onChange={trocarPeriodo}
         rotulo="Cadastro do lead"
         presets={PRESETS_LEAD}
+        min={meta?.crmSince}
       />
 
       {campos.map(({ campo, titulo, opcoes }, i) => (

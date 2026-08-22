@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useFiltrosDesempenho } from '../api';
+import { useFiltrosDesempenho, useMeta } from '../api';
 import { LISTAS_DESEMPENHO, PRESETS, useFilters } from '../filters';
 import { Icone } from './Icone';
 import { FiltroLista, FiltroPeriodo } from './SlicerBar';
@@ -27,6 +27,7 @@ const PRESETS_DES = ['tudo', 'mes', 'mesPassado', '30d', '12m', 'ano']
 export function SlicerBarDesempenho({ por }) {
   const { filtros, setFiltro, limpar, contar } = useFilters();
   const { data: dims } = useFiltrosDesempenho();
+  const { data: meta } = useMeta();
   const [busca, setBusca] = useState(filtros.buscaDes || '');
 
   useEffect(() => setBusca(filtros.buscaDes || ''), [filtros.buscaDes]);
@@ -84,6 +85,7 @@ export function SlicerBarDesempenho({ por }) {
         onChange={pLead.onChange}
         rotulo="Cadastro do lead"
         presets={PRESETS_DES}
+        min={meta?.crmSince}
       />
       <FiltroPeriodo
         de={pNeg.de}
@@ -92,6 +94,7 @@ export function SlicerBarDesempenho({ por }) {
         onChange={pNeg.onChange}
         rotulo="Criação da negociação"
         presets={PRESETS_DES}
+        min={meta?.crmSince}
       />
 
       {campos.map(({ campo, titulo, opcoes }, i) => (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFiltros } from '../api';
+import { useFiltros, useMeta } from '../api';
 import { PRESETS, useFilters } from '../filters';
 import { useSession } from '../auth/session.jsx';
 import { labelData } from '../format';
@@ -87,10 +87,21 @@ export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, 
   );
 }
 
-export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets = PRESETS }) {
+/**
+ * Seletor de período. `min` é o começo da janela de dados (Configurações → Janela
+ * de dados): o que existe carregado em memória, não o que existe no banco.
+ *
+ * Ele faz duas coisas. Nos campos de data, limita o calendário — pedir 2023 numa
+ * tela cujo recorte começa em 2026 devolvia zero e parecia dado faltando. Nos
+ * atalhos, encurta o começo em vez de deixar passar: "12 meses" com recorte de
+ * janeiro vira janeiro–hoje. O atalho deixa de ficar aceso de propósito, e o
+ * resumo passa a mostrar as datas reais — o filtro conta a verdade do que somou.
+ */
+export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets = PRESETS, min }) {
   const [aberto, setAberto] = useState(false);
   const ref = usarFechamento(aberto, () => setAberto(false));
   const preset = presets.find((p) => p.id === presetAtivo);
+  const aplicar = (r) => onChange(min && r.de && r.de < min ? { ...r, de: min } : r);
   const resumo = preset
     ? preset.label
     : de && ate ? `${labelData(de)} – ${labelData(ate)}` : 'todo o período';
@@ -106,9 +117,19 @@ export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets 
       {aberto && (
         <div className="pop pop-periodo">
           <div className="datas">
-            <input type="date" value={de || ''} onChange={(e) => onChange({ de: e.target.value })} />
+            <input
+              type="date"
+              value={de || ''}
+              min={min || undefined}
+              onChange={(e) => onChange({ de: e.target.value })}
+            />
             <span>até</span>
-            <input type="date" value={ate || ''} onChange={(e) => onChange({ ate: e.target.value })} />
+            <input
+              type="date"
+              value={ate || ''}
+              min={min || undefined}
+              onChange={(e) => onChange({ ate: e.target.value })}
+            />
           </div>
           <div className="presets">
             {presets.map((p) => (
@@ -116,12 +137,13 @@ export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets 
                 key={p.id}
                 type="button"
                 className={presetAtivo === p.id ? 'on' : ''}
-                onClick={() => { onChange(p.calc()); setAberto(false); }}
+                onClick={() => { aplicar(p.calc()); setAberto(false); }}
               >
                 {p.label}
               </button>
             ))}
           </div>
+          {min && <div className="pop-limite">Dados carregados a partir de {labelData(min)}</div>}
         </div>
       )}
     </div>
@@ -138,6 +160,7 @@ export function SlicerBar({
 }) {
   const { filtros, setFiltro, presetAtivo, ativos, limpar } = useFilters();
   const { data: dims } = useFiltros();
+  const { data: meta } = useMeta();
   const { escopo } = useSession();
   const [cliente, setCliente] = useState(filtros.cliente || '');
 
@@ -182,6 +205,7 @@ export function SlicerBar({
           presetAtivo={presetAtivo}
           onChange={setFiltro}
           rotulo={rotuloPeriodo}
+          min={meta?.since}
         />
       )}
 

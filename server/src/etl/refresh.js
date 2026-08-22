@@ -94,7 +94,15 @@ const destinoDe = (src) => DESTINOS[src.destino || 'comercial'];
  * recorte e não pode entrar no cache — antes disso, a consulta velha terminava
  * depois da nova e sobrescrevia tudo, com a tela informando sucesso.
  */
-const assinaturaJanela = () => `${config.since}|${config.phoneSince}`;
+const assinaturaJanela = () => `${config.since}|${config.phoneSince}|${config.crmSince}`;
+
+/**
+ * Quais modelos recebem recorte de data por parâmetro. Só para estes vale
+ * descartar um resultado que chegou depois de o admin mexer na janela — o de
+ * condomínios não tem recorte nenhum, e descartar a carga dele por causa disso
+ * seria refazer 60 s de consulta por nada.
+ */
+const SENSIVEL_A_JANELA = new Set(['comercial', 'leads']);
 
 function agendarRebuild(chave) {
   if (rebuildTimers[chave]) return;
@@ -117,10 +125,7 @@ async function executar(nome, src) {
   const janela = assinaturaJanela();
   try {
     const { rows, ms } = await src.run();
-    // O recorte histórico só vale para as consultas que o recebem por parâmetro.
-    // As de condomínio não têm recorte: descartar o resultado delas porque o
-    // admin mexeu na janela comercial seria refazer trabalho por nada.
-    if (chave === 'comercial' && assinaturaJanela() !== janela) {
+    if (SENSIVEL_A_JANELA.has(chave) && assinaturaJanela() !== janela) {
       console.log(`[etl] ${nome}: resultado descartado — o recorte mudou durante a consulta`);
       return true;
     }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useFiltrosNegociacoes } from '../api';
+import { useFiltrosNegociacoes, useMeta } from '../api';
 import { LISTAS_NEGOCIACAO, PRESETS, useFilters } from '../filters';
 import { Icone } from './Icone';
 import { FiltroLista, FiltroPeriodo } from './SlicerBar';
@@ -27,6 +27,7 @@ const PRESETS_NEG = ['tudo', 'mes', 'mesPassado', '30d', '12m', 'ano']
 export function SlicerBarNegociacoes() {
   const { filtros, setFiltro, limpar, contar } = useFilters();
   const { data: dims } = useFiltrosNegociacoes();
+  const { data: meta } = useMeta();
   const [busca, setBusca] = useState(filtros.buscaNeg || '');
 
   useEffect(() => setBusca(filtros.buscaNeg || ''), [filtros.buscaNeg]);
@@ -77,6 +78,7 @@ export function SlicerBarNegociacoes() {
         onChange={trocarPeriodo}
         rotulo="Criação da negociação"
         presets={PRESETS_NEG}
+        min={meta?.crmSince}
       />
 
       {campos.map(({ campo, titulo, opcoes }, i) => (

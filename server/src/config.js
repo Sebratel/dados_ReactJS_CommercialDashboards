@@ -58,6 +58,10 @@ export const config = {
   // já usa o recorte novo — sem reiniciar o processo.
   get since() { return janela().since; },
   get phoneSince() { return janela().phoneSince; },
+  // Recorte das consultas de CRM (leads e negociações), definido em
+  // Configurações → Janela de dados. Getter pelo mesmo motivo dos outros dois: a
+  // carga seguinte já usa o valor novo, sem reiniciar o processo.
+  get crmSince() { return janela().crmSince; },
 
   // Autenticação (Google) e controle de acesso
   auth: {
@@ -73,11 +77,6 @@ export const config = {
 
   // Janela (em dias) das cargas incrementais
   incrementalDays: num(process.env.INCREMENTAL_DAYS, 60),
-
-  // Recorte das consultas de CRM (leads e negociações). No `.pbip` é a constante
-  // '2026-01-01' escrita dentro das duas consultas; aqui é o mesmo valor, mas
-  // ajustável sem editar SQL.
-  crmSince: process.env.CRM_SINCE || '2026-01-01',
 
   // Frequência de atualização (ms)
   refresh: {

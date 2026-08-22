@@ -126,6 +126,7 @@ function meta() {
     refresh: config.refresh,
     since: config.since,
     phoneSince: config.phoneSince,
+    crmSince: config.crmSince,
     iaConfigurada: iaConfigurada(),
     ready: isReady(),
   };

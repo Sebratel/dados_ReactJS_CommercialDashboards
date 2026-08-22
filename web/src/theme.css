@@ -418,6 +418,11 @@ body {
 }
 .pop-periodo .presets button:hover { border-color: var(--pbi-primary); color: var(--pbi-primary); }
 .pop-periodo .presets button.on { background: var(--pbi-primary); border-color: var(--pbi-primary); color: #fff; }
+/* limite da janela de dados, dentro do popover de período */
+.pop-limite {
+  font-size: 11px; color: var(--pbi-muted); border-top: 1px solid var(--pbi-borda);
+  padding-top: 7px;
+}
 
 /* --------------------------------------------------------------- card */
 /* Um único estilo de card para tudo — gráfico, tabela ou matriz. */

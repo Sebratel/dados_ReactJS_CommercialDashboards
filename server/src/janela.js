@@ -39,9 +39,14 @@ const dataReal = (v) => {
 function semente() {
   const d = process.env.DATA_SINCE;
   const p = process.env.PHONE_SINCE;
+  const c = process.env.CRM_SINCE;
   return {
     since: ISO.test(d || '') ? d : '2024-01-01',
     phoneSince: ISO.test(p || '') ? p : '2024-11-01',
+    // O recorte do CRM (leads e negociações). No `.pbip` de Leads é a constante
+    // '2026-01-01' escrita dentro das duas consultas; aqui ele entrou junto dos
+    // outros dois para o admin mexer nos três no mesmo lugar.
+    crmSince: ISO.test(c || '') ? c : '2026-01-01',
   };
 }
 
@@ -80,6 +85,7 @@ export function janela() {
   return {
     since: valido(salvo.since) || base.since,
     phoneSince: valido(salvo.phoneSince) || base.phoneSince,
+    crmSince: valido(salvo.crmSince) || base.crmSince,
     origem: valido(salvo.since) ? 'tela' : 'env',
     semente: base,
     atualizadoEm: salvo.atualizadoEm || null,
@@ -90,15 +96,24 @@ export function janela() {
 /**
  * Valida e grava. Recusa data futura, formato inválido e telefonia começando antes
  * da base — a ativação de telefonia só faz sentido dentro do recorte principal.
+ *
+ * O CRM NÃO tem essa amarra com a data inicial: leads e negociações vivem num
+ * modelo próprio, e nada impede querer mais histórico de CRM que de contrato (ou
+ * o contrário). Amarrar os dois só criaria um erro de validação sem motivo.
  */
-export function definirJanela({ since, phoneSince }, porQuem) {
+export function definirJanela({ since, phoneSince, crmSince }, porQuem) {
   const atual = janela();
   const novo = {
     since: since ?? atual.since,
     phoneSince: phoneSince ?? atual.phoneSince,
+    crmSince: crmSince ?? atual.crmSince,
   };
 
-  for (const [campo, rotulo] of [['since', 'Data inicial'], ['phoneSince', 'Início da telefonia']]) {
+  for (const [campo, rotulo] of [
+    ['since', 'Data inicial'],
+    ['phoneSince', 'Início da telefonia'],
+    ['crmSince', 'Início do CRM'],
+  ]) {
     if (!ISO.test(novo[campo])) throw new Error(`${rotulo}: use o formato AAAA-MM-DD.`);
     if (!dataReal(novo[campo])) throw new Error(`${rotulo}: ${novo[campo]} não existe no calendário.`);
     if (novo[campo] > hoje()) throw new Error(`${rotulo} não pode estar no futuro.`);

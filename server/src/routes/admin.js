@@ -128,6 +128,14 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
  * Enquanto ela não termina, os dados antigos continuam servindo — ninguém fica
  * olhando tela vazia por causa de uma mudança de configuração.
  */
+/**
+ * As datas que, mudando, obrigam a reler o banco. Lista em vez de comparação campo
+ * a campo porque a versão anterior comparava só duas das três: mexer apenas no
+ * recorte do CRM gravava o valor novo e não recarregava nada — a tela dizia
+ * "salvo" e os leads continuavam os do recorte antigo até o ciclo de 10 minutos.
+ */
+const MUTAVEIS = ['since', 'phoneSince', 'crmSince'];
+
 function recarregar(motivo) {
   marcarRecarga({ rodando: true, erro: null });
   refreshAll()
@@ -152,9 +160,11 @@ admin.put('/janela', exigirAuth({ minPapel: 'admin' }), (req, res) => {
   try {
     const antes = janela();
     const depois = definirJanela(req.body || {}, req.usuario.email);
-    const mudou = antes.since !== depois.since || antes.phoneSince !== depois.phoneSince;
+    const mudou = MUTAVEIS.some((c) => antes[c] !== depois[c]);
     if (mudou) {
-      console.log(`[janela] ${req.usuario.email}: ${antes.since} -> ${depois.since} (telefonia ${depois.phoneSince})`);
+      const diff = MUTAVEIS.filter((c) => antes[c] !== depois[c])
+        .map((c) => `${c} ${antes[c]} -> ${depois[c]}`).join(', ');
+      console.log(`[janela] ${req.usuario.email}: ${diff}`);
       recarregar('alteração da janela');
     }
     return res.json({ ...depois, recarga: estadoRecarga(), recarregando: mudou });
@@ -166,7 +176,7 @@ admin.put('/janela', exigirAuth({ minPapel: 'admin' }), (req, res) => {
 admin.post('/janela/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) => {
   const antes = janela();
   const depois = restaurarJanela();
-  const mudou = antes.since !== depois.since || antes.phoneSince !== depois.phoneSince;
+  const mudou = MUTAVEIS.some((c) => antes[c] !== depois[c]);
   if (mudou) recarregar('restauração do .env');
   return res.json({ ...depois, recarga: estadoRecarga(), recarregando: mudou });
 });
@@ -175,7 +185,12 @@ admin.post('/janela/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) =>
 // Exclusivo de power users: administrar pessoas e enxergar o SQL do sistema são
 // atribuições diferentes, então o papel de admin, sozinho, não entra aqui.
 admin.get('/queries', exigirAuth({ powerUser: true }), (req, res) => {
-  res.json({ queries: listarQueries(), since: config.since, phoneSince: config.phoneSince });
+  res.json({
+    queries: listarQueries(),
+    since: config.since,
+    phoneSince: config.phoneSince,
+    crmSince: config.crmSince,
+  });
 });
 
 admin.post('/queries/:id/test', exigirAuth({ powerUser: true }), async (req, res) => {

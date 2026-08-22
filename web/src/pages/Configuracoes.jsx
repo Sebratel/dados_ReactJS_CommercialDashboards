@@ -622,13 +622,13 @@ function AbaJanela() {
   const [estado, setEstado] = useState(null);
   const [erro, setErro] = useState(null);
   const [salvando, setSalvando] = useState(false);
-  const [form, setForm] = useState({ since: '', phoneSince: '' });
+  const [form, setForm] = useState({ since: '', phoneSince: '', crmSince: '' });
 
   const carregar = useCallback(async (sincronizarForm = true) => {
     try {
       const d = await apiJson('/janela');
       setEstado(d);
-      if (sincronizarForm) setForm({ since: d.since, phoneSince: d.phoneSince });
+      if (sincronizarForm) setForm({ since: d.since, phoneSince: d.phoneSince, crmSince: d.crmSince });
       setErro(null);
       return d;
     } catch (e) { setErro(e); return null; }
@@ -656,13 +656,15 @@ function AbaJanela() {
     try {
       const d = await apiJson('/janela/restaurar', { method: 'POST' });
       setEstado(d);
-      setForm({ since: d.since, phoneSince: d.phoneSince });
+      setForm({ since: d.since, phoneSince: d.phoneSince, crmSince: d.crmSince });
     } catch (e) { setErro(e); } finally { setSalvando(false); }
   };
 
   if (!estado && !erro) return <Loading texto="Carregando janela de dados…" />;
 
-  const alterado = estado && (form.since !== estado.since || form.phoneSince !== estado.phoneSince);
+  const alterado = estado && (form.since !== estado.since
+    || form.phoneSince !== estado.phoneSince
+    || form.crmSince !== estado.crmSince);
   const recarga = estado?.recarga || {};
 
   return (
@@ -670,10 +672,23 @@ function AbaJanela() {
       {erro && <Erro erro={erro} />}
 
       <p className="cfg-nota">
-        Define quanto histórico o dashboard carrega do Voalle. Alcança <b>todas</b> as telas:
-        é ele que limita até onde vão as comparações entre meses, as coortes e as projeções.
-        Ampliar traz mais histórico e deixa a carga completa mais lenta; reduzir acelera, mas
-        encurta a base de comparação.
+        Define quanto histórico o dashboard carrega do Voalle. É ele que limita até onde vão
+        as comparações entre meses, as coortes e as projeções. Ampliar traz mais histórico e
+        deixa a carga completa mais lenta; reduzir acelera, mas encurta a base de comparação.
+      </p>
+      <p className="cfg-nota">
+        Cada data alcança o seu modelo: a <b>inicial</b> vale para contratos, ativações e
+        primeiro pagamento — ou seja, Diretoria, Vendas, Ativações, 1º Pagamento, Rampagem,
+        Premiações, Canceladas, Históricos e Preditiva. A de <b>telefonia</b> recorta só as
+        ativações de telefonia. A do <b>CRM</b> vale para as quatro sub-páginas de Leads e
+        Negociações.
+      </p>
+      <p className="cfg-nota">
+        <b>Condomínios não aparece aqui de propósito.</b> A rede de splitters é um retrato do
+        agora, não uma série temporal: cortar por data de criação tiraria da conta equipamento
+        que está em operação desde 2019 e a ocupação passaria a mentir. O recorte por data
+        daquela tela é o filtro <b>Criação do splitter</b>, na própria barra dela, que só
+        esconde linha — não muda a capacidade instalada.
       </p>
 
       <div className="cfg-form">
@@ -693,6 +708,15 @@ function AbaJanela() {
             value={form.phoneSince}
             max={new Date().toISOString().slice(0, 10)}
             onChange={(e) => setForm({ ...form, phoneSince: e.target.value })}
+          />
+        </label>
+        <label>
+          <span>Leads e negociações a partir de</span>
+          <input
+            type="date"
+            value={form.crmSince}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setForm({ ...form, crmSince: e.target.value })}
           />
         </label>
       </div>
@@ -731,14 +755,16 @@ function AbaJanela() {
 
       <ul className="cfg-legenda">
         <li>
-          Em vigor: <b>{estado?.since}</b> (telefonia a partir de <b>{estado?.phoneSince}</b>)
+          Em vigor: <b>{estado?.since}</b> (telefonia a partir de <b>{estado?.phoneSince}</b>,
+          {' '}CRM a partir de <b>{estado?.crmSince}</b>)
           {estado?.origem === 'env'
             ? ' — valor de semente, vindo do .env.'
             : ` — definido na tela${estado?.atualizadoPor ? ` por ${estado.atualizadoPor}` : ''}${estado?.atualizadoEm ? ` em ${labelDataHora(estado.atualizadoEm)}` : ''}.`}
         </li>
         <li>
-          <code>DATA_SINCE</code> e <code>PHONE_SINCE</code> no <code>.env</code> continuam valendo
-          como ponto de partida: valem enquanto ninguém definir nada aqui, e o botão acima volta a eles.
+          <code>DATA_SINCE</code>, <code>PHONE_SINCE</code> e <code>CRM_SINCE</code> no
+          <code>.env</code> continuam valendo como ponto de partida: valem enquanto ninguém definir
+          nada aqui, e o botão acima volta a eles.
         </li>
         <li>
           A telefonia entrou na operação depois do resto, por isso tem data própria — ela não pode
@@ -970,7 +996,8 @@ function AbaQueries() {
       {erro && <Erro erro={erro} />}
       <p className="cfg-nota">
         Todas as consultas que alimentam o dashboard, como são enviadas ao banco. O recorte
-        histórico é <code>{dados?.since}</code> (telefonia a partir de <code>{dados?.phoneSince}</code>).
+        histórico é <code>{dados?.since}</code> (telefonia a partir de{' '}
+        <code>{dados?.phoneSince}</code>, CRM a partir de <code>{dados?.crmSince}</code>).
         O botão <b>testar</b> executa com <code>LIMIT 20</code>, sem alterar nada.
       </p>
 

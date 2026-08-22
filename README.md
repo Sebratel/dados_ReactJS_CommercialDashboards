@@ -231,11 +231,19 @@ O recorte histórico da carga fica em **Configurações → Janela de dados** (s
 decide até onde o dashboard enxerga: é o que limita a comparação entre meses, as coortes e
 as projeções.
 
-`DATA_SINCE` e `PHONE_SINCE` no `.env` continuam valendo como **semente** — enquanto ninguém
-definir nada na tela, e como destino do botão "voltar ao valor do .env". O que a tela grava
-tem precedência e vive em `janela.json`, no volume de dados. `config.since` é um getter, e
-todos os pontos que montam SQL já o liam de forma preguiçosa, então a carga seguinte usa o
-recorte novo sem reiniciar o processo.
+São **três datas**, uma por modelo que tem recorte:
+
+| Campo | `.env` | Alcança |
+|---|---|---|
+| Carregar contratos a partir de | `DATA_SINCE` | contratos, ativações e primeiro pagamento — Diretoria, Vendas, Ativações, 1º Pagamento, Rampagem, Premiações, Canceladas, Históricos e Preditiva |
+| Ativações de telefonia a partir de | `PHONE_SINCE` | só as ativações de telefonia |
+| Leads e negociações a partir de | `CRM_SINCE` | as quatro sub-páginas de Leads e Negociações |
+
+As três variáveis do `.env` continuam valendo como **semente** — enquanto ninguém definir nada
+na tela, e como destino do botão "voltar ao valor do .env". O que a tela grava tem precedência
+e vive em `janela.json`, no volume de dados. `config.since`, `config.phoneSince` e
+`config.crmSince` são getters, e todos os pontos que montam SQL já os liam de forma preguiçosa,
+então a carga seguinte usa o recorte novo sem reiniciar o processo.
 
 Mudar o recorte dispara uma recarga completa em segundo plano: a tela responde na hora e
 acompanha o progresso, e os dados anteriores continuam servindo até a nova carga terminar.
@@ -247,8 +255,24 @@ acompanha o progresso, e os dados anteriores continuam servindo até a nova carg
 > respondia "concluído" na hora e o cache acabava com os dados do recorte anterior.
 
 A telefonia tem data própria porque entrou na operação depois do resto; ela não pode ser
-anterior à data inicial da base. A carga incremental (60 dias) também respeita o recorte:
-se ele for mais estreito que a janela incremental, ela é encurtada.
+anterior à data inicial da base. O CRM **não** tem essa amarra: leads e negociações vivem num
+modelo próprio, e querer mais histórico de CRM que de contrato (ou o contrário) é legítimo —
+amarrar os dois só criaria erro de validação sem motivo. A carga incremental (60 dias) também
+respeita o recorte: se ele for mais estreito que a janela incremental, ela é encurtada.
+
+**Condomínios não está na tela de propósito.** A rede de splitters é um retrato do agora, não
+uma série temporal: cortar por data de criação tiraria da conta equipamento em operação desde
+2019 e a ocupação passaria a mentir. O recorte por data daquela tela é o filtro *Criação do
+splitter*, na barra dela, que só esconde linha — não muda a capacidade instalada. Por isso as
+consultas de condomínio também ficam fora do descarte de "consulta em voo" acima: elas não
+recebem data por parâmetro, e refazer 60 s de consulta porque o admin mexeu numa janela que
+não as alcança seria trabalho perdido.
+
+O seletor de período de cada tela tem `min` na janela do seu modelo, e um atalho que
+começaria antes dela é **encurtado** em vez de deixar passar: "12 meses" numa tela cujo recorte
+começa em janeiro vira janeiro–hoje, o atalho deixa de ficar aceso e o resumo mostra as datas
+reais. Pedir 2023 numa tela carregada desde 2026 devolvia zero linhas e parecia dado faltando —
+o número certo para uma pergunta que os dados em memória não podem responder.
 
 ### Expiração da sessão
 
