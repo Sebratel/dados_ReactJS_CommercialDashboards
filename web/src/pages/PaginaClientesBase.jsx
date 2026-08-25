@@ -110,7 +110,7 @@ export function PaginaClientesBase({ filtros }) {
           {vazio ? <Loading /> : porCidade.dados.length
             ? (
               <>
-                <Legenda itens={porCidade.series.map((n, i) => ({ nome: n, cor: corDaCategoria(n, i) }))} />
+                <Legenda itens={porCidade.series.map((n, i) => ({ label: n, cor: corDaCategoria(n, i) }))} />
                 <ColunasEmpilhadas
                   data={porCidade.dados}
                   series={porCidade.series}
@@ -131,7 +131,7 @@ export function PaginaClientesBase({ filtros }) {
           {vazio ? <Loading /> : porBairro.dados.length
             ? (
               <>
-                <Legenda itens={porBairro.series.map((n, i) => ({ nome: n, cor: corDaCategoria(n, i) }))} />
+                <Legenda itens={porBairro.series.map((n, i) => ({ label: n, cor: corDaCategoria(n, i) }))} />
                 <ColunasEmpilhadas
                   data={porBairro.dados}
                   series={porBairro.series}

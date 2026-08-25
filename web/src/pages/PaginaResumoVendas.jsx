@@ -126,7 +126,7 @@ export function PaginaResumoVendas({ filtros }) {
           {vazio ? <Loading /> : porTec.dados.length
             ? (
               <>
-                <Legenda itens={porTec.series.map((n, i) => ({ nome: n, cor: corDaCategoria(n, i) }))} />
+                <Legenda itens={porTec.series.map((n, i) => ({ label: n, cor: corDaCategoria(n, i) }))} />
                 <ColunasEmpilhadas data={porTec.dados} series={porTec.series} cores={corDaCategoria} />
               </>
             ) : <Vazio />}
@@ -142,7 +142,7 @@ export function PaginaResumoVendas({ filtros }) {
           {vazio ? <Loading /> : porCidade.dados.length
             ? (
               <>
-                <Legenda itens={porCidade.series.map((n, i) => ({ nome: n, cor: corDaCategoria(n, i) }))} />
+                <Legenda itens={porCidade.series.map((n, i) => ({ label: n, cor: corDaCategoria(n, i) }))} />
                 <ColunasEmpilhadas data={porCidade.dados} series={porCidade.series} cores={corDaCategoria} />
               </>
             ) : <Vazio />}
