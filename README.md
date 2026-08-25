@@ -511,6 +511,41 @@ Conferido contra uma captura do Power BI do mesmo dia: Canoas, Esteio e Porto Al
 saíram com os sete números idênticos, e o total de telefonia também. As diferenças nas
 demais linhas eram as vendas que entraram entre o print e a medição.
 
+### Enquadrar na tela: como o print sai inteiro
+
+O Relatório Diário existe para virar print e ser compartilhado, e tem 2,4 telas de
+altura. O botão **Enquadrar na tela** reduz o conteúdo até ele caber inteiro numa
+janela. Três coisas nele foram descobertas medindo, e cada uma corrigiu um print ruim:
+
+1. **`transform: scale`, não zoom do navegador.** O zoom mudaria o tamanho da fonte da
+   barra de filtros e refluiria o layout — o print não seria o que se vê na tela.
+2. **Tela virtual antes de reduzir.** Só reduzir levava a 44% com metade da tela vazia
+   à direita: a escala encolhe os dois eixos junto, e o conteúdo é alto e estreito
+   (1.400 × 2.216) contra uma janela larga e baixa (1.440 × 760). Desenhando numa
+   largura MAIOR que a janela, o grid reflui, a altura cai e a redução necessária é
+   menor. A largura certa depende de como o layout reflui, o que não se calcula: o
+   código prova oito larguras e fica com a melhor.
+3. **O critério é ocupação da tela, não o maior fator.** Escolhendo o maior fator, a
+   tela virtual mais estreita sempre ganhava — ela cabe com menos redução — e o print
+   voltava a ter 55% de largura em branco. A ocupação é a menor das duas frações
+   preenchidas; maximizá-la escolhe a largura cuja proporção mais se parece com a da
+   janela. Medido: **98% de largura e 98% de altura**, a 55% do tamanho.
+
+Mais dois detalhes: a margem negativa que colapsa a sobra, porque `scale` reduz o
+desenho mas não o espaço que o elemento ocupa (sem ela a tela cabia e a página
+continuava rolando por mil pixels de nada); e o `resize` que espera 120 ms mais um
+quadro antes de remedir, porque o navegador dispara o evento antes de terminar o
+reflow — medindo no evento, o fator saía do tamanho anterior da janela.
+
+No modo enquadrado os controles de tela somem (CSV, IA, alternadores): são coisas de
+interação, e em escala pequena viram borrão ao lado do título.
+
+**Rádio não aparece nesta tela**, a pedido. O relatório de origem tem os blocos de
+rádio — meta, fila e dois cartões —, mas medido no banco eles estão todos em zero: não
+há venda, ativação nem protocolo de rádio no recorte. Numa tela cujo propósito é virar
+print, seis caixas de zero só disputam espaço. Os números continuam sendo calculados no
+servidor, então voltar a mostrá-los é acrescentar os visuais de novo.
+
 ### Filtro em painel, não em popover (Clientes Base)
 
 Na página CLIENTES BASE da origem, o slicer de cidade e bairro tem 311×849 e fica à

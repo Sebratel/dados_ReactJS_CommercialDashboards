@@ -516,6 +516,23 @@ body {
   transform: scale(var(--fator, 1));
   width: var(--largura-palco, 100%);
 }
+/* REORGANIZA ANTES DE ESCALAR, e este e o ponto todo do modo.
+   O conteudo normal tem ~1460 de largura por 2216 de altura (proporcao 0,66); a
+   janela tem 1440 por ~760 (proporcao 1,9). Escalando so por altura, a largura
+   encolhia junto e sobrava metade da tela vazia a direita, com o conteudo a 44%.
+   Dividindo cada coluna em duas, o conteudo fica com o dobro da largura e metade da
+   altura — perto da proporcao da tela — e o fator sobe para ~70%, que e a diferenca
+   entre um print legivel e um print de lupa. */
+.tela-diario.enquadrada .coluna-diario { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tela-diario.enquadrada .cartoes-diario,
+.tela-diario.enquadrada .par-diario { grid-column: 1 / -1; }
+
+/* Controle nao vai para print: botao de CSV, de IA e alternador de granularidade
+   sao coisas de tela, e em escala pequena viram borrao ao lado do titulo. */
+.tela-diario.enquadrada .visual > header .titulo > .seg,
+.tela-diario.enquadrada .visual > header .titulo > button,
+.tela-diario.enquadrada .visual > header .titulo > .btn-ia { display: none; }
+
 /* Sem sombra e sem hover no modo print: sombra em escala pequena vira sujeira. */
 .tela-diario.enquadrada .visual,
 .tela-diario.enquadrada .cartao-diario { box-shadow: none; }

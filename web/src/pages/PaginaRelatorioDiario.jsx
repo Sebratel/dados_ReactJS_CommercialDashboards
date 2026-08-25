@@ -14,10 +14,17 @@ import { baixar, tabelaParaCSV } from '../exportar';
  * TECNOLOGIA, porque cada visual de lá tem `TECNOLOGIA` no próprio filtro:
  *
  *   FIBRA     — vendas e ativações por cidade, contra meta, mais os cartões
- *   RÁDIO     — o mesmo, com meta ÚNICA (não por cidade, é assim na origem)
- *   TELEFONIA — só contagem e média por dia; não tem meta lá
+ *   TELEFONIA — só contagem e média por dia; não tem meta na origem
  *
- * Uma tabela só, somando as três, responderia uma pergunta que ninguém faz.
+ * Uma tabela só, somando as duas, responderia uma pergunta que ninguém faz.
+ *
+ * RÁDIO SAIU DA TELA, a pedido: o relatório de origem tem os blocos de rádio (meta,
+ * fila e cartões), mas medido no banco eles estão todos em zero — não há venda, nem
+ * ativação, nem protocolo de rádio no recorte. Numa tela cujo propósito é virar print
+ * compartilhado, seis caixas de zero só disputam espaço com o que importa.
+ *
+ * Os números continuam sendo calculados no servidor (`painelDiario` devolve `radio`),
+ * então voltar a mostrá-los é acrescentar os visuais de novo — não recalcular nada.
  *
  * O LAYOUT E AS CORES SEGUEM A ORIGEM, e aqui isso é decisão consciente. Esta é a
  * única tela do dashboard que foge do padrão de cor da casa: barra de título em
@@ -119,52 +126,101 @@ function usarEnquadramento(dependencia) {
   const medir = useCallback(() => {
     const el = palco.current;
     if (!el || !ativo) return;
-    // mede o conteúdo no tamanho natural: zera escala e margem antes de ler
-    el.style.setProperty('--fator', '1');
-    el.style.marginBottom = '';
-    const alturaConteudo = el.scrollHeight;
-    const larguraConteudo = el.scrollWidth;
+
     const topo = el.getBoundingClientRect().top;
-    const disponivelAltura = window.innerHeight - topo - 12;
-    const disponivelLargura = el.parentElement?.clientWidth || window.innerWidth;
-    if (!alturaConteudo || !larguraConteudo) return;
-    const k = Math.max(Math.min(
-      1,
-      disponivelAltura / alturaConteudo,
-      disponivelLargura / larguraConteudo,
-    ), 0.35); // abaixo de 0,35 o número fica ilegível
+    const alturaDisponivel = window.innerHeight - topo - 12;
+    const larguraDisponivel = el.parentElement?.clientWidth || window.innerWidth;
+    if (alturaDisponivel < 80 || larguraDisponivel < 200) return;
+
     /**
-     * A variável CSS é escrita AQUI, no elemento, e não pela prop `style` do React.
+     * TELA VIRTUAL: primeiro escolhe a LARGURA em que o conteúdo é desenhado, e só
+     * depois reduz.
      *
-     * Com as duas escrevendo, elas se atropelavam: esta função zera a escala para
-     * medir o tamanho natural, o React repintava com o valor do estado, e o que
-     * sobrava no elemento era o zero da medição — o botão dizia 44% e a tela
-     * continuava do tamanho original. Um dono só resolve.
+     * A primeira versão só reduzia, e o resultado era ruim: o conteúdo tem ~1.400 de
+     * largura por 2.216 de altura, a janela tem 1.440 por 760. Reduzir até a altura
+     * caber levava a 44%, e como a escala encolhe os dois eixos junto, sobrava
+     * metade da tela vazia à direita — um print com o dobro de margem e letra de
+     * lupa.
      *
-     * O estado guarda o fator apenas para o rótulo mostrar a porcentagem.
+     * Desenhando numa largura MAIOR que a janela, o grid reflui: cabe mais por
+     * linha, a altura cai, e a redução necessária é menor. A largura certa é a que
+     * maximiza o fator, e ela depende de como o layout reflui — coisa que não se
+     * calcula, se mede. Então prova algumas larguras e fica com a melhor.
      */
+    const candidatas = [1, 1.2, 1.4, 1.6, 1.8, 2, 2.3, 2.6]
+      .map((f) => Math.round(larguraDisponivel * f));
+    let melhor = { largura: larguraDisponivel, k: 0, ocupacao: -1 };
+    for (const largura of candidatas) {
+      el.style.setProperty('--fator', '1');
+      el.style.marginBottom = '';
+      el.style.setProperty('--largura-palco', `${largura}px`);
+      // leitura forçada: o navegador precisa refluir antes de medir
+      const altura = el.scrollHeight;
+      if (!altura) continue;
+      const k = Math.min(1, larguraDisponivel / largura, alturaDisponivel / altura);
+      /**
+       * O critério é OCUPAÇÃO DA TELA, não o maior fator — e a diferença aparece na
+       * prática. Escolhendo o maior fator, a tela virtual mais estreita sempre ganha
+       * (ela cabe com menos redução), e o print saía com 55% da largura em branco.
+       * A ocupação é a menor das duas frações preenchidas: maximizá-la escolhe a
+       * largura cuja proporção mais se parece com a da janela, que é o que faz o
+       * conteúdo encostar nas duas bordas.
+       */
+      const ocupacao = Math.min((k * largura) / larguraDisponivel, (k * altura) / alturaDisponivel);
+      if (ocupacao > melhor.ocupacao + 0.01
+        || (Math.abs(ocupacao - melhor.ocupacao) <= 0.01 && k > melhor.k)) {
+        melhor = { largura, k, altura, ocupacao };
+      }
+    }
+
+    const k = Math.max(melhor.k, 0.35); // abaixo de 0,35 fica ilegível
+    el.style.setProperty('--largura-palco', `${melhor.largura}px`);
     el.style.setProperty('--fator', String(k));
     /**
      * `scale` reduz o DESENHO, não o espaço que o elemento ocupa no fluxo: sem isto
      * a tela caberia na janela mas a página continuaria rolando por mais mil pixels
      * de nada. A margem negativa devolve exatamente a sobra.
      */
-    el.style.marginBottom = `${-Math.round(alturaConteudo * (1 - k))}px`;
+    const alturaFinal = melhor.altura || el.scrollHeight;
+    el.style.marginBottom = `${-Math.round(alturaFinal * (1 - k))}px`;
     setFator(k);
   }, [ativo]);
 
   useLayoutEffect(() => {
     if (!ativo) {
-      palco.current?.style.removeProperty('--fator');
-      if (palco.current) palco.current.style.marginBottom = '';
+      const el = palco.current;
+      if (el) {
+        el.style.removeProperty('--fator');
+        el.style.removeProperty('--largura-palco');
+        el.style.marginBottom = '';
+      }
       setFator(1);
       return undefined;
     }
     // duas passadas: a primeira mede, a segunda corrige o que o scale mudou
     medir();
     const t = setTimeout(medir, 60);
-    window.addEventListener('resize', medir);
-    return () => { clearTimeout(t); window.removeEventListener('resize', medir); };
+
+    /**
+     * O resize espera o layout assentar antes de remedir.
+     *
+     * Medindo no próprio evento, o fator saía do tamanho ANTERIOR da janela: ao
+     * passar de 1440x900 para 1366x768 a tela continuou a 53% e voltou a rolar,
+     * com 115% da altura. O navegador dispara `resize` antes de terminar o reflow, e
+     * ainda por cima dispara muitas vezes durante o arraste — daí o atraso curto e o
+     * quadro de animação, que juntos garantem uma medição só, depois de tudo parado.
+     */
+    let atraso = null;
+    const remedir = () => {
+      clearTimeout(atraso);
+      atraso = setTimeout(() => requestAnimationFrame(medir), 120);
+    };
+    window.addEventListener('resize', remedir);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(atraso);
+      window.removeEventListener('resize', remedir);
+    };
   }, [ativo, medir, dependencia]);
 
   // Esc sai do modo: é o gesto esperado de qualquer coisa que ocupa a tela
@@ -266,22 +322,6 @@ export function PaginaRelatorioDiario({ filtros }) {
             })}
 
           <Visual
-            title="RÁDIO"
-            sub={vazio ? null : 'meta de rádio é um número único na origem, não por cidade — uma linha para cada lado'}
-            className="v-meia bloco-azul"
-          >
-            {vazio ? <Loading /> : (
-              <Tabela
-                colunas={COLUNAS_META('', 'REALIZADO')}
-                dados={[
-                  { ...data.radio.vendas, __key: 'v' },
-                  { ...data.radio.ativos, __key: 'a' },
-                ]}
-              />
-            )}
-          </Visual>
-
-          <Visual
             title="VENDAS TELEFONIA"
             sub={vazio ? null : 'sem meta no relatório de origem — só contagem e média por dia'}
             className="v-meia bloco-roxo"
@@ -339,32 +379,6 @@ export function PaginaRelatorioDiario({ filtros }) {
             />
           </div>
 
-          <div className="par-diario">
-            <TabelaFila
-              titulo="AGENDADOS RÁDIO"
-              sub="equipes de campo, protocolos de rádio"
-              bloco={vazio ? null : data.fila.agendadosRadio}
-              vazio={vazio}
-              tom="roxo"
-            />
-            <TabelaFila
-              titulo="BKO RÁDIO"
-              sub="Validação de Dados, protocolos de rádio"
-              bloco={vazio ? null : data.fila.bkoRadio}
-              vazio={vazio}
-              tom="salmao"
-            />
-          </div>
-
-          <div className="cartoes-diario">
-            <CartaoDiario valor={vazio ? '—' : int(data.radio.cartoes.ativos)} rotulo="ATIVOS RÁDIO" />
-            <CartaoDiario valor={vazio ? '—' : int(data.radio.cartoes.projecao)} rotulo="PROJEÇÃO RÁDIO" />
-            <CartaoDiario
-              largo
-              valor={vazio ? '—' : brl(data.radio.cartoes.valor)}
-              rotulo="VALOR INSTALADO RÁDIO"
-            />
-          </div>
         </div>
       </section>
 
