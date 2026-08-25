@@ -159,6 +159,27 @@ function meta() {
       avisos: r.avisos,
       ready: relatoriosPronto(),
     },
+    /**
+     * Como os vendedores casaram com o RH. Fica no meta porque é diagnóstico de
+     * QUALIDADE DE DADO, não número de negócio: `divergentes` são e-mails iguais
+     * com nomes diferentes nas duas bases — conta compartilhada ou erro de cadastro,
+     * e alguém precisa olhar. Sem isso, 'SEM AUXILIAR' herda a admissão de outra
+     * pessoa e entra em Rampagem sem ninguém notar.
+     */
+    juncaoVendedores: (() => {
+      const j = s.juncaoSellers;
+      if (!j) return null;
+      return {
+        porEmail: j.porEmail,
+        porNome: j.porNome,
+        porNomeSemAcento: j.porNomeSemAcento,
+        divergentes: j.divergentes.length,
+        recusados: j.recusados.length,
+        // só os nomes; o e-mail não sai do servidor
+        exemplos: j.divergentes.slice(0, 8),
+        exemplosRecusados: j.recusados.slice(0, 8),
+      };
+    })(),
     refresh: config.refresh,
     since: config.since,
     phoneSince: config.phoneSince,

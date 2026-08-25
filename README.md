@@ -225,6 +225,61 @@ Três decisões que mudam número na tela:
 Quem tem escopo vê um aviso na barra de filtros com as equipes que alcança. Recorte invisível
 faz a pessoa concluir que o número está errado.
 
+### O vendedor encontra o RH pelo e-mail, não pelo nome
+
+O modelo original relacionava `new_sellers` (usuários do Voalle) com o RH do Senior
+**pelo nome**, e nome quebra. `JÉSSICA ARAÚJO TEIXEIRA` no Voalle contra
+`JESSICA ARAUJO TEIXEIRA` no Senior é a mesma pessoa e não casava — ela ficava sem
+admissão, e como o modelo mantém só quem existe no RH, **desaparecia de Rampagem e de
+Premiações sem deixar rastro**. O relatório de origem foi corrigido do mesmo jeito.
+
+As duas consultas passaram a trazer `email`, e a junção tem três tentativas:
+
+| Via | Quantos | Por que existe |
+|---|---|---|
+| e-mail | 477 | chave de verdade |
+| nome exato | 158 | 303 usuários do Voalle e 151 registros do Senior **não têm e-mail** — trocar só para e-mail perderia essas pessoas |
+| nome sem acento | 10 | resolve o caso da Jéssica para quem também não tem e-mail |
+
+O total de vendedores com admissão foi de **602 para 645**.
+
+O e-mail fica no servidor: é chave de junção, não coluna de tela, e não entra em
+nenhuma resposta de API.
+
+#### E-mail igual não é sempre a mesma pessoa
+
+Com o e-mail como chave única, **sete pares** casaram com nome de outra pessoa — conta
+genérica e conta reaproveitada nas duas bases:
+
+```
+SEM AUXILIAR                   -> GUSTAVO LEITE DOS SANTOS
+ISA - AGENTE VIRTUAL SEBRATEL  -> PATRICIA PASTORIZA LOUZADA     (robô)
+LUKAS FRANCISCO MELO CAVALIM   -> IGOR SOARES SCHUMACHER DA SILVA
+ANDRE LUIS DOS SANTOS          -> ANDRE FERNANDO DOS SANTOS
+VANESSA GARCIA DA SILVA        -> VANESSA CUNHA DA SILVA
+CARLOS DAVI RODRIGUES DA SILVA -> CARLOS EDUARDO DA SILVA
+JOAO BATISTA GOMES DE OLIVEIRA -> JOAO VITOR GOMES DA SILVA
+```
+
+`SEM AUXILIAR` chegou a aparecer na tela de Rampagem herdando a admissão do Gustavo —
+um vendedor que não existe, com data de outra pessoa. Então o e-mail só casa quando os
+nomes se reconhecem, em três níveis:
+
+1. **iguais** ignorando acento — o caso da Jéssica;
+2. **um é prefixo do outro** (12 caracteres ou mais) — a coluna `name` do Senior corta
+   em 40 caracteres, e daí vinham três dos pares: `VIANNELLY NAZARETH DE CARMEN RAMIREZ
+   SEIJAS` contra `... RAMIREZ SEI`;
+3. **três quartos dos pedaços** batendo, com tolerância de uma letra por pedaço.
+
+O limite de 3/4 foi **medido, não escolhido**: com 1/2 passavam quatro impostores que
+compartilham primeiro nome e último sobrenome (`ANDRE LUIS DOS SANTOS` contra `ANDRE
+FERNANDO DOS SANTOS`, 2 de 3). Com 3/4 eles caem e continuam passando
+`DARWIN JOSE BAIRROS RODRIGUES` / `BARRIOS RODRIGUEZ` (3 de 4) e
+`LUCIANO TELLES VIEIRA` / `VIERA` (3 de 3).
+
+Os dois grupos ficam contados em `GET /api/meta` (`juncaoVendedores`), com nome e sem
+e-mail: os sete recusados são erro de cadastro numa das bases, e alguém precisa olhar.
+
 ### Janela de dados
 
 O recorte histórico da carga fica em **Configurações → Janela de dados** (só admin). Ele

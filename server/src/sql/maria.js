@@ -38,11 +38,19 @@ export const GENERAL_COMMERCIAL_SQL = `
   WHERE gc.\`DATA CRIAÇÃO CONTRATO\` >= ?
 `;
 
-// tabela "senior_admitted" -> colaboradores ativos no Senior (RH)
+/**
+ * tabela "senior_admitted" -> colaboradores ativos no Senior (RH)
+ *
+ * O `email` é a chave de junção com os usuários do Voalle. Ver o cabeçalho de
+ * `sellers.sql`: o relacionamento por nome perdia quem tivesse acento grafado
+ * diferente nas duas bases, e a pessoa ficava sem admissão — logo, fora de Rampagem
+ * e de Premiações, que são exatamente as telas que dependem dela.
+ */
 export const SENIOR_SQL = `
-  SELECT dsc.name           AS seller,
-         dsc.admission_date AS admission_date,
-         dsc.position       AS position
+  SELECT dsc.name             AS seller,
+         lower(trim(dsc.email)) AS email,
+         dsc.admission_date   AS admission_date,
+         dsc.position         AS position
   FROM API_WebDeveloper.db_senior_collaborators AS dsc
   WHERE dsc.termination_date IS NULL
 `;
