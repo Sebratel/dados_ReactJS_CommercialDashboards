@@ -274,6 +274,191 @@ começa em janeiro vira janeiro–hoje, o atalho deixa de ficar aceso e o resumo
 reais. Pedir 2023 numa tela carregada desde 2026 devolvia zero linhas e parecia dado faltando —
 o número certo para uma pergunta que os dados em memória não podem responder.
 
+## Relatórios Comercial: o quinto relatório, e o único de consulta
+
+O `.pbip` **COM - Relatórios Comercial** é o maior dos cinco: 8 páginas e 189 visuais.
+Ele também é o único que não responde "como estamos" — responde "onde está aquele
+contrato", "o que tem naquela cesta", "quem está na fila de instalação". Por isso a
+densidade aqui é de tabela, não de gráfico: nas 189 caixas da origem há 15 gráficos e
+mais de 20 tabelas.
+
+A CAPA de lá é navegação e cartão de "atualizado em", que o dashboard já tem. Sobram
+**sete sub-páginas** numa entrada de menu (`?rpag=`), pelo mesmo motivo de Leads: a
+navegação principal já tem 14 itens.
+
+### O que veio de graça, e o que era novo
+
+`general`, `payments`, `alocattion_activations` e `phone_activation` são exatamente as
+consultas que `base.sql`, `pagto.sql`, `aloc.sql` e `phone.sql` já replicam. E as
+tabelas ATIVOS, CADASTRO, PRIMEIRO PAGAMENTO e TECNOLOGIA são projeções DAX de
+`general` — `SELECTCOLUMNS`, sem SQL próprio. Quatro consultas novas, então:
+
+| Consulta | Grão | Linhas medidas | Recorte |
+|---|---|---|---|
+| `cesta.sql` | item de contrato | 219.871 | Janela de dados |
+| `cancelamento.sql` | atendimento com pesquisa | 5.535 → 60.458 respostas | Janela de dados |
+| `backlog.sql` | protocolo de instalação em aberto | ~170 | **nenhum**, de propósito |
+| `contratos_base.sql` | contrato com ponto de autenticação | 54.642 | Janela de dados |
+
+O `backlog` não tem recorte pela mesma razão dos condomínios: fila em aberto é retrato
+do agora, e um protocolo de 2019 que nunca foi instalado é exatamente o que se quer
+ver. Cortar por data o esconderia e faria a fila parecer menor do que é.
+
+### A ponte histórica, e por que o total é MENOR que o do Power BI
+
+O `general` deste relatório não é só Voalle: ele faz `Table.Combine` com a tabela
+`General_Commercial` do MariaDB — 55.198 linhas de venda registrada fora do Voalle,
+entre 2022 e 2024.
+
+Medido no banco, no recorte de 2024: a tabela traz 26.218 linhas, e **25.805 delas
+(98,4%) são o mesmo cliente na mesma data que o Voalle já tem**. Ela não é fonte
+paralela de venda; é ponte de uma época, e 2024 está coberto pelos dois lados.
+
+As três leituras possíveis, todas medidas:
+
+| Leitura | Contratos em 2024 |
+|---|---|
+| A — não anexar nada | 120.822 |
+| **B — anexar só o que o Voalle não tem** | **121.266** (+444) |
+| C — literal da origem | 145.838 (+25.016) |
+
+A origem faz (C): anexa e depois aplica `Table.Distinct` por cliente+contrato. Como as
+linhas da ponte não têm contrato, cada cliente sobrevive como **uma linha de contrato
+vazio** — 25.016 linhas que duplicam venda já contada, 21% de inflação. Aqui fazemos
+(B). A consequência é direta e esperada: **esta tela mostra total menor que o Power BI,
+e é o número menor que está certo.**
+
+As linhas da ponte entram marcadas, e a tabela da aba Geral tem uma coluna ORIGEM. Sem
+ela, a célula vazia de contrato e bairro pareceria defeito de carga. Elas também só
+entram depois que a base do Voalle carregou — a consulta do MariaDB leva 2 s e a do
+Voalle 40 s, e sem essa espera o modelo mostrava 26 mil contratos fantasmas por um
+minuto e meio, porque não havia com o que comparar.
+
+### Duas divergências internas da própria origem
+
+**A fila de instalação não fecha com ela mesma.** A lista de equipes da consulta
+agregada (`backlog`) inclui `Equipe Field Service` e a do detalhe (`Consulta1`) não. São
+cerca de 100 de 170 protocolos: na mesma página, o total diz 170 e a tabela lista 70. O
+SQL marca as duas bases na coluna `no_detalhe`, cada visual usa a que a origem usava, e
+a tela diz o número que está fora.
+
+**A pesquisa de cancelamento conta Sim e Não incluindo os vazios.** As três medidas de
+lá (`Qtd Sim2`, `Qtd Não2`, `Qtd Vazio2`) são todas
+`CALCULATE(DISTINCTCOUNT(Protocolo), ISBLANK(valor) || valor = "<X>")`. O `||` soma os
+vazios nas três colunas, e como 90% das respostas são vazias, "Sim" e "Não" mostram
+quase o mesmo número enorme — nenhuma das duas responde à pergunta. É erro de cópia.
+Aqui cada resposta conta só na própria coluna, e a de vazios fica ao lado para conferir
+que a soma fecha com o total de protocolos.
+
+### O que substituiu a planilha do Google
+
+O modelo de origem lia **equipes** e **feriados** de uma planilha. Equipes já vinham do
+`Comercial_Teams`; os feriados agora são **calculados**, móveis inclusive — a Páscoa
+sai pelo algoritmo gregoriano anônimo (Meeus/Jones/Butcher), conferida contra 2024 a
+2027, e Carnaval, Sexta-feira Santa e Corpus Christi derivam dela. Nacionais e o
+estadual do RS nunca precisam de manutenção.
+
+Os **municipais não são semeados de propósito**: aniversário de cidade muda por
+município, e chutar uma data seria pior que não ter, porque o número sairia errado com
+cara de certo. O admin cadastra em **Configurações → Feriados**, e pode marcar um
+calculado como dia normal.
+
+Isso não é detalhe de cadastro. Feriado é dia produtivo a menos, que é meta por dia
+maior, que é projeção diferente — uma data errada ali move todos os números do
+Relatório Diário.
+
+### A régua de dias do Relatório Diário
+
+Sábado vale **meio** dia, domingo zero, feriado zero — a régua da origem.
+
+```
+meta/dia  = meta      ÷ dias PRODUTIVOS   (o mês inteiro, porque é alvo)
+média/dia = realizado ÷ dias ÚTEIS        (só o que já passou, até ontem)
+projeção  = média/dia × dias produtivos
+```
+
+Os dois divisores são diferentes de propósito: é isso que faz a projeção significar
+algo — ela pega o ritmo do que já aconteceu e estende pelo mês todo. Os dias úteis param
+em ontem porque incluir o dia corrente, ainda em andamento, derrubaria a média toda
+manhã.
+
+### Metas editáveis, e duas séries conflitantes
+
+As metas por cidade eram constantes dentro de medidas DAX. Agora vivem no volume de
+dados com tela de administração, no mesmo padrão de `janela.json`.
+
+O modelo de origem tem **dois conjuntos conflitantes** de meta de ativação:
+
+| Cidade | `# ATIVOS_META` | `## ATIVOS_META_BASE` |
+|---|---|---|
+| Canoas | 1100 | 898 |
+| São Leopoldo | 600 | 598 |
+| Novo Hamburgo | 650 | 498 |
+| Sapucaia do Sul | 400 | 349 |
+| Esteio | 250 | 149 |
+| Cachoeirinha | (não existe) | 498 |
+
+A semente é o segundo, que é o que as tabelas da tela usam — e também o único que soma
+corretamente com mais de uma cidade marcada: o primeiro usa `SELECTEDVALUE` e devolve
+**zero** quando há duas cidades selecionadas. A tela de administração mostra o conjunto
+alternativo no rodapé, para quem precisar comparar.
+
+### Clima: a única fonte que não é banco nosso
+
+A página CLIMA/TEMPO busca chuva na **Open-Meteo**: dois endpoints públicos, sem chave
+e sem cadastro. Só latitude e longitude saem daqui; nenhum dado nosso viaja. São as
+sete cidades do relatório de origem, com as coordenadas de lá.
+
+Uma busca por dia, guardada em disco. Chuva de ontem não muda, e a previsão de hoje não
+melhora se pedirmos de dez em dez minutos. Falha aqui **não derruba tela**: a matriz diz
+que a busca falhou, o que estava em cache continua servindo, e o resto do Relatório
+Diário não depende dela.
+
+O histórico começa em 1º de janeiro do **ano corrente**. Na origem é a constante
+`'2026-01-01'`, que envelhece — em 2027 aquele relatório continuaria trazendo 2026.
+
+Os emojis da origem (☀️ ⛅ 🌧️ ⛈️) viraram classificação em texto mais ícone SVG: emoji
+muda de desenho por sistema operacional e desalinha a linha da tabela.
+
+### Limite de concorrência no ETL
+
+Com o quarto modelo, a carga inicial passou a ter **13 consultas para um pool de 5
+conexões**, e quebrou de duas maneiras ao mesmo tempo: as que ficaram na fila estouraram
+o tempo de espera por conexão, e as que passaram competiram por I/O no banco e
+estouraram o `statement_timeout` — a consulta de ativações, que sozinha leva 31 s, foi a
+130 s. Seis fontes falhando por carga.
+
+Aumentar os timeouts de novo só empurraria o problema; o gargalo é o banco de produção,
+que é compartilhado. **Limitar a três consultas simultâneas** (`config.voalle.max - 2`)
+não só zerou as falhas — deixou tudo mais rápido, porque o banco parou de competir
+consigo mesmo:
+
+| Consulta | Antes | Depois |
+|---|---|---|
+| `base` | 77 s | 39 s |
+| `cesta` | 88 s | 34 s |
+| `ponte` (MariaDB) | 53 s | 2,4 s |
+
+O limite também protege os ciclos agendados: `full` (30 min) e `rel` (15 min) coincidem
+de hora em hora.
+
+> **Tentei e não paguei.** Internar as strings repetidas da cesta (220 mil linhas com
+> vocabulário pequeno em seis colunas) para reduzir memória. O residente ficou em
+> 1.178 MB contra 1.161 MB — o custo não são as strings repetidas, é o overhead de 335
+> mil objetos. Revertido. Se a memória precisar cair, o caminho é não manter a cesta
+> inteira em memória, não economizar string.
+
+### Leitura por IA
+
+Nove visuais registrados, e a aba **Geral fica de fora** — as três tabelas dela são
+detalhe de cliente, com nome, endereço e contrato. Mesma regra do detalhe de condomínios
+e de leads: o que sobe para a IA é agregado, nunca a linha da pessoa.
+
+Os `oQueE` de cada visual carregam as advertências: que "não ativado" não é
+cancelamento, que a base de clientes é estoque acumulado e não fluxo, e que as colunas
+Sim/Não da pesquisa divergem do Power BI de propósito. Sem isso a IA leria o número e
+repetiria a interpretação errada com confiança.
+
 ### Expiração da sessão
 
 O token do Google dura cerca de uma hora. A sessão se renova **sozinha cinco minutos antes
@@ -832,6 +1017,9 @@ banner da tela diz o número: recorte invisível gera chamado.
 | `POST /api/preditivo/insights` | leitura da IA sobre os indicadores |
 | `GET/PUT/DELETE /api/ia` · `POST /api/ia/modelos` · `POST /api/ia/testar` | provedor de IA (admin) |
 | `GET/PUT /api/janela` · `POST /api/janela/restaurar` | recorte histórico da carga (admin) |
+| `GET /api/relatorios/{geral,resumo,equipes,diario,base,pesquisa,clima}` | as sete sub-páginas de Relatórios Comercial |
+| `GET/PUT /api/metas` · `POST /api/metas/restaurar` | metas por cidade (admin) |
+| `GET/PUT /api/feriados` · `POST /api/feriados/restaurar` | cadastro de feriados (admin) |
 | `GET /api/insights/visuais` · `POST /api/insights/visual/:id` | leitura de IA de um gráfico |
 
 Todos aceitam os filtros: `de`, `ate`, `vendedor`, `equipe`, `tecnologia`, `situacao`,

@@ -46,8 +46,29 @@ export const LISTAS_NEGOCIACAO = [
   'nvendedor', 'nequipe', 'nstatus', 'nfase', 'ntipo', 'norigem', 'nforma', 'nregiao',
 ];
 
+/**
+ * Seletores das sete sub-paginas de Relatorios Comercial. Cada aba tem os seus, com
+ * prefixo proprio, pelo mesmo motivo das outras: a base de cada uma e diferente. Em
+ * GERAL o periodo e a criacao do contrato; no RELATORIO DIARIO ele recorta venda E
+ * ativacao ao mesmo tempo; em CLIENTES BASE e a entrada do cliente na base; na
+ * PESQUISA e a abertura do atendimento de cancelamento.
+ */
+export const LISTAS_REL_GERAL = [
+  'rcidade', 'rbairro', 'rvend', 'requipe', 'rsit', 'rstatus', 'rtec', 'rserv', 'retiq', 'ritem',
+];
+export const LISTAS_REL_RESUMO = [
+  'vcidade', 'vvend', 'vequipe', 'vsit', 'vstatus', 'vtec', 'vtipo',
+];
+export const LISTAS_REL_EQUIPES = ['qvend', 'qequipe', 'qsit', 'qtec'];
+export const LISTAS_REL_DIARIO = ['dcidade', 'dequipe', 'dsit', 'dtec', 'dtipo'];
+export const LISTAS_REL_BASE = ['bcidade', 'bbairro', 'btec'];
+export const LISTAS_REL_PESQUISA = ['pcidade', 'petiq', 'pstatus', 'pperg', 'presp'];
+export const LISTAS_REL_CLIMA = ['ccidade'];
+
 const TODAS_AS_LISTAS = [
   ...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO, ...LISTAS_DESEMPENHO,
+  ...LISTAS_REL_GERAL, ...LISTAS_REL_RESUMO, ...LISTAS_REL_EQUIPES, ...LISTAS_REL_DIARIO,
+  ...LISTAS_REL_BASE, ...LISTAS_REL_PESQUISA, ...LISTAS_REL_CLIMA,
 ];
 
 /** período padrão ao abrir o dashboard (equivale ao slicer Ano do Power BI) */
@@ -102,6 +123,36 @@ export function FiltersProvider({ children }) {
       buscaDes: params.get('buscaDes') || '',
       // sub-página da tela de Leads (o relatório tem quatro)
       lpag: params.get('lpag') || '',
+
+      // --- Relatórios Comercial: um par de datas por sub-página ---------------
+      // GERAL: criação do contrato. Sem padrão — é tela de consulta, e um recorte
+      // automático faria o contrato procurado "não existir".
+      relDe: params.get('relDe') || '',
+      relAte: params.get('relAte') || '',
+      buscaRel: params.get('buscaRel') || '',
+      // RESUMO - VENDAS: criação do contrato, com granularidade própria
+      resDe: params.get('resDe') || '',
+      resAte: params.get('resAte') || '',
+      resG: params.get('resG') === 'dia' ? 'dia' : 'mes',
+      // QUADRO EQUIPES: recorta as três datas do quadro (venda, ativação, pagamento)
+      eqpDe: params.get('eqpDe') || '',
+      eqpAte: params.get('eqpAte') || '',
+      eqpAtivo: params.get('eqpAtivo') === '1' ? '1' : '',
+      // RELATÓRIO DIÁRIO: sem padrão na URL porque o padrão é o MÊS CORRENTE, e ele
+      // é resolvido no servidor — assim o mês vira sozinho à meia-noite, sem link
+      // compartilhado apontando para um mês velho.
+      diaDe: params.get('diaDe') || '',
+      diaAte: params.get('diaAte') || '',
+      // CLIENTES BASE: entrada do cliente na base
+      baseDe: params.get('baseDe') || '',
+      baseAte: params.get('baseAte') || '',
+      buscaBase: params.get('buscaBase') || '',
+      // PESQUISA CANCELAMENTO: abertura do atendimento
+      pesqDe: params.get('pesqDe') || '',
+      pesqAte: params.get('pesqAte') || '',
+      buscaPesq: params.get('buscaPesq') || '',
+      // sub-página da tela de Relatórios (o relatório tem sete de dados)
+      rpag: params.get('rpag') || '',
     };
     for (const k of TODAS_AS_LISTAS) {
       const v = params.get(k);
@@ -137,7 +188,24 @@ export function FiltersProvider({ children }) {
     }, { replace: true });
   }, [setParams]);
 
-  const limpar = useCallback(() => {
+  /**
+   * Limpa filtros.
+   *
+   * Sem argumento, volta tudo ao estado inicial — é o que as barras antigas fazem.
+   * Com uma lista de campos, apaga SÓ aqueles e não toca no resto da URL. A lista é
+   * necessária nas telas com sub-navegação: a versão sem argumento reescreve a URL
+   * inteira, o que apagava também o campo da sub-página e devolvia o usuário para a
+   * primeira aba ao limpar os filtros da quarta.
+   */
+  const limpar = useCallback((campos = null) => {
+    if (Array.isArray(campos) && campos.length) {
+      setParams((prev) => {
+        const p = new URLSearchParams(prev);
+        for (const k of campos) p.delete(k);
+        return p;
+      }, { replace: true });
+      return;
+    }
     const inicial = PRESETS.find((p) => p.id === PADRAO).calc();
     setParams((prev) => new URLSearchParams({
       de: inicial.de,

@@ -80,6 +80,67 @@ export function buildQuery(filtros = {}) {
    * do banner vem do lado do cliente.
    */
   add('por', filtros.por);
+
+  // --- Relatorios Comercial: sete abas, cada uma com o seu prefixo -----------
+  // GERAL
+  add('rde', filtros.relDe);
+  add('rate', filtros.relAte);
+  add('rcidade', filtros.rcidade);
+  add('rbairro', filtros.rbairro);
+  add('rvend', filtros.rvend);
+  add('requipe', filtros.requipe);
+  add('rsit', filtros.rsit);
+  add('rstatus', filtros.rstatus);
+  add('rtec', filtros.rtec);
+  add('rserv', filtros.rserv);
+  add('retiq', filtros.retiq);
+  add('ritem', filtros.ritem);
+  add('rbusca', filtros.buscaRel);
+  // RESUMO - VENDAS
+  add('vde', filtros.resDe);
+  add('vate', filtros.resAte);
+  add('vcidade', filtros.vcidade);
+  add('vvend', filtros.vvend);
+  add('vequipe', filtros.vequipe);
+  add('vsit', filtros.vsit);
+  add('vstatus', filtros.vstatus);
+  add('vtec', filtros.vtec);
+  add('vtipo', filtros.vtipo);
+  add('vg', filtros.resG);
+  // QUADRO EQUIPES
+  add('qde', filtros.eqpDe);
+  add('qate', filtros.eqpAte);
+  add('qvend', filtros.qvend);
+  add('qequipe', filtros.qequipe);
+  add('qsit', filtros.qsit);
+  add('qtec', filtros.qtec);
+  add('qativo', filtros.eqpAtivo);
+  // RELATORIO DIARIO
+  add('dde', filtros.diaDe);
+  add('date', filtros.diaAte);
+  add('dcidade', filtros.dcidade);
+  add('dequipe', filtros.dequipe);
+  add('dsit', filtros.dsit);
+  add('dtec', filtros.dtec);
+  add('dtipo', filtros.dtipo);
+  // CLIENTES BASE
+  add('bde', filtros.baseDe);
+  add('bate', filtros.baseAte);
+  add('bcidade', filtros.bcidade);
+  add('bbairro', filtros.bbairro);
+  add('btec', filtros.btec);
+  add('bbusca', filtros.buscaBase);
+  // PESQUISA CANCELAMENTO
+  add('pde', filtros.pesqDe);
+  add('pate', filtros.pesqAte);
+  add('pcidade', filtros.pcidade);
+  add('petiq', filtros.petiq);
+  add('pstatus', filtros.pstatus);
+  add('pperg', filtros.pperg);
+  add('presp', filtros.presp);
+  add('pbusca', filtros.buscaPesq);
+  // CLIMA
+  add('ccidade', filtros.ccidade);
   return p.toString();
 }
 
@@ -211,6 +272,27 @@ export function useFiltrosNegociacoes() {
 }
 
 /** Opções dos seletores das sub-páginas de desempenho. */
+/**
+ * Opcoes dos seletores de cada aba de Relatorios. Sete endpoints em vez de um
+ * porque as dimensoes nao se cruzam: a cesta tem servico e etiqueta, a base tem
+ * bairro e ponto de acesso, a pesquisa tem pergunta e resposta.
+ */
+const filtrosDeAba = (aba) => function useFiltrosAba() {
+  return useQuery({
+    queryKey: [`/relatorios/${aba}/filtros`],
+    queryFn: () => apiGet(`/relatorios/${aba}/filtros`),
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+export const useFiltrosRelGeral = filtrosDeAba('geral');
+export const useFiltrosRelResumo = filtrosDeAba('resumo');
+export const useFiltrosRelEquipes = filtrosDeAba('equipes');
+export const useFiltrosRelDiario = filtrosDeAba('diario');
+export const useFiltrosRelBase = filtrosDeAba('base');
+export const useFiltrosRelPesquisa = filtrosDeAba('pesquisa');
+export const useFiltrosRelClima = filtrosDeAba('clima');
+
 export function useFiltrosDesempenho() {
   return useQuery({
     queryKey: ['/desempenho/filtros'],

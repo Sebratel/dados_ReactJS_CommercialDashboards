@@ -18,6 +18,11 @@ import {
   painelDesempenho, painelLeads, painelNegociacoes, parseFiltrosDesempenho,
   parseFiltrosLeads, parseFiltrosNegociacoes,
 } from '../model/leads.js';
+import {
+  painelBase, painelDiario, painelEquipes, painelPesquisa, painelResumo,
+  parseFiltrosBase, parseFiltrosDiario, parseFiltrosEquipes, parseFiltrosPesquisa,
+  parseFiltrosResumo,
+} from '../model/relatorios.js';
 
 /**
  * De qual MODELO o visual vem.
@@ -71,6 +76,72 @@ const MODELOS = {
       flt.pontoAcesso?.length && `pontos de acesso: ${flt.pontoAcesso.join(', ')}`,
       flt.site?.length && `sites: ${flt.site.join(', ')}`,
       flt.splitter?.length && `splitters: ${flt.splitter.join(', ')}`,
+    ],
+  },
+  relResumo: {
+    parse: (q) => ({ flt: parseFiltrosResumo(q) }),
+    montar: (visual, ctx) => painelResumo(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período pela CRIAÇÃO DO CONTRATO: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período: entram todos os contratos carregados.'),
+    recortes: ({ flt }) => [
+      flt.cidades?.length && `cidades: ${flt.cidades.join(', ')}`,
+      flt.vendedores?.length && `vendedores: ${flt.vendedores.join(', ')}`,
+      flt.equipes?.length && `equipes: ${flt.equipes.join(', ')}`,
+      flt.tecnologias?.length && `tecnologias: ${flt.tecnologias.join(', ')}`,
+      flt.status?.length && `status de contrato: ${flt.status.join(', ')}`,
+      flt.tipos?.length && `tipos de solicitação: ${flt.tipos.join(', ')}`,
+    ],
+  },
+  relEquipes: {
+    parse: (q) => ({ flt: parseFiltrosEquipes(q) }),
+    montar: (visual, ctx) => painelEquipes(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período de ${flt.de || 'início'} a ${flt.ate || 'hoje'}, aplicado às TRÊS datas do quadro (venda, ativação e primeiro pagamento) de forma independente — por isso as colunas não fecham entre si.`
+      : 'Sem filtro de período.'),
+    recortes: ({ flt }) => [
+      flt.vendedores?.length && `vendedores: ${flt.vendedores.join(', ')}`,
+      flt.equipes?.length && `equipes: ${flt.equipes.join(', ')}`,
+      flt.tecnologias?.length && `tecnologias: ${flt.tecnologias.join(', ')}`,
+      flt.somenteAtivos && 'somente vendedor marcado como ativo',
+    ],
+  },
+  relDiario: {
+    parse: (q) => ({ flt: parseFiltrosDiario(q) }),
+    montar: (visual, ctx) => painelDiario(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Mês de ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro: a tela usa o MÊS CORRENTE por padrão.'),
+    recortes: ({ flt }) => [
+      flt.cidades?.length && `cidades: ${flt.cidades.join(', ')}`,
+      flt.equipes?.length && `equipes: ${flt.equipes.join(', ')}`,
+      flt.tecnologias?.length && `tecnologias: ${flt.tecnologias.join(', ')}`,
+      flt.tipos?.length && `tipos de solicitação: ${flt.tipos.join(', ')}`,
+    ],
+  },
+  relBase: {
+    parse: (q) => ({ flt: parseFiltrosBase(q) }),
+    montar: (visual, ctx) => painelBase(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período pela ENTRADA DO CLIENTE NA BASE: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período.'),
+    recortes: ({ flt }) => [
+      flt.cidades?.length && `cidades: ${flt.cidades.join(', ')}`,
+      flt.bairros?.length && `bairros: ${flt.bairros.join(', ')}`,
+      flt.tecnologias?.length && `tecnologias: ${flt.tecnologias.join(', ')}`,
+    ],
+  },
+  relPesquisa: {
+    parse: (q) => ({ flt: parseFiltrosPesquisa(q) }),
+    montar: (visual, ctx) => painelPesquisa(ctx.flt),
+    periodo: ({ flt }) => (flt.de || flt.ate
+      ? `Período pela ABERTURA DO ATENDIMENTO: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
+      : 'Sem filtro de período.'),
+    recortes: ({ flt }) => [
+      flt.cidades?.length && `cidades: ${flt.cidades.join(', ')}`,
+      flt.status?.length && `status do atendimento: ${flt.status.join(', ')}`,
+      flt.perguntas?.length && `perguntas: ${flt.perguntas.join(', ')}`,
+      flt.respostas?.length && `respostas: ${flt.respostas.join(', ')}`,
     ],
   },
   desempenho: {
@@ -636,6 +707,112 @@ export const VISUAIS = {
       totalPorEstado: p.matrizVendedor?.totalPorColuna,
       vendedores: topo(p.matrizVendedor?.linhas, 40),
       leadsSemDono: p.semDono,
+    }),
+  },
+
+  // ------------------------------------------------- relatórios comercial
+  // A aba GERAL não entra: as três tabelas dela são detalhe de cliente, com nome,
+  // endereço e contrato. Mesma regra do detalhe de condomínios e de leads — o que
+  // sobe para a IA é agregado, nunca a linha da pessoa.
+  'relatorios:resumo': {
+    tela: 'relatorios',
+    modelo: 'relResumo',
+    titulo: 'Contratos criados por período',
+    oQueE: 'Série de contratos criados no período, agrupada por mês ou por dia. É a mesma medida das duas quebras ao lado, e por isso os totais fecham entre si.',
+    recorte: (p) => ({
+      cartoes: p.cartoes,
+      granularidade: p.granularidade,
+      serie: serieEnxuta((p.total?.periodos || []).map((per, i) => ({
+        periodo: per, total: p.total.series[0]?.pontos[i],
+      }))),
+    }),
+  },
+  'relatorios:resumo-tecnologia': {
+    tela: 'relatorios',
+    modelo: 'relResumo',
+    titulo: 'Contratos por tecnologia',
+    oQueE: 'A mesma contagem de contratos, quebrada por tecnologia (fibra, rádio, telefonia).',
+    recorte: (p) => ({
+      cartoes: p.cartoes,
+      periodos: topo(p.porTecnologia?.periodos, 40),
+      series: p.porTecnologia?.series,
+    }),
+  },
+  'relatorios:resumo-cidade': {
+    tela: 'relatorios',
+    modelo: 'relResumo',
+    titulo: 'Contratos por cidade',
+    oQueE: 'A mesma contagem de contratos, quebrada pelas cidades de maior volume; o resto vem agrupado em "Outros".',
+    recorte: (p) => ({
+      cartoes: p.cartoes,
+      periodos: topo(p.porCidade?.periodos, 40),
+      series: p.porCidade?.series,
+    }),
+  },
+  'relatorios:equipes': {
+    tela: 'relatorios',
+    modelo: 'relEquipes',
+    titulo: 'Quadro por vendedor',
+    oQueE: 'Cadastro, ativação e primeiro pagamento de cada vendedor no período, com a coluna NÃO ATIVADO — que é (cadastros menos ativações) dividido por cadastros, a medida %CHURN da origem. NÃO é cancelamento: é venda que ainda não instalou, e em período recente ela é naturalmente alta porque a instalação vem depois da venda.',
+    recorte: (p) => ({ totais: p.totais, vendedores: topo(p.linhas, 40) }),
+  },
+  'relatorios:diario-vendas': {
+    tela: 'relatorios',
+    modelo: 'relDiario',
+    titulo: 'Vendas contra a meta, por cidade',
+    oQueE: 'Meta, realizado, projeção e as duas médias diárias de VENDA por cidade. A meta por dia divide por dias produtivos (o mês inteiro, porque é alvo); a média por dia divide por dias úteis já decorridos. Sábado vale meio dia, domingo e feriado zero.',
+    recorte: (p) => ({
+      periodo: p.periodo, dias: p.dias, linhas: p.vendas?.linhas,
+      total: p.vendas?.total, radio: p.vendasRadio, origemDaMeta: p.metasOrigem,
+    }),
+  },
+  'relatorios:diario-ativos': {
+    tela: 'relatorios',
+    modelo: 'relDiario',
+    titulo: 'Ativações contra a meta, por cidade',
+    oQueE: 'O mesmo quadro para ATIVAÇÃO. Conta pela data de ativação, não pela da venda — por isso não fecha com a tabela de vendas, e isso é proposital.',
+    recorte: (p) => ({
+      periodo: p.periodo, dias: p.dias, linhas: p.ativos?.linhas,
+      total: p.ativos?.total, radio: p.ativosRadio, origemDaMeta: p.metasOrigem,
+    }),
+  },
+  'relatorios:diario-fila': {
+    tela: 'relatorios',
+    modelo: 'relDiario',
+    titulo: 'Fila de instalação por cidade',
+    oQueE: 'Instalações de fibra e rádio em aberto, com equipamento ainda em estoque. Não respeita o período: fila em aberto é retrato do agora. `ocultaNoDetalhe` é uma divergência da origem — protocolos da equipe Field Service que os totais contam e a tabela de detalhe não.',
+    recorte: (p) => ({
+      fibra: p.fila?.fibra,
+      radio: p.fila?.radio,
+      ocultaNoDetalhe: p.fila?.oculta,
+      chuvaForteNoPeriodo: (p.clima?.celulas || [])
+        .reduce((a, l) => a + l.dias.filter((d) => d?.classificacao === 'Forte').length, 0),
+    }),
+  },
+  'relatorios:base-cidade': {
+    tela: 'relatorios',
+    modelo: 'relBase',
+    titulo: 'Base acumulada de clientes',
+    oQueE: 'Tamanho da base de clientes conectados ao longo do tempo, por cidade. É ESTOQUE ACUMULADO, não entrada do período: cada ponto é a base inteira até aquela data, e é por isso que a curva só sobe.',
+    recorte: (p) => ({
+      cartoes: p.cartoes,
+      datas: topo(p.porCidade?.datas, 40),
+      porCidade: (p.porCidade?.celulas || []).map((c) => ({
+        nome: c.nome, baseNoFim: c.pontos[c.pontos.length - 1],
+      })),
+      tecnologia: p.porTecnologia?.linhas,
+    }),
+  },
+  'relatorios:pesquisa': {
+    tela: 'relatorios',
+    modelo: 'relPesquisa',
+    titulo: 'Pesquisa de cancelamento por pergunta',
+    oQueE: 'Sim, Não e em branco de cada pergunta do questionário aplicado no cancelamento, contando protocolo distinto. ATENÇÃO ao comparar com o Power BI: lá as três medidas incluem os vazios por erro de cópia na fórmula, e por isso as colunas Sim e Não mostram quase o mesmo número enorme. Aqui cada resposta conta só na própria coluna.',
+    recorte: (p) => ({
+      cartoes: p.cartoes,
+      perguntas: p.perguntas,
+      porMotivo: topo(p.porMotivo, 12),
+      porCidade: topo(p.porCidade, 12),
     }),
   },
 };

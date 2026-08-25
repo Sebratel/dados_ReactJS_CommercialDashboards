@@ -362,6 +362,22 @@ export const COR_STATUS = {
  * "amarelo é PAP" leria o gráfico errado. Acima de 6 séries o servidor dobra a
  * cauda em "Outros", que sai sempre no cinza neutro.
  */
+/**
+ * Faixas de chuva -> icone e cor, usadas pela matriz do Relatorio Diario e pela aba
+ * de Clima. Vive aqui, e nao em cada tela, porque duas telas mostrando a mesma
+ * classificacao com cores diferentes seria pior que nao ter cor.
+ *
+ * A escala e de MAGNITUDE (um so tom, claro para escuro), nao de identidade: chuva
+ * forte nao e "outra categoria" de chuva, e mais chuva.
+ */
+export const CHUVA = {
+  'Sem chuva': { icone: 'sol', cor: '#D9B300', rotulo: 'Sem chuva', faixa: 'exatamente 0 mm no dia' },
+  Fraca: { icone: 'nuvem', cor: '#9AA5AD', rotulo: 'Chuva fraca', faixa: 'acima de 0 e abaixo de 5 mm' },
+  Moderada: { icone: 'chuva', cor: '#5B8DB8', rotulo: 'Chuva moderada', faixa: 'de 5 a menos de 20 mm' },
+  Forte: { icone: 'chuva', cor: '#2E5F8A', rotulo: 'Chuva forte', faixa: '20 mm ou mais' },
+  'Sem medida': { icone: 'interrogacao', cor: '#C8C6C4', rotulo: 'Sem medida', faixa: 'a fonte nao devolveu valor' },
+};
+
 export const PALETA_CATEGORIAS = [
   CORES.gold, CORES.orange, CORES.primary, CORES.goldSoft, CORES.ink, CORES.orangeSoft,
 ];

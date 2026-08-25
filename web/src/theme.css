@@ -419,6 +419,34 @@ body {
 .pop-periodo .presets button:hover { border-color: var(--pbi-primary); color: var(--pbi-primary); }
 .pop-periodo .presets button.on { background: var(--pbi-primary); border-color: var(--pbi-primary); color: #fff; }
 /* limite da janela de dados, dentro do popover de período */
+/* --- Relatorios Comercial ------------------------------------------------- */
+/* Marca de "somente ativo" na barra de filtros: nao e seletor de lista, e uma
+   chave. Mesmo peso visual dos filtros ao lado, para nao parecer decoracao. */
+.filtros .filtro-marca,
+.filtro-marca {
+  display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
+  border: 1px solid var(--pbi-borda); border-radius: 7px; background: #fff;
+  font-size: 11.5px; color: var(--pbi-ink); cursor: pointer; white-space: nowrap;
+}
+.filtro-marca:hover { border-color: var(--pbi-primary); }
+.filtro-marca input { accent-color: var(--pbi-primary); cursor: pointer; }
+
+/* Aviso de recorte acima do conteudo. Recorte invisivel gera chamado: quando a
+   tela mostra menos (ou diferente) do que a origem, ela diz isso aqui. */
+.aviso-recorte {
+  display: flex; align-items: center; gap: 7px; margin: 0 0 var(--gap);
+  padding: 7px 11px; border-radius: 7px;
+  background: var(--pbi-gold-200); border: 1px solid var(--pbi-gold-600);
+  font-size: 11.5px; color: var(--pbi-ink); line-height: 1.45;
+}
+.aviso-recorte svg { flex: none; color: var(--pbi-gold-600); }
+
+/* Legenda das faixas de chuva, na aba de clima. */
+.legenda-clima { list-style: none; margin: 0; padding: 4px 2px; display: grid; gap: 7px; }
+.legenda-clima li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.legenda-clima b { min-width: 118px; font-weight: 600; }
+.legenda-clima span { color: var(--pbi-muted); }
+
 .pop-limite {
   font-size: 11px; color: var(--pbi-muted); border-top: 1px solid var(--pbi-borda);
   padding-top: 7px;

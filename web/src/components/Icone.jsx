@@ -24,6 +24,12 @@ const CAMINHOS = {
   baixar: <><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M4 20h16" /></>,
   ia: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><rect x="6.5" y="6.5" width="11" height="11" rx="2.5" /><circle cx="12" cy="12" r="2" /></>,
   planilha: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18" /></>,
+  // Clima. Existem porque o relatório de origem usa emoji (☀️ ⛅ 🌧️ ⛈️) na célula
+  // da matriz, e emoji muda de desenho por sistema operacional e desalinha a linha.
+  sol: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></>,
+  nuvem: <path d="M7 18h10a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6 1.3A3.4 3.4 0 0 0 7 18Z" />,
+  chuva: <><path d="M7 15h10a4 4 0 0 0 .4-8A5.5 5.5 0 0 0 6.8 8.3 3.4 3.4 0 0 0 7 15Z" /><path d="M8.5 18.5 8 21M12 18.5 11.5 21M15.5 18.5 15 21" /></>,
+  interrogacao: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .8c0 1.7-2.5 2-2.5 3.5M12 17h.01" /></>,
 };
 
 export function Icone({ nome, tamanho = 15, className, style, strokeWidth = 1.8 }) {

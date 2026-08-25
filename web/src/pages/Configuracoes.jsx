@@ -4,7 +4,7 @@ import { apiJson } from '../api';
 import { useSession } from '../auth/session.jsx';
 import { Erro, Loading, Visual } from '../components/ui';
 import { Icone } from '../components/Icone';
-import { int, labelDataHora } from '../format';
+import { int, labelData, labelDataHora } from '../format';
 
 const PAPEL_LABEL = { viewer: 'Visualizador', dev: 'DEV', admin: 'Administrador' };
 const PAPEL_AJUDA = {
@@ -1069,6 +1069,365 @@ function AbaQueries() {
   );
 }
 
+// ------------------------------------------------------- metas por cidade
+/**
+ * Metas de venda e de ativação por cidade — o alvo do RELATÓRIO DIÁRIO.
+ *
+ * No Power BI elas são constantes dentro de medidas DAX, e mudar uma exigia abrir o
+ * arquivo e republicar. Meta muda todo ano, e às vezes no meio do ano.
+ *
+ * Rascunho com Salvar, e não gravação a cada tecla: são doze campos, e gravar em
+ * cada um seria doze requisições sem confirmação nenhuma. Nada aqui recarrega o
+ * banco — meta é cálculo sobre o que já está em memória, então a próxima abertura da
+ * tela já usa o valor novo.
+ */
+function AbaMetas() {
+  const [estado, setEstado] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      const d = await apiJson('/metas');
+      setEstado(d);
+      setForm({
+        vendas: { ...d.vendas },
+        ativos: { ...d.ativos },
+        vendasRadio: d.vendasRadio,
+        ativosRadio: d.ativosRadio,
+      });
+      setErro(null);
+    } catch (e) { setErro(e); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const d = await apiJson('/metas', { method: 'PUT', body: form });
+      setEstado(d);
+      setForm({
+        vendas: { ...d.vendas },
+        ativos: { ...d.ativos },
+        vendasRadio: d.vendasRadio,
+        ativosRadio: d.ativosRadio,
+      });
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  const restaurar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const d = await apiJson('/metas/restaurar', { method: 'POST' });
+      setEstado(d);
+      setForm({
+        vendas: { ...d.vendas },
+        ativos: { ...d.ativos },
+        vendasRadio: d.vendasRadio,
+        ativosRadio: d.ativosRadio,
+      });
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  if (!form) return <div className="cfg-carregando">Carregando as metas…</div>;
+
+  const cidades = [...new Set([
+    ...Object.keys(form.vendas), ...Object.keys(form.ativos),
+  ])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const alterado = estado && (
+    JSON.stringify(form.vendas) !== JSON.stringify(estado.vendas)
+    || JSON.stringify(form.ativos) !== JSON.stringify(estado.ativos)
+    || Number(form.vendasRadio) !== Number(estado.vendasRadio)
+    || Number(form.ativosRadio) !== Number(estado.ativosRadio)
+  );
+
+  const trocar = (grupo, cidade, valor) => setForm((f) => ({
+    ...f, [grupo]: { ...f[grupo], [cidade]: valor === '' ? '' : Number(valor) },
+  }));
+
+  const alt = estado?.alternativo;
+
+  return (
+    <div className="cfg-bloco">
+      <p className="cfg-nota">
+        O alvo contra o qual o <b>Relatório diário</b> compara. A meta por dia é a meta dividida
+        pelos dias produtivos do mês (sábado vale meio dia, domingo e feriado zero), então mexer
+        nos <b>Feriados</b> também muda a meta por dia.
+      </p>
+      <p className="cfg-nota">
+        <b>O relatório de origem tem duas séries conflitantes para ativação.</b> As tabelas de lá
+        usam a que está semeada aqui; a outra, mais alta, está no rodapé desta tela para
+        conferência. Se a série alta for a correta, é aqui que se corrige.
+      </p>
+
+      {erro && <div className="banner error">{erro.message}</div>}
+
+      <table className="pbi cfg-metas">
+        <thead>
+          <tr>
+            <th className="left">CIDADE</th>
+            <th>META DE VENDAS</th>
+            <th>META DE ATIVAÇÕES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cidades.map((cidade) => (
+            <tr key={cidade}>
+              <td className="left">{cidade}</td>
+              <td>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.vendas[cidade] ?? ''}
+                  onChange={(e) => trocar('vendas', cidade, e.target.value)}
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.ativos[cidade] ?? ''}
+                  onChange={(e) => trocar('ativos', cidade, e.target.value)}
+                />
+              </td>
+            </tr>
+          ))}
+          <tr className="cfg-radio">
+            <td className="left">
+              Rádio <span title="Na origem a meta de rádio não é por cidade: é um número único para o total.">(total)</span>
+            </td>
+            <td>
+              <input
+                type="number"
+                min="0"
+                value={form.vendasRadio ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, vendasRadio: e.target.value === '' ? '' : Number(e.target.value) }))}
+              />
+            </td>
+            <td>
+              <input
+                type="number"
+                min="0"
+                value={form.ativosRadio ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, ativosRadio: e.target.value === '' ? '' : Number(e.target.value) }))}
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="janela-acoes">
+        <button type="button" className="cfg-botao" disabled={!alterado || salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar metas'}
+        </button>
+        <button type="button" className="cfg-botao ghost" disabled={salvando} onClick={restaurar}>
+          Voltar às metas do relatório
+        </button>
+      </div>
+
+      <ul className="cfg-legenda">
+        <li>
+          Em vigor: <b>{estado?.origem === 'tela' ? 'definidas nesta tela' : 'as do relatório de origem'}</b>
+          {estado?.atualizadoPor ? ` por ${estado.atualizadoPor}` : ''}
+          {estado?.atualizadoEm ? ` em ${labelDataHora(estado.atualizadoEm)}` : ''}.
+        </li>
+        {alt && (
+          <li>
+            Série alternativa de ativação, presente no modelo de origem e <b>não usada</b> pelas
+            tabelas dele: {Object.entries(alt.ativos).map(([c, v]) => `${c} ${v}`).join(' · ')}.
+          </li>
+        )}
+        <li>
+          Cidade sem meta aparece na tabela do relatório com alvo em branco, e não escondida —
+          esconder faria a venda daquela cidade desaparecer do total.
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ feriados
+/**
+ * Feriados — o que decide dia útil e dia produtivo.
+ *
+ * Os nacionais e o estadual do RS são CALCULADOS, inclusive os móveis (Carnaval,
+ * Sexta-feira Santa e Corpus Christi derivam da Páscoa), então nunca precisam de
+ * manutenção. Esta tela existe para os MUNICIPAIS, que mudam por cidade, e para
+ * remover um calculado que a empresa trate como dia normal.
+ *
+ * No relatório de origem esta lista vinha de uma planilha do Google.
+ */
+function AbaFeriados() {
+  const [estado, setEstado] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [extras, setExtras] = useState([]);
+  const [removidos, setRemovidos] = useState([]);
+  const [novo, setNovo] = useState({ data: '', nome: '' });
+
+  const carregar = useCallback(async () => {
+    try {
+      const d = await apiJson('/feriados');
+      setEstado(d);
+      setExtras(d.extras || []);
+      setRemovidos(d.removidos || []);
+      setErro(null);
+    } catch (e) { setErro(e); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const d = await apiJson('/feriados', { method: 'PUT', body: { extras, removidos } });
+      setEstado(d);
+      setExtras(d.extras || []);
+      setRemovidos(d.removidos || []);
+      setNovo({ data: '', nome: '' });
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  const restaurar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const d = await apiJson('/feriados/restaurar', { method: 'POST' });
+      setEstado(d);
+      setExtras(d.extras || []);
+      setRemovidos(d.removidos || []);
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  if (!estado) return <div className="cfg-carregando">Carregando os feriados…</div>;
+
+  const alterado = JSON.stringify(extras) !== JSON.stringify(estado.extras || [])
+    || JSON.stringify(removidos) !== JSON.stringify(estado.removidos || []);
+
+  const acrescentar = () => {
+    if (!novo.data || !novo.nome.trim()) return;
+    setExtras((e) => [...e, { data: novo.data, nome: novo.nome.trim() }]
+      .sort((a, b) => a.data.localeCompare(b.data)));
+    setNovo({ data: '', nome: '' });
+  };
+
+  const alternarRemocao = (data) => setRemovidos((r) => (
+    r.includes(data) ? r.filter((x) => x !== data) : [...r, data]));
+
+  return (
+    <div className="cfg-bloco">
+      <p className="cfg-nota">
+        Feriado é dia produtivo a menos, que é meta por dia maior, que é projeção diferente. Uma
+        data errada aqui move todos os números do <b>Relatório diário</b>.
+      </p>
+      <p className="cfg-nota">
+        Os <b>nacionais e o estadual do RS são calculados</b>, os móveis inclusive — não precisam
+        de cadastro em nenhum ano. Os <b>municipais não são semeados de propósito</b>: aniversário
+        de cidade muda por município, e chutar uma data seria pior que não ter, porque o número
+        sairia errado com cara de certo.
+      </p>
+
+      {erro && <div className="banner error">{erro.message}</div>}
+
+      <div className="cfg-form linha">
+        <label>
+          <span>Data</span>
+          <input type="date" value={novo.data} onChange={(e) => setNovo({ ...novo, data: e.target.value })} />
+        </label>
+        <label className="cresce">
+          <span>Nome do feriado</span>
+          <input
+            type="text"
+            value={novo.nome}
+            placeholder="Aniversário de Canoas, por exemplo"
+            onChange={(e) => setNovo({ ...novo, nome: e.target.value })}
+          />
+        </label>
+        <button type="button" className="cfg-botao ghost" onClick={acrescentar} disabled={!novo.data || !novo.nome.trim()}>
+          <Icone nome="mais" tamanho={13} /> Acrescentar
+        </button>
+      </div>
+
+      <table className="pbi cfg-feriados">
+        <thead>
+          <tr>
+            <th className="left">DATA</th>
+            <th className="left">FERIADO</th>
+            <th>ORIGEM</th>
+            <th>VALE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(estado.doAno || []).map((f) => {
+            const fora = removidos.includes(f.data);
+            return (
+              <tr key={f.data} className={fora ? 'desligado' : ''}>
+                <td className="left">{labelData(f.data)}</td>
+                <td className="left">{f.nome}</td>
+                <td className="center">{f.origem === 'calculado' ? 'calculado' : 'cadastrado'}</td>
+                <td className="center">
+                  <button
+                    type="button"
+                    className="cfg-alternar"
+                    onClick={() => alternarRemocao(f.data)}
+                    title={fora
+                      ? 'Hoje este dia conta como dia normal. Clique para voltar a tratá-lo como feriado.'
+                      : 'Clique para tratar este dia como dia normal de trabalho.'}
+                  >
+                    {fora ? 'dia normal' : 'feriado'}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {extras.filter((f) => !(estado.doAno || []).some((x) => x.data === f.data)).map((f) => (
+            <tr key={f.data}>
+              <td className="left">{labelData(f.data)}</td>
+              <td className="left">{f.nome}</td>
+              <td className="center">cadastrado (outro ano)</td>
+              <td className="center">
+                <button
+                  type="button"
+                  className="cfg-alternar"
+                  onClick={() => setExtras((e) => e.filter((x) => x.data !== f.data))}
+                  title="Apagar este feriado do cadastro."
+                >
+                  apagar
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="janela-acoes">
+        <button type="button" className="cfg-botao" disabled={!alterado || salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar feriados'}
+        </button>
+        <button type="button" className="cfg-botao ghost" disabled={salvando} onClick={restaurar}>
+          Apagar o cadastro
+        </button>
+      </div>
+
+      <ul className="cfg-legenda">
+        <li>
+          A tabela mostra o <b>ano corrente</b>. Um feriado cadastrado para outro ano aparece na
+          lista de baixo e continua valendo.
+        </li>
+        <li>
+          {extras.length} cadastrado(s) · {removidos.length} calculado(s) tratado(s) como dia normal
+          {estado.atualizadoPor ? ` · última alteração por ${estado.atualizadoPor}` : ''}
+          {estado.atualizadoEm ? ` em ${labelDataHora(estado.atualizadoEm)}` : ''}.
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ página
 export default function Configuracoes() {
   const { ehAdmin, ehDev, usuario } = useSession();
@@ -1077,6 +1436,8 @@ export default function Configuracoes() {
       { id: 'usuarios', label: 'Usuários e papéis', icone: 'pessoas' },
       { id: 'telas', label: 'Acesso por tela', icone: 'tela' },
       { id: 'janela', label: 'Janela de dados', icone: 'relogio' },
+      { id: 'metas', label: 'Metas por cidade', icone: 'ok' },
+      { id: 'feriados', label: 'Feriados', icone: 'relogio' },
       { id: 'ia', label: 'Provedor de IA', icone: 'ia' },
     ] : []),
     ...(ehDev ? [{ id: 'queries', label: 'Queries do sistema', icone: 'banco' }] : []),
@@ -1109,6 +1470,8 @@ export default function Configuracoes() {
         {aba === 'usuarios' && <AbaUsuarios />}
         {aba === 'telas' && <AbaTelas />}
         {aba === 'janela' && <AbaJanela />}
+        {aba === 'metas' && <AbaMetas />}
+        {aba === 'feriados' && <AbaFeriados />}
         {aba === 'ia' && <AbaIA />}
         {aba === 'queries' && <AbaQueries />}
       </Visual>
