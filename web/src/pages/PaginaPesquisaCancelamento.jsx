@@ -22,6 +22,9 @@ import { baixar, tabelaParaCSV } from '../exportar';
  * o do Power BI, e é o certo.
  */
 
+/** Estado da resposta: verde para sim, cinza para não. Reservado, não série. */
+const corDaResposta = (linha) => (linha.resposta === 'Sim' ? '#DFF0DC' : '#F3F2F1');
+
 /** Magnitude do "sim": um só tom, claro para escuro. */
 const corDoSim = (linha) => escalaGradiente(Number(linha.pctSim) || 0, 0, 1, '#F7F0D0', CORES.gold);
 
@@ -54,6 +57,14 @@ export function PaginaPesquisaCancelamento({ filtros }) {
     { key: 'encerradoPor', titulo: 'ENCERRADO POR', align: 'left' },
     { key: 'dataCancelamento', titulo: 'CANCELAMENTO', fmt: labelData },
     { key: 'motivoCancelamento', titulo: 'MOTIVO', align: 'left' },
+  ];
+
+  // A tabela de baixo-esquerda da origem: a linha crua do checklist.
+  const colunasRespostas = [
+    { key: 'numeroProtocolo', titulo: 'PROTOCOLO', align: 'left' },
+    { key: 'ordem', titulo: '#', align: 'center' },
+    { key: 'pergunta', titulo: 'PERGUNTA', align: 'left' },
+    { key: 'resposta', titulo: 'RESPOSTA', align: 'center', corFundo: corDaResposta },
   ];
 
   if (error) return <Erro erro={error} />;
@@ -94,12 +105,56 @@ export function PaginaPesquisaCancelamento({ filtros }) {
         />
       </div>
 
+      {/*
+        ORDEM DA ORIGEM, por coordenada: esta tabela é a de y=348, largura inteira
+        (1882 de 1920), logo abaixo dos cartões — é o assunto da página. As duas
+        menores ficam em y=775. Eu havia invertido, e a tabela principal acabava
+        escondida no fim da rolagem.
+      */}
       <section className="grid">
+        <Visual
+          title="PESQUISAS"
+          sub={vazio ? null : legendaProtocolos(data)}
+          className="v-tabela"
+          actions={!vazio && (
+            <BotaoExportar onExportar={() => baixar(
+              tabelaParaCSV(colunasProtocolos, data.protocolos.amostra), 'pesquisas-de-cancelamento.csv',
+            )}
+            />
+          )}
+        >
+          {vazio ? <Loading /> : data.protocolos.amostra.length
+            ? (
+              <Tabela
+                colunas={colunasProtocolos}
+                dados={data.protocolos.amostra.map((p) => ({ ...p, __key: p.numeroProtocolo }))}
+                ordemInicial={{ key: 'criado', dir: 'desc' }}
+              />
+            ) : <Vazio />}
+        </Visual>
+      </section>
+
+      <section className="grid linha-38-62">
+        <Visual
+          title="RESPOSTAS"
+          sub={vazio ? null : `${int(data.respostas.total)} respondidas${data.respostas.total > data.respostas.amostra.length ? ` · mostrando ${data.respostas.amostra.length}` : ''}`}
+          className="v-meia"
+        >
+          {vazio ? <Loading /> : data.respostas.amostra.length
+            ? (
+              <Tabela
+                colunas={colunasRespostas}
+                dados={data.respostas.amostra.map((p, i) => ({ ...p, __key: `${p.numeroProtocolo}-${p.ordem}-${i}` }))}
+                ordemInicial={{ key: 'numeroProtocolo', dir: 'desc' }}
+              />
+            ) : <Vazio texto="Nenhuma resposta preenchida no recorte" />}
+        </Visual>
+
         <Visual
           title="RESPOSTAS POR PERGUNTA"
           sub={vazio ? null
-            : `${data.perguntas.length} perguntas · SIM e NÃO contam protocolo distinto; EM BRANCO é quem não respondeu aquela pergunta`}
-          className="v-tabela"
+            : `${data.perguntas.length} perguntas · SIM e NÃO contam protocolo distinto; EM BRANCO é quem não respondeu aquela`}
+          className="v-meia"
           ia="relatorios:pesquisa"
           actions={!vazio && (
             <BotaoExportar onExportar={() => baixar(
@@ -130,7 +185,7 @@ export function PaginaPesquisaCancelamento({ filtros }) {
         */}
         <Visual
           title="MOTIVO DO CANCELAMENTO"
-          sub={vazio ? null : 'motivo registrado no contrato, não a resposta da pesquisa'}
+          sub={vazio ? null : 'não existe no relatório de origem · motivo registrado no contrato, não a resposta da pesquisa'}
           className="v-meia"
         >
           {vazio ? <Loading /> : data.porMotivo.length
@@ -140,7 +195,7 @@ export function PaginaPesquisaCancelamento({ filtros }) {
 
         <Visual
           title="POR CIDADE"
-          sub={vazio ? null : 'protocolos de pesquisa por cidade do cliente'}
+          sub={vazio ? null : 'não existe no relatório de origem · protocolos por cidade do cliente'}
           className="v-meia"
         >
           {vazio ? <Loading /> : data.porCidade.length
@@ -149,28 +204,6 @@ export function PaginaPesquisaCancelamento({ filtros }) {
         </Visual>
       </section>
 
-      <section className="grid">
-        <Visual
-          title="PESQUISAS"
-          sub={vazio ? null : legendaProtocolos(data)}
-          className="v-tabela"
-          actions={!vazio && (
-            <BotaoExportar onExportar={() => baixar(
-              tabelaParaCSV(colunasProtocolos, data.protocolos.amostra), 'pesquisas-de-cancelamento.csv',
-            )}
-            />
-          )}
-        >
-          {vazio ? <Loading /> : data.protocolos.amostra.length
-            ? (
-              <Tabela
-                colunas={colunasProtocolos}
-                dados={data.protocolos.amostra.map((p) => ({ ...p, __key: p.numeroProtocolo }))}
-                ordemInicial={{ key: 'criado', dir: 'desc' }}
-              />
-            ) : <Vazio />}
-        </Visual>
-      </section>
     </>
   );
 }

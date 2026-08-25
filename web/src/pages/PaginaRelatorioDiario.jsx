@@ -1,6 +1,6 @@
 import { useDados } from '../api';
-import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/ui';
-import { CHUVA, CORES, escalaGradiente } from '../components/charts';
+import { BotaoExportar, Erro, Loading, Vazio, Visual } from '../components/ui';
+import { CHUVA, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { brl, dec1, int, labelData, pct } from '../format';
@@ -12,6 +12,21 @@ import { baixar, tabelaParaCSV } from '../exportar';
  * A pergunta dela é uma só: o mês fecha na meta? E ela responde em quatro cortes
  * (venda e ativação, fibra e rádio), mais a fila de instalação e o clima.
  *
+ * ESTA TELA TEM IDENTIDADE VISUAL PRÓPRIA, DE PROPÓSITO
+ * As outras quatro réplicas usam o vermelho da marca (#880F17) porque é o que está
+ * nos `.pbip` delas. Esta página usa o tema CY23SU08, e a leitura do arquivo dá os
+ * valores exatos: número de cartão em #118DFF a 50–60px, texto de tabela em #12239E,
+ * grade vertical azul de 2px, cabeçalho em maiúscula centralizado. Não é escolha
+ * nossa nem descuido — é o que está no `.pbip`, e quem usa este relatório todo dia
+ * reconhece a tela pelo azul. Os tokens ficam escopados em `.tela-diario` para não
+ * vazarem para o resto do dashboard.
+ *
+ * O LAYOUT TAMBÉM É O DA ORIGEM: duas colunas. À esquerda (x=22, largura 1232 de
+ * 1920 — 64%) as tabelas de meta empilhadas; à direita (x=1256 a 1886 — 33%) os
+ * cartões de número grande e a fila de instalação. O clima fecha a página em largura
+ * inteira (y=1900, 1860 de largura). Seguir a origem aqui vale mais que a convenção
+ * interna: quem abre esta tela procura o número pela posição.
+ *
  * A RÉGUA DE DIAS, que é o que faz os números significarem algo:
  *   sábado vale MEIO dia, domingo zero, feriado zero — a régua da origem.
  *   meta/dia  = meta ÷ dias PRODUTIVOS   (o mês inteiro, porque é alvo)
@@ -19,11 +34,11 @@ import { baixar, tabelaParaCSV } from '../exportar';
  *   projeção  = média/dia × dias produtivos
  * Os dois divisores serem diferentes é de propósito: a projeção pega o ritmo do que
  * já aconteceu e estende pelo mês todo.
- *
- * O clima está aqui e não é enfeite: instalação de fibra é serviço de rua, e um dia
- * de chuva forte derruba ativação. A matriz ao lado da meta explica um dia ruim sem
- * ninguém precisar procurar a explicação.
  */
+
+/** Azuis do tema CY23SU08, os mesmos que o `.pbip` desta página usa. */
+const AZUL = '#118DFF';
+const LARANJA = '#E66C37';
 
 /** Polaridade em relação à meta: abaixo esfria, acima esquenta. Neutro no meio. */
 const corDoPercentual = (linha) => {
@@ -33,10 +48,28 @@ const corDoPercentual = (linha) => {
   return escalaGradiente(v, 0, 1, '#F6DAD5', '#F3EFD8');
 };
 
+/**
+ * Cartão de número grande, no formato dos `card` da origem: rótulo pequeno em cima,
+ * número enorme embaixo, os dois em azul, sobre branco.
+ *
+ * Não reusa o `Kpi` do dashboard porque aquele tem duas variantes e nenhuma serve
+ * aqui: a crua tem gradiente escuro e a de faixa põe o valor no vermelho da marca.
+ * O par fundo+texto deste cartão viaja junto, no CSS.
+ */
+function CartaoAzul({ valor, rotulo, desc, title, largo = false }) {
+  return (
+    <div className={`cartao-azul${largo ? ' largo' : ''}`} title={title || undefined}>
+      <span className="rotulo">{rotulo}</span>
+      <strong className="numero">{valor}</strong>
+      {desc && <span className="desc">{desc}</span>}
+    </div>
+  );
+}
+
 const COLUNAS_META = (rotulo) => [
   { key: 'nome', titulo: rotulo, align: 'left' },
   { key: 'meta', titulo: 'META', fmt: int },
-  { key: 'realizado', titulo: 'REALIZADO', fmt: int, databar: { cor: CORES.gold } },
+  { key: 'realizado', titulo: 'REALIZADO', fmt: int, databar: { cor: AZUL } },
   { key: 'percentual', titulo: '% DA META', fmt: pct, align: 'center', corFundo: corDoPercentual },
   { key: 'metaDia', titulo: 'META/DIA', fmt: dec1 },
   { key: 'mediaDia', titulo: 'MÉDIA/DIA', fmt: dec1 },
@@ -75,7 +108,7 @@ export function PaginaRelatorioDiario({ filtros }) {
   );
 
   return (
-    <>
+    <div className="tela-diario">
       {!vazio && data.periodo.padrao && (
         <p className="aviso-recorte">
           <Icone nome="relogio" tamanho={12} />
@@ -84,71 +117,74 @@ export function PaginaRelatorioDiario({ filtros }) {
         </p>
       )}
 
-      <div className="kpi-faixa">
-        <Kpi
-          value={vazio ? '—' : int(c.vendas)}
-          label="VENDAS"
-          desc="contratos criados no mês"
-        />
-        <Kpi
-          value={vazio ? '—' : int(c.ativos)}
-          label="ATIVAÇÕES"
-          desc="instalações concluídas no mês"
-        />
-        <Kpi
-          value={vazio ? '—' : brl(c.valorAtivo)}
-          label="VALOR ATIVADO"
-          desc="mensalidade das ativações do mês"
-          title="Soma da mensalidade dos contratos ATIVADOS no mês — é o que passa a faturar, não o que foi vendido."
-        />
-        <Kpi
-          value={vazio ? '—' : dec1(c.diasProdutivos)}
-          label="DIAS PRODUTIVOS"
-          desc="do mês, com sábado valendo meio"
-          title="Régua da origem: sábado 0,5, domingo 0, feriado 0. É o divisor da meta/dia e o multiplicador da projeção. Os feriados vêm de Configurações → Feriados."
-        />
-        <Kpi
-          value={vazio ? '—' : dec1(c.diasUteis)}
-          label="DIAS DECORRIDOS"
-          desc="já passados, na mesma régua"
-          title="Conta só até ontem. Incluir o dia de hoje, ainda em andamento, derrubaria a média por dia toda manhã."
-        />
-      </div>
+      <section className="grid linha-diario">
+        {/* coluna esquerda: as tabelas de meta, como em x=22 na origem */}
+        <div className="coluna-diario">
+          {vazio ? <Visual title="VENDAS POR CIDADE" className="v-tabela"><Loading /></Visual>
+            : tabelaMeta(data.vendas, 'Vendas por cidade', 'vendas')}
+          {vazio ? <Visual title="ATIVAÇÕES POR CIDADE" className="v-tabela"><Loading /></Visual>
+            : tabelaMeta(data.ativos, 'Ativações por cidade', 'ativos')}
 
-      <section className="grid linha-dupla">
-        {vazio ? <Visual title="VENDAS POR CIDADE" className="v-tabela"><Loading /></Visual>
-          : tabelaMeta(data.vendas, 'Vendas por cidade', 'vendas')}
-        {vazio ? <Visual title="ATIVAÇÕES POR CIDADE" className="v-tabela"><Loading /></Visual>
-          : tabelaMeta(data.ativos, 'Ativações por cidade', 'ativos')}
-      </section>
+          <Visual
+            title="RÁDIO"
+            sub={vazio ? null : 'na origem a meta de rádio é um número único, não por cidade — então é uma linha para cada lado'}
+            className="v-meia"
+          >
+            {vazio ? <Loading /> : (
+              <Tabela
+                colunas={COLUNAS_META('')}
+                dados={[
+                  { ...data.vendasRadio, nome: 'Vendas', __key: 'v' },
+                  { ...data.ativosRadio, nome: 'Ativações', __key: 'a' },
+                ]}
+              />
+            )}
+          </Visual>
+        </div>
 
-      <section className="grid linha-dupla">
-        <Visual
-          title="RÁDIO"
-          sub={vazio ? null : 'na origem a meta de rádio é um número único, não por cidade — então é uma linha para cada lado'}
-          className="v-meia"
-        >
-          {vazio ? <Loading /> : (
-            <Tabela
-              colunas={COLUNAS_META('')}
-              dados={[
-                { ...data.vendasRadio, nome: 'Vendas', __key: 'v' },
-                { ...data.ativosRadio, nome: 'Ativações', __key: 'a' },
-              ]}
+        {/* coluna direita: números grandes e a fila, como em x=1256 na origem */}
+        <div className="coluna-diario">
+          <div className="cartoes-azuis">
+            <CartaoAzul
+              valor={vazio ? '—' : int(c.vendas)}
+              rotulo="VENDAS"
+              desc="criadas no mês"
             />
-          )}
-        </Visual>
+            <CartaoAzul
+              valor={vazio ? '—' : int(c.ativos)}
+              rotulo="ATIVAÇÕES"
+              desc="concluídas no mês"
+            />
+            <CartaoAzul
+              valor={vazio ? '—' : dec1(c.diasProdutivos)}
+              rotulo="DIAS PRODUTIVOS"
+              desc="sábado vale meio"
+              title="Régua da origem: sábado 0,5, domingo 0, feriado 0. É o divisor da meta/dia e o multiplicador da projeção. Os feriados vêm de Configurações → Feriados."
+            />
+            <CartaoAzul
+              valor={vazio ? '—' : dec1(c.diasUteis)}
+              rotulo="DIAS DECORRIDOS"
+              desc="até ontem"
+              title="Conta só até ontem. Incluir o dia de hoje, ainda em andamento, derrubaria a média por dia toda manhã."
+            />
+            <CartaoAzul
+              largo
+              valor={vazio ? '—' : brl(c.valorAtivo)}
+              rotulo="VALOR ATIVADO NO MÊS"
+              desc="mensalidade dos contratos que passaram a faturar"
+              title="Soma da mensalidade dos contratos ATIVADOS no mês — é o que passa a faturar, não o que foi vendido."
+            />
+          </div>
 
-        <Visual
-          title="FILA DE INSTALAÇÃO"
-          sub={vazio ? null : legendaFila(data.fila)}
-          className="v-meia"
-          ia="relatorios:diario-fila"
-        >
-          {vazio ? <Loading /> : (
-            <FilaPorCidade fila={data.fila} />
-          )}
-        </Visual>
+          <Visual
+            title="FILA DE INSTALAÇÃO"
+            sub={vazio ? null : legendaFila(data.fila)}
+            className="v-meia"
+            ia="relatorios:diario-fila"
+          >
+            {vazio ? <Loading /> : <FilaPorCidade fila={data.fila} />}
+          </Visual>
+        </div>
       </section>
 
       <section className="grid">
@@ -160,7 +196,7 @@ export function PaginaRelatorioDiario({ filtros }) {
           {vazio ? <Loading /> : <MatrizClima clima={data.clima} />}
         </Visual>
       </section>
-    </>
+    </div>
   );
 }
 
@@ -179,8 +215,8 @@ function FilaPorCidade({ fila }) {
 
   const colunas = [
     { key: 'cidade', titulo: 'CIDADE', align: 'left' },
-    { key: 'fibra', titulo: 'FIBRA', fmt: int, databar: { cor: CORES.gold } },
-    { key: 'radio', titulo: 'RÁDIO', fmt: int, databar: { cor: CORES.orange } },
+    { key: 'fibra', titulo: 'FIBRA', fmt: int, databar: { cor: AZUL } },
+    { key: 'radio', titulo: 'RÁDIO', fmt: int, databar: { cor: LARANJA } },
     { key: 'total', titulo: 'TOTAL', fmt: int },
   ];
   const dados = cidades.map((cidade) => {

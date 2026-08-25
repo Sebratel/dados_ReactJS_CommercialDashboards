@@ -441,6 +441,110 @@ body {
 }
 .aviso-recorte svg { flex: none; color: var(--pbi-gold-600); }
 
+/* --- Relatorio Diario: identidade azul, do tema CY23SU08 do proprio .pbip ----
+   Escopado em .tela-diario de proposito. As outras quatro replicas usam o vermelho
+   da marca porque e o que esta nos .pbip delas; esta pagina e azul porque e o que
+   esta no dela, e quem a usa todo dia reconhece a tela pela cor. Sem o escopo, o
+   azul vazaria para telas que nao pediram. */
+.tela-diario {
+  --diario-azul: #118DFF;
+  --diario-tinta: #12239E;
+  --diario-grade: #D3E8FF;
+}
+
+/* Duas colunas, na proporcao da origem: 1232 e 630 de 1920 uteis (64/33). O minmax
+   evita a coluna dos numeros virar um filete em tela estreita. */
+.linha-diario { grid-template-columns: minmax(520px, 64fr) minmax(300px, 36fr); }
+.coluna-diario { display: grid; gap: var(--gap); align-content: start; min-width: 0; }
+
+/* Cabecalho e grade dos visuais desta tela seguem o azul. O par fundo+texto muda
+   junto: cabecalho azul com texto branco, celula branca com texto azul-escuro. */
+.tela-diario .visual > header { background: var(--diario-azul); }
+.tela-diario table.pbi thead th { background: var(--diario-azul); }
+.tela-diario table.pbi tbody td { color: var(--diario-tinta); }
+.tela-diario table.pbi tbody tr + tr td { border-top-color: var(--diario-grade); }
+.tela-diario table.pbi tfoot td { color: var(--diario-tinta); border-top-color: var(--diario-azul); }
+
+/* Os `card` da origem: rotulo pequeno, numero enorme, os dois em azul sobre branco.
+   Lah o numero e 50-60px; aqui e clamp para nao estourar em tela estreita. */
+.cartoes-azuis {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap);
+}
+.cartao-azul {
+  background: var(--pbi-superficie);
+  border: 1px solid var(--diario-grade);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: 10px 13px;
+  display: grid; align-content: center; gap: 1px; min-height: 96px;
+  color: var(--diario-azul);
+}
+.cartao-azul.largo { grid-column: 1 / -1; min-height: 0; }
+.cartao-azul .rotulo {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;
+}
+.cartao-azul .numero {
+  font-size: clamp(26px, 3.1vw, 46px); line-height: 1.05; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cartao-azul.largo .numero { font-size: clamp(22px, 2.1vw, 30px); }
+.cartao-azul .desc { font-size: 10.5px; color: var(--pbi-muted); font-weight: 400; line-height: 1.3; }
+
+/* --- Painel de filtro lateral (Clientes Base) ------------------------------
+   Na origem o slicer de cidade+bairro tem 311x849 e fica a ESQUERDA das matrizes,
+   ocupando a altura inteira delas. Aqui e a mesma ideia: nesta tela o filtro e o
+   eixo de leitura, nao um acessorio da barra de cima. */
+.linha-com-lateral { grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); }
+.coluna-visuais { display: grid; gap: var(--gap); align-content: start; min-width: 0; }
+
+.painel-filtro {
+  background: var(--pbi-superficie);
+  border: 1px solid var(--pbi-borda);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.painel-filtro > header {
+  background: var(--pbi-primary); color: #fff;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 0 10px; height: 30px; font-size: 12px; flex: none;
+}
+.painel-limpar {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: rgba(255, 255, 255, 0.18); color: #fff; border: 0; border-radius: 999px;
+  font-family: var(--font); font-size: 10.5px; padding: 2px 8px; cursor: pointer;
+}
+.painel-limpar:hover { background: rgba(255, 255, 255, 0.32); }
+
+.painel-filtro section {
+  display: flex; flex-direction: column; min-height: 0; padding: 7px 8px 0;
+  border-top: 1px solid var(--pbi-borda);
+}
+.painel-filtro section:first-of-type { border-top: 0; }
+.painel-filtro h4 {
+  margin: 0 0 5px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--pbi-muted); font-weight: 700;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
+}
+.painel-filtro h4 span { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 10px; }
+.painel-filtro input[type="text"] {
+  height: 26px; border: 1px solid var(--pbi-grid); border-radius: 6px; padding: 0 7px;
+  font-family: var(--font); font-size: 11.5px; color: var(--pbi-ink); margin-bottom: 5px;
+}
+.painel-filtro input[type="text"]:focus { outline: 2px solid rgba(136, 15, 23, 0.3); }
+.painel-lista { overflow: auto; max-height: 208px; padding-bottom: 7px; }
+.painel-lista label {
+  display: flex; align-items: center; gap: 6px; font-size: 11.5px; line-height: 1.5;
+  padding: 1px 2px; cursor: pointer;
+}
+.painel-lista label:hover { background: #FAF9F8; }
+.painel-lista label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.painel-lista input[type="checkbox"] { accent-color: var(--pbi-primary); flex: none; cursor: pointer; }
+.painel-nada { margin: 4px 2px; font-size: 11px; color: var(--pbi-muted); }
+
+/* Duas colunas 38/62, para a tabela larga ficar ao lado da estreita. */
+.linha-38-62 { grid-template-columns: minmax(300px, 38fr) minmax(320px, 62fr); }
+
 /* Legenda das faixas de chuva, na aba de clima. */
 .legenda-clima { list-style: none; margin: 0; padding: 4px 2px; display: grid; gap: 7px; }
 .legenda-clima li { display: flex; align-items: center; gap: 8px; font-size: 12px; }

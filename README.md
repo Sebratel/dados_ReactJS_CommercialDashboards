@@ -367,6 +367,37 @@ Isso não é detalhe de cadastro. Feriado é dia produtivo a menos, que é meta 
 maior, que é projeção diferente — uma data errada ali move todos os números do
 Relatório Diário.
 
+### Por que o Relatório Diário é azul
+
+As outras quatro réplicas usam o vermelho da marca (`#880F17`) porque é o que está
+nos `.pbip` delas. Esta página usa o tema **CY23SU08**, e a leitura do arquivo dá os
+valores exatos: número de cartão em `#118DFF` a 50–60px, texto de tabela em
+`#12239E`, grade vertical azul de 2px, cabeçalho maiúsculo centralizado. Não é
+descuido nem escolha nossa — quem usa este relatório todo dia reconhece a tela pelo
+azul, e trocar por vermelho gera desconfiança no número.
+
+Os tokens ficam escopados em `.tela-diario`, para não vazarem para o resto do
+dashboard, e o par fundo+texto muda sempre junto: cabeçalho azul com texto branco,
+célula branca com texto azul-escuro.
+
+O **layout também é o da origem**: duas colunas, `64fr / 36fr`, na proporção de
+1232 e 630 dos 1920 de lá. À esquerda as tabelas de meta empilhadas (x=22); à direita
+os cartões de número grande e a fila de instalação (x=1256 a 1886); o clima fecha a
+página em largura inteira (y=1900). Seguir a origem aqui vale mais que a convenção
+interna do dashboard: quem abre esta tela procura o número pela posição.
+
+### Filtro em painel, não em popover (Clientes Base)
+
+Na página CLIENTES BASE da origem, o slicer de cidade e bairro tem 311×849 e fica à
+**esquerda** das três matrizes (x=12, contra x=333 delas), ocupando a altura inteira.
+Ali o filtro não é acessório da barra: é o eixo pelo qual se lê a tela, e quem usa
+fica trocando de bairro e olhando a matriz ao lado. Num popover isso custa dois
+cliques por troca e esconde o gráfico justamente na hora de comparar.
+
+Então cidade e bairro saíram da barra de cima e viraram um `FiltroLateral` — mas
+continuam sendo contados e limpos pela barra (campo `extras` na declaração da aba),
+senão o botão "limpar N filtros" mentiria sobre o que está ativo.
+
 ### A régua de dias do Relatório Diário
 
 Sábado vale **meio** dia, domingo zero, feriado zero — a régua da origem.

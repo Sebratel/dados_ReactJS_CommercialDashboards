@@ -100,11 +100,13 @@ const ABAS = {
     ate: 'baseAte',
     rotuloPeriodo: 'Entrada na base',
     busca: { campo: 'buscaBase', placeholder: 'Contrato, usuário ou descrição…' },
+    // Cidade e bairro NÃO estão aqui: eles vivem no painel lateral da própria tela,
+    // como no relatório de origem. Continuam sendo contados e limpos por esta barra
+    // (ficam em `extras`), senão o botão "limpar" mentiria sobre o que está ativo.
     campos: [
-      { campo: 'bcidade', titulo: 'Cidade', opcoes: 'cidades' },
-      { campo: 'bbairro', titulo: 'Bairro', opcoes: 'bairros' },
       { campo: 'btec', titulo: 'Tecnologia', opcoes: 'tecnologias' },
     ],
+    extras: ['bcidade', 'bbairro'],
   },
   pesquisa: {
     hook: useFiltrosRelPesquisa,
@@ -152,6 +154,7 @@ export function SlicerBarRelatorios({ aba }) {
   // LIMPAR, as duas datas precisam sair, senão fica a data final sozinha.
   const { camposContados, camposLimpar } = useMemo(() => {
     const base = def.campos.map((c) => c.campo);
+    for (const extra of def.extras || []) base.push(extra);
     if (def.busca) base.push(def.busca.campo);
     if (def.marca) base.push(def.marca.campo);
     return {

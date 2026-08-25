@@ -900,7 +900,10 @@ export function painelBase(flt) {
       cidades: new Set(linhas.map((b) => b.cidade).filter(Boolean)).size,
     },
     porCidade: acumulado((b) => b.cidade, { limite: 10 }),
-    porBairro: acumulado((b) => b.bairro, { limite: 12 }),
+    // 8 e nao 12: a legenda de doze bairros num card de meia largura come mais
+    // altura que o proprio grafico em tela de 1366, e o grafico passava a rolar
+    // dentro do card. Quem precisa de um bairro especifico usa o painel lateral.
+    porBairro: acumulado((b) => b.bairro, { limite: 8 }),
     porTecnologia: (() => {
       const mapa = new Map();
       for (const b of linhas) {

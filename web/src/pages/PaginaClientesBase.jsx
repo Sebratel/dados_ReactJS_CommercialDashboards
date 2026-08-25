@@ -1,4 +1,6 @@
-import { useDados } from '../api';
+import { useDados, useFiltrosRelBase } from '../api';
+import { useFilters } from '../filters';
+import { FiltroLateral } from '../components/SlicerBar';
 import { BotaoExportar, Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../components/ui';
 import { ColunasEmpilhadas, CORES, corDaCategoria } from '../components/charts';
 import { Tabela } from '../components/tables';
@@ -43,6 +45,8 @@ function paraGrafico(ac, granularidade = 'mes') {
 
 export function PaginaClientesBase({ filtros }) {
   const { data, error, isLoading } = useDados('/relatorios/base', filtros);
+  const { data: dims } = useFiltrosRelBase();
+  const { setFiltro } = useFilters();
   const vazio = isLoading && !data;
   const c = data?.cartoes;
 
@@ -92,7 +96,28 @@ export function PaginaClientesBase({ filtros }) {
         />
       </div>
 
-      <section className="grid">
+      {/*
+        Painel lateral, como na origem: lá o slicer de cidade+bairro tem 311x849 e
+        ocupa a altura inteira das três matrizes, à esquerda delas (x=12, contra
+        x=333 das matrizes). Aqui é a mesma ideia — cidade e bairro saíram da barra
+        de cima e vivem ao lado do gráfico, porque nesta tela eles são o eixo de
+        leitura, não um acessório: quem usa troca de bairro e olha a matriz ao lado.
+      */}
+      <section className="grid linha-com-lateral">
+        <FiltroLateral
+          titulo="Cidade e bairro"
+          onChange={setFiltro}
+          grupos={[
+            {
+              campo: 'bcidade', titulo: 'Cidade', opcoes: dims?.cidades || [], valor: filtros.bcidade,
+            },
+            {
+              campo: 'bbairro', titulo: 'Bairro', opcoes: dims?.bairros || [], valor: filtros.bbairro,
+            },
+          ]}
+        />
+
+        <div className="coluna-visuais">
         <Visual
           title="BASE ACUMULADA POR CIDADE"
           sub={vazio ? null
@@ -120,9 +145,8 @@ export function PaginaClientesBase({ filtros }) {
               </>
             ) : <Vazio />}
         </Visual>
-      </section>
 
-      <section className="grid linha-dupla">
+        <div className="grid linha-dupla">
         <Visual
           title="BASE ACUMULADA POR BAIRRO"
           sub={vazio ? null : `${porBairro.series.length} bairros mais representativos · o resto está em "Outros"`}
@@ -154,6 +178,8 @@ export function PaginaClientesBase({ filtros }) {
             ? <Tabela colunas={colunasTec} dados={dadosTec} />
             : <Vazio />}
         </Visual>
+        </div>
+        </div>
       </section>
     </>
   );

@@ -88,6 +88,93 @@ export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, 
 }
 
 /**
+ * Seletor em PAINEL, ancorado ao lado do visual — não em popover.
+ *
+ * Existe porque a página CLIENTES BASE do relatório de origem tem um slicer de
+ * 311×849 na lateral esquerda, ocupando a altura inteira das três matrizes, com
+ * cidade e bairro juntos. Ali o filtro não é acessório da barra: é o eixo pelo qual
+ * se lê a tela, e quem usa fica trocando de bairro e olhando a matriz ao lado. Num
+ * popover isso custa dois cliques por troca e esconde o gráfico justamente na hora
+ * de comparar.
+ *
+ * Cada grupo tem busca própria a partir de ~12 opções — abaixo disso a busca ocupa
+ * mais espaço do que economiza.
+ */
+export function FiltroLateral({ titulo, grupos, onChange }) {
+  const [buscas, setBuscas] = useState({});
+
+  const total = grupos.reduce((a, g) => a + g.valor.length, 0);
+
+  return (
+    <aside className="painel-filtro">
+      <header>
+        <span>{titulo}</span>
+        {total > 0 && (
+          <button
+            type="button"
+            className="painel-limpar"
+            onClick={() => onChange(Object.fromEntries(grupos.map((g) => [g.campo, []])))}
+            title="Limpar as seleções deste painel"
+          >
+            <Icone nome="fechar" tamanho={11} /> {total}
+          </button>
+        )}
+      </header>
+
+      {grupos.map((g) => {
+        const busca = (buscas[g.campo] || '').trim().toLowerCase();
+        const casam = (busca
+          ? g.opcoes.filter((o) => String(o).toLowerCase().includes(busca))
+          : g.opcoes);
+        // Teto de itens no DOM, como no seletor de popover. São 277 bairros hoje;
+        // sem teto, uma dimensão que cresça enche a página de caixas de marcação
+        // que ninguém vai rolar. O rodapé diz quantas ficaram de fora, para a lista
+        // curta não ser confundida com lista completa.
+        const visiveis = casam.slice(0, 300);
+        const escondidas = casam.length - visiveis.length;
+        const alterna = (op) => onChange({
+          [g.campo]: g.valor.includes(op) ? g.valor.filter((v) => v !== op) : [...g.valor, op],
+        });
+        return (
+          <section key={g.campo}>
+            <h4>
+              {g.titulo}
+              <span>{g.valor.length ? `${g.valor.length} de ${g.opcoes.length}` : g.opcoes.length}</span>
+            </h4>
+            {g.opcoes.length > 12 && (
+              <input
+                type="text"
+                placeholder={`Buscar ${g.titulo.toLowerCase()}…`}
+                value={buscas[g.campo] || ''}
+                onChange={(e) => setBuscas((b) => ({ ...b, [g.campo]: e.target.value }))}
+              />
+            )}
+            <div className="painel-lista">
+              {visiveis.map((op) => (
+                <label key={op} title={op}>
+                  <input
+                    type="checkbox"
+                    checked={g.valor.includes(op)}
+                    onChange={() => alterna(op)}
+                  />
+                  <span>{op}</span>
+                </label>
+              ))}
+              {!visiveis.length && <p className="painel-nada">Nada encontrado</p>}
+              {escondidas > 0 && (
+                <p className="painel-nada">
+                  +{escondidas} não listadas — use a busca acima
+                </p>
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </aside>
+  );
+}
+
+/**
  * Seletor de período. `min` é o começo da janela de dados (Configurações → Janela
  * de dados): o que existe carregado em memória, não o que existe no banco.
  *
