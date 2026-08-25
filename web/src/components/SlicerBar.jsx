@@ -139,7 +139,12 @@ export function FiltroLateral({ titulo, grupos, onChange }) {
           <section key={g.campo}>
             <h4>
               {g.titulo}
-              <span>{g.valor.length ? `${g.valor.length} de ${g.opcoes.length}` : g.opcoes.length}</span>
+              {/* `nota` diz de onde a lista veio quando ela e derivada de outro
+                  grupo — sem isso, uma lista que encurtou parece lista incompleta. */}
+              <span title={g.nota || undefined}>
+                {g.nota ? `${g.opcoes.length} ${g.nota}` : null}
+                {!g.nota && (g.valor.length ? `${g.valor.length} de ${g.opcoes.length}` : g.opcoes.length)}
+              </span>
             </h4>
             {g.opcoes.length > 12 && (
               <input

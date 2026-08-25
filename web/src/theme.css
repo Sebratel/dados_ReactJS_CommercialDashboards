@@ -441,54 +441,67 @@ body {
 }
 .aviso-recorte svg { flex: none; color: var(--pbi-gold-600); }
 
-/* --- Relatorio Diario: identidade azul, do tema CY23SU08 do proprio .pbip ----
-   Escopado em .tela-diario de proposito. As outras quatro replicas usam o vermelho
-   da marca porque e o que esta nos .pbip delas; esta pagina e azul porque e o que
-   esta no dela, e quem a usa todo dia reconhece a tela pela cor. Sem o escopo, o
-   azul vazaria para telas que nao pediram. */
+/* --- Relatorio Diario: as cores da origem -----------------------------------
+   Esta e a UNICA tela do dashboard que foge do padrao de cor da casa, e e de
+   proposito: barra de titulo dourada, corpo de tabela com tom proprio por bloco de
+   tecnologia, cartao de numero em vinho. Quem usa este relatorio todo dia acha o
+   numero pela cor e pela posicao; uniformizar tudo em branco fez a tela deixar de
+   ser reconhecivel. Tudo escopado em .tela-diario para nao vazar. */
 .tela-diario {
-  --diario-azul: #118DFF;
-  --diario-tinta: #12239E;
-  --diario-grade: #D3E8FF;
+  --d-dourado: #D9B300;
+  --d-vinho: #8B2331;
+  --d-cinza: #5E5C5A;
+  --d-azul: #E8EEF7;
+  --d-verde: #E4F0E2;
+  --d-roxo: #EDE7F2;
+  --d-salmao: #F7DED3;
+  --d-pessego: #F6E7D6;
 }
 
-/* Duas colunas, na proporcao da origem: 1232 e 630 de 1920 uteis (64/33). O minmax
-   evita a coluna dos numeros virar um filete em tela estreita. */
-.linha-diario { grid-template-columns: minmax(520px, 64fr) minmax(300px, 36fr); }
+/* Duas colunas, na proporcao da origem: 1232 e 630 de 1920 (64/33). */
+.linha-diario { grid-template-columns: minmax(520px, 64fr) minmax(320px, 36fr); }
 .coluna-diario { display: grid; gap: var(--gap); align-content: start; min-width: 0; }
+.par-diario { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
 
-/* Cabecalho e grade dos visuais desta tela seguem o azul. O par fundo+texto muda
-   junto: cabecalho azul com texto branco, celula branca com texto azul-escuro. */
-.tela-diario .visual > header { background: var(--diario-azul); }
-.tela-diario table.pbi thead th { background: var(--diario-azul); }
-.tela-diario table.pbi tbody td { color: var(--diario-tinta); }
-.tela-diario table.pbi tbody tr + tr td { border-top-color: var(--diario-grade); }
-.tela-diario table.pbi tfoot td { color: var(--diario-tinta); border-top-color: var(--diario-azul); }
+/* Barra de titulo dourada com texto escuro — o par fundo+texto viaja junto. */
+.tela-diario .visual > header { background: var(--d-dourado); color: var(--pbi-ink); }
+.tela-diario .visual > header .sub { color: rgba(37, 36, 35, 0.72); }
+.tela-diario .visual > header button { color: var(--pbi-ink); }
 
-/* Os `card` da origem: rotulo pequeno, numero enorme, os dois em azul sobre branco.
-   Lah o numero e 50-60px; aqui e clamp para nao estourar em tela estreita. */
-.cartoes-azuis {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap);
-}
-.cartao-azul {
-  background: var(--pbi-superficie);
-  border: 1px solid var(--diario-grade);
+/* Corpo com o tom do bloco. O cabecalho da tabela herda o tom, mais escuro. */
+.tela-diario .bloco-azul    .body { background: var(--d-azul); }
+.tela-diario .bloco-verde   .body { background: var(--d-verde); }
+.tela-diario .bloco-roxo    .body { background: var(--d-roxo); }
+.tela-diario .bloco-salmao  .body { background: var(--d-salmao); }
+.tela-diario .bloco-pessego .body { background: var(--d-pessego); }
+.tela-diario .bloco-dourado .body { background: #FBF6E3; }
+.tela-diario table.pbi thead th { background: rgba(37, 36, 35, 0.06); color: var(--pbi-ink); }
+.tela-diario table.pbi tbody td { background: transparent; }
+.tela-diario table.pbi tbody tr:hover td { background: rgba(255, 255, 255, 0.55); }
+.tela-diario table.pbi tfoot td { background: rgba(255, 255, 255, 0.6); }
+
+/* Os cartoes de numero: vinho para resultado, cinza para contador de dia — a mesma
+   distincao que a origem faz, e ela ajuda: dia util nao e resultado. */
+.cartoes-diario { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
+.cartao-diario {
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
-  padding: 10px 13px;
-  display: grid; align-content: center; gap: 1px; min-height: 96px;
-  color: var(--diario-azul);
+  padding: 12px 14px;
+  display: grid; align-content: center; justify-items: center; gap: 2px;
+  min-height: 92px; text-align: center; color: #fff;
 }
-.cartao-azul.largo { grid-column: 1 / -1; min-height: 0; }
-.cartao-azul .rotulo {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700;
-}
-.cartao-azul .numero {
-  font-size: clamp(26px, 3.1vw, 46px); line-height: 1.05; font-weight: 600;
+.cartao-diario.vinho { background: var(--d-vinho); }
+.cartao-diario.cinza { background: var(--d-cinza); }
+.cartao-diario.largo { grid-column: 1 / -1; min-height: 0; padding: 10px 14px; }
+.cartao-diario strong {
+  font-size: clamp(24px, 2.9vw, 42px); line-height: 1.05; font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.cartao-azul.largo .numero { font-size: clamp(22px, 2.1vw, 30px); }
-.cartao-azul .desc { font-size: 10.5px; color: var(--pbi-muted); font-weight: 400; line-height: 1.3; }
+.cartao-diario.largo strong { font-size: clamp(20px, 2vw, 28px); }
+.cartao-diario span {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
 
 /* --- Painel de filtro lateral (Clientes Base) ------------------------------
    Na origem o slicer de cidade+bairro tem 311x849 e fica a ESQUERDA das matrizes,

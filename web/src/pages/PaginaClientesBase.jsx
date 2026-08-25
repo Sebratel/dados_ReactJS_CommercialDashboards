@@ -53,6 +53,38 @@ export function PaginaClientesBase({ filtros }) {
   const porCidade = paraGrafico(data?.porCidade);
   const porBairro = paraGrafico(data?.porBairro);
 
+  /**
+   * Bairros que a lista lateral oferece.
+   *
+   * O slicer da origem e uma HIERARQUIA cidade > bairro: escolher Canoas deixa
+   * embaixo os bairros de Canoas. Sem isso, a lista mostrava os 277 bairros de todas
+   * as cidades, e marcar um bairro de outra cidade zerava a tela sem dizer por que.
+   *
+   * Sem cidade marcada, mostra todos — e nao "nenhum": lista vazia pareceria defeito.
+   */
+  const bairrosOferecidos = (() => {
+    const mapa = dims?.bairrosPorCidade || {};
+    if (!filtros.bcidade.length) return dims?.bairros || [];
+    const conjunto = new Set();
+    for (const cidade of filtros.bcidade) {
+      for (const b of mapa[cidade] || []) conjunto.add(b);
+    }
+    return [...conjunto].sort((a1, b1) => a1.localeCompare(b1, 'pt-BR'));
+  })();
+
+  /**
+   * Trocar de cidade descarta o bairro que nao pertence a ela. Sem isso ficava um
+   * filtro invisivel: a lista deixava de mostrar o bairro, mas ele continuava na URL
+   * recortando a tela.
+   */
+  const trocarCidade = (patch) => {
+    const cidades = patch.bcidade || [];
+    if (!cidades.length) return setFiltro(patch);
+    const permitidos = new Set(cidades.flatMap((c) => (dims?.bairrosPorCidade || {})[c] || []));
+    const bairros = filtros.bbairro.filter((b) => permitidos.has(b));
+    return setFiltro({ ...patch, bbairro: bairros });
+  };
+
   if (error) return <Erro erro={error} />;
 
   const colunasTec = !vazio ? [
@@ -106,13 +138,19 @@ export function PaginaClientesBase({ filtros }) {
       <section className="grid linha-com-lateral">
         <FiltroLateral
           titulo="Cidade e bairro"
-          onChange={setFiltro}
+          onChange={trocarCidade}
           grupos={[
             {
               campo: 'bcidade', titulo: 'Cidade', opcoes: dims?.cidades || [], valor: filtros.bcidade,
             },
             {
-              campo: 'bbairro', titulo: 'Bairro', opcoes: dims?.bairros || [], valor: filtros.bbairro,
+              campo: 'bbairro',
+              titulo: 'Bairro',
+              opcoes: bairrosOferecidos,
+              valor: filtros.bbairro,
+              nota: filtros.bcidade.length
+                ? `de ${filtros.bcidade.length === 1 ? filtros.bcidade[0] : `${filtros.bcidade.length} cidades`}`
+                : null,
             },
           ]}
         />

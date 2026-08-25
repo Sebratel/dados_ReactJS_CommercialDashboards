@@ -301,6 +301,22 @@ export function construirRelatorios() {
     cidadesFila: unico(fila.map((f) => f.cidade)),
     cidadesBase: unico(base.map((b) => b.cidade)),
     bairrosBase: unico(base.map((b) => b.bairro)),
+    /**
+     * Bairros de cada cidade. Existe porque o slicer da origem e uma HIERARQUIA
+     * cidade > bairro: escolher Canoas deixa a lista de baixo com os bairros de
+     * Canoas. Sem este mapa a lista mostrava os 277 bairros de todas as cidades, e
+     * marcar um bairro de outra cidade zerava a tela sem explicacao.
+     */
+    bairrosPorCidade: Object.fromEntries(
+      [...base.reduce((mapa, b) => {
+        const cidade = b.cidade || '(sem cidade)';
+        if (!mapa.has(cidade)) mapa.set(cidade, new Set());
+        if (b.bairro) mapa.get(cidade).add(b.bairro);
+        return mapa;
+      }, new Map())].map(([cidade, bairros]) => [
+        cidade, [...bairros].sort((x, y) => x.localeCompare(y, 'pt-BR')),
+      ]),
+    ),
     tecnologiasBase: unico(base.map((b) => b.tecnologia)),
     cidadesClima: unico((clima().linhas || []).map((l) => l.cidade)),
   };
@@ -750,6 +766,56 @@ function tabelaMetas(fatos, dataDe, alvos, dias, rotuloTotal = 'Total') {
  * A tela mais densa do relatório: meta × realizado × projeção, para venda e para
  * ativação, em fibra e em rádio, mais a fila de instalação e o clima.
  */
+/**
+ * Clientes que o relatório de origem EXCLUI da contagem de ativação, por nome, no
+ * filtro de cada visual de ativos. São contratos institucionais que distorcem a
+ * conta: entram como uma ativação e valem por um prédio inteiro.
+ *
+ * Ficam aqui e a tela diz que existem — recorte invisível gera chamado. Não valem
+ * para VENDA, só para ATIVAÇÃO, que é como está na origem.
+ */
+const EXCLUIDOS_DE_ATIVACAO = [
+  'Prefeitura Municipal de São Leopoldo/RS',
+  'RESIDENCIAL MORRO DO ESPELHO',
+];
+
+/**
+ * As duas famílias de equipe da fila de instalação, na divisão que a origem faz:
+ *
+ *   BKO       — 'Validação de dados - BKO': protocolo que ainda não foi para a rua,
+ *               parado na conferência de cadastro.
+ *   AGENDADOS — as equipes de campo: já tem agenda, falta executar.
+ *
+ * É a divisão que importa operacionalmente, e não a que eu tinha feito (fibra contra
+ * rádio): as duas tabelas respondem "quantos estão presos no escritório" e "quantos
+ * estão na fila da rua". O tipo (fibra/rádio) é o outro eixo, e vira o par de baixo.
+ */
+const EQUIPE_BKO = ['Validação de dados - BKO'];
+const EQUIPES_AGENDADAS = [
+  'Ativações - Fibra',
+  'Instalação [SLE/SPS/NHO/EIO/CAN]',
+  'Operacional Fibra – Instalações',
+  'Equipe Field Service',
+  'Operacional Radio',
+  'Instalação [Nova Santa Rita, Esteio]',
+  'Instalação [Triunfo]',
+];
+
+const TIPO_FIBRA = 'TEC - Instalação de Fibra';
+const TIPO_RADIO = 'TEC - Instalação de Rádio';
+
+/**
+ * A tela mais densa do relatório de origem: 34 visuais em três blocos de tecnologia.
+ *
+ * A ESTRUTURA É POR TECNOLOGIA, e isso não é detalhe de layout: cada visual de lá
+ * tem `TECNOLOGIA` no próprio filtro, e as metas de rádio são um número único
+ * enquanto as de fibra são por cidade. Uma tabela só, somando as três, responderia
+ * uma pergunta que ninguém faz.
+ *
+ *   FIBRA     — vendas e ativações por cidade, contra meta, mais os cartões
+ *   RÁDIO     — o mesmo, com meta única (não por cidade)
+ *   TELEFONIA — só contagem e média por dia; não tem meta na origem
+ */
 export function painelDiario(flt) {
   const padrao = mesCorrente();
   const de = flt.de || padrao.de;
@@ -762,74 +828,109 @@ export function painelDiario(flt) {
     && combinaLista(f.equipe, flt.equipes)
     && combinaLista(f.situacao, flt.situacoes)
     && combinaLista(f.tipoSolicitacao, flt.tipos)
+    && combinaLista(f.tecnologia, flt.tecnologias)
   ));
-  const comTec = (tec) => base.filter((f) => (
-    combinaLista(f.tecnologia, flt.tecnologias) && (!tec || f.tecnologia === tec)));
 
-  const vendidosNoPeriodo = (itens) => itens.filter((f) => dentro(f.dtVenda, de, ate));
-  const ativosNoPeriodo = (itens) => itens.filter((f) => f.dtAtiv && dentro(f.dtAtiv, de, ate));
+  const daTecnologia = (tec) => base.filter((f) => f.tecnologia === tec);
+  const vendidos = (itens) => itens.filter((f) => dentro(f.dtVenda, de, ate));
+  const excluido = new Set(EXCLUIDOS_DE_ATIVACAO.map((n) => n.toUpperCase()));
+  const ativados = (itens) => itens.filter((f) => (
+    f.dtAtiv && dentro(f.dtAtiv, de, ate) && !excluido.has(f.cliente.toUpperCase())));
 
-  const fibra = comTec('FIBRA');
-  const radio = comTec('RÁDIO');
-  const todos = comTec(null);
+  const fibra = daTecnologia('FIBRA');
+  const radio = daTecnologia('RÁDIO');
+  const telefonia = daTecnologia('TELEFONIA');
 
-  /**
-   * Fila de instalação, quatro recortes como as quatro tabelas da origem.
-   *
-   * O tipo é comparado por ID (12 fibra, 249 rádio), nunca por rótulo. E quando não
-   * existe protocolo daquele tipo, a tabela sai VAZIA — a primeira versão daqui
-   * tratava "tipo não encontrado" como "sem filtro" e mostrava a fila inteira na
-   * tabela de rádio, que hoje é zero. Somava 170 onde o certo era 0.
-   */
-  const filaDe = (tipoId, apenasDetalhe) => {
+  const vendaFibra = vendidos(fibra);
+  const ativoFibra = ativados(fibra);
+  const vendaRadio = vendidos(radio);
+  const ativoRadio = ativados(radio);
+  const vendaTelefonia = vendidos(telefonia);
+
+  /** Quantas ativações a exclusão de clientes tirou da conta, para a tela dizer. */
+  const tirados = (itens) => itens.filter((f) => (
+    f.dtAtiv && dentro(f.dtAtiv, de, ate) && excluido.has(f.cliente.toUpperCase()))).length;
+
+  // ---- fila de instalação: equipe (BKO / agendados) x tipo (fibra / rádio) ----
+  const filaDe = (tipo, equipes) => {
     const linhas = estado.fila.filter((f) => (
-      f.tipoId === tipoId
-      && (!apenasDetalhe || f.noDetalhe)
-      && combinaLista(f.cidade, flt.cidades)
-      && combinaLista(f.equipe, flt.equipes)));
+      f.tipoProtocolo === tipo
+      && equipes.includes(f.equipe)
+      && combinaLista(f.cidade, flt.cidades)));
     return {
       total: linhas.length,
       porCidade: agrupar(linhas, (f) => f.cidade, { rotuloVazio: '(sem cidade)' }),
     };
   };
-  const TIPO_FIBRA = 12;
-  const TIPO_RADIO = 249;
 
-  // clima do período, cidade × dia
+  // ---- clima do período, cidade x dia ----------------------------------------
+  // Porto Alegre fica fora: é o filtro do visual de origem. A cidade existe na
+  // busca da Open-Meteo porque as outras seis são a região metropolitana dela, mas
+  // a operação não instala lá.
   const linhasClima = estado.clima.filter((l) => l.data >= de && l.data <= ate
+    && l.cidade !== 'Porto Alegre'
     && (!flt.cidades.length || flt.cidades.includes(l.cidade)));
   const diasClima = [...new Set(linhasClima.map((l) => l.data))].sort();
-  const cidadesClima = [...new Set(linhasClima.map((l) => l.cidade))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const cidadesClima = [...new Set(linhasClima.map((l) => l.cidade))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const mapaClima = new Map(linhasClima.map((l) => [`${l.cidade}|${l.data}`, l]));
+
+  const porCidadeSimples = (itens) => {
+    const mapa = new Map();
+    for (const f of itens) {
+      const cidade = f.cidade || '(sem cidade)';
+      mapa.set(cidade, (mapa.get(cidade) || 0) + 1);
+    }
+    return [...mapa.entries()]
+      .map(([cidade, vendas]) => ({
+        nome: cidade, vendas, mediaDia: dias.uteis ? vendas / dias.uteis : 0,
+      }))
+      .sort((a, b) => b.vendas - a.vendas || a.nome.localeCompare(b.nome, 'pt-BR'));
+  };
 
   return {
     periodo: { de, ate, padrao: !flt.de && !flt.ate },
     dias,
     metasOrigem: alvos.origem,
-    vendas: tabelaMetas(vendidosNoPeriodo(todos), (f) => f.dtVenda, alvos.vendas, dias),
-    ativos: tabelaMetas(ativosNoPeriodo(todos), (f) => f.dtAtiv, alvos.ativos, dias),
-    // Rádio na origem é meta única, não por cidade: uma linha só.
-    vendasRadio: linhaMeta('Rádio', vendidosNoPeriodo(radio).length, alvos.vendasRadio, dias),
-    ativosRadio: linhaMeta('Rádio', ativosNoPeriodo(radio).length, alvos.ativosRadio, dias),
-    cartoes: {
-      ativos: ativosNoPeriodo(todos).length,
-      valorAtivo: somar(ativosNoPeriodo(todos), (f) => f.valor),
-      vendas: vendidosNoPeriodo(todos).length,
-      valorVenda: somar(vendidosNoPeriodo(todos), (f) => f.valor),
-      fibraAtivos: ativosNoPeriodo(fibra).length,
-      diasUteis: dias.uteis,
-      diasProdutivos: dias.produtivos,
+
+    fibra: {
+      vendas: tabelaMetas(vendaFibra, (f) => f.dtVenda, alvos.vendas, dias),
+      ativos: tabelaMetas(ativoFibra, (f) => f.dtAtiv, alvos.ativos, dias),
+      cartoes: {
+        ativos: ativoFibra.length,
+        projecao: linhaMeta('', ativoFibra.length, 0, dias).projecao,
+        valor: somar(ativoFibra, (f) => f.valor),
+        vendas: vendaFibra.length,
+      },
     },
+    radio: {
+      // Meta de rádio é número único na origem, não por cidade.
+      vendas: linhaMeta('Vendas', vendaRadio.length, alvos.vendasRadio, dias),
+      ativos: linhaMeta('Ativações', ativoRadio.length, alvos.ativosRadio, dias),
+      cartoes: {
+        ativos: ativoRadio.length,
+        projecao: linhaMeta('', ativoRadio.length, 0, dias).projecao,
+        valor: somar(ativoRadio, (f) => f.valor),
+        vendas: vendaRadio.length,
+      },
+    },
+    telefonia: {
+      // Sem meta na origem: só contagem e média por dia.
+      linhas: porCidadeSimples(vendaTelefonia),
+      total: {
+        nome: 'Total',
+        vendas: vendaTelefonia.length,
+        mediaDia: dias.uteis ? vendaTelefonia.length / dias.uteis : 0,
+      },
+    },
+
     fila: {
-      // A origem tem quatro tabelas de fila: duas com a lista de equipes larga
-      // (que inclui Field Service) e duas com a estreita. `filaOculta` é a
-      // diferença — hoje 103 de 170 protocolos.
-      fibra: filaDe(TIPO_FIBRA, false),
-      radio: filaDe(TIPO_RADIO, false),
-      fibraDetalhe: filaDe(TIPO_FIBRA, true),
-      radioDetalhe: filaDe(TIPO_RADIO, true),
-      oculta: estado.avisos.filaSemDetalhe || 0,
+      bkoFibra: filaDe(TIPO_FIBRA, EQUIPE_BKO),
+      agendadosFibra: filaDe(TIPO_FIBRA, EQUIPES_AGENDADAS),
+      bkoRadio: filaDe(TIPO_RADIO, EQUIPE_BKO),
+      agendadosRadio: filaDe(TIPO_RADIO, EQUIPES_AGENDADAS),
     },
+
     clima: {
       dias: diasClima,
       cidades: cidadesClima,
@@ -841,6 +942,13 @@ export function painelDiario(flt) {
         }),
       })),
       erro: estado.avisos.climaErro || null,
+    },
+
+    // O recorte que a origem faz sem dizer, agora dito.
+    excluidos: {
+      clientes: EXCLUIDOS_DE_ATIVACAO,
+      ativacoesFibra: tirados(fibra),
+      ativacoesRadio: tirados(radio),
     },
   };
 }
@@ -1072,7 +1180,9 @@ export const filtrosDiario = () => ({
 });
 
 export const filtrosBase = () => ({
-  cidades: estado.dims.cidadesBase, bairros: estado.dims.bairrosBase,
+  cidades: estado.dims.cidadesBase,
+  bairros: estado.dims.bairrosBase,
+  bairrosPorCidade: estado.dims.bairrosPorCidade,
   tecnologias: estado.dims.tecnologiasBase,
 });
 

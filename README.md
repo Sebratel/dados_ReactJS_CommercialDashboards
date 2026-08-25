@@ -367,24 +367,45 @@ Isso não é detalhe de cadastro. Feriado é dia produtivo a menos, que é meta 
 maior, que é projeção diferente — uma data errada ali move todos os números do
 Relatório Diário.
 
-### Por que o Relatório Diário é azul
+### Relatório Diário: três blocos de tecnologia, e as cores da origem
 
-As outras quatro réplicas usam o vermelho da marca (`#880F17`) porque é o que está
-nos `.pbip` delas. Esta página usa o tema **CY23SU08**, e a leitura do arquivo dá os
-valores exatos: número de cartão em `#118DFF` a 50–60px, texto de tabela em
-`#12239E`, grade vertical azul de 2px, cabeçalho maiúsculo centralizado. Não é
-descuido nem escolha nossa — quem usa este relatório todo dia reconhece a tela pelo
-azul, e trocar por vermelho gera desconfiança no número.
+Esta é a única tela do dashboard que foge do padrão de cor da casa, e é decisão
+consciente: barra de título dourada, corpo de tabela com tom próprio por bloco,
+cartão de número em vinho, contador de dia em cinza. Quem usa este relatório todo dia
+acha o número pela cor e pela posição — uniformizar tudo em branco fez a tela deixar
+de ser reconhecível. Os tokens ficam escopados em `.tela-diario`.
 
-Os tokens ficam escopados em `.tela-diario`, para não vazarem para o resto do
-dashboard, e o par fundo+texto muda sempre junto: cabeçalho azul com texto branco,
-célula branca com texto azul-escuro.
+**A estrutura é por TECNOLOGIA**, e isso saiu do `filterConfig` de cada visual: todos
+eles têm `TECNOLOGIA` no próprio filtro.
 
-O **layout também é o da origem**: duas colunas, `64fr / 36fr`, na proporção de
-1232 e 630 dos 1920 de lá. À esquerda as tabelas de meta empilhadas (x=22); à direita
-os cartões de número grande e a fila de instalação (x=1256 a 1886); o clima fecha a
-página em largura inteira (y=1900). Seguir a origem aqui vale mais que a convenção
-interna do dashboard: quem abre esta tela procura o número pela posição.
+| Bloco | O que tem |
+|---|---|
+| FIBRA | vendas e ativações por cidade contra meta, mais cartões de ativos, projeção e valor instalado |
+| RÁDIO | o mesmo, com meta **única** — na origem a meta de rádio não é por cidade |
+| TELEFONIA | só contagem e média por dia; não tem meta na origem |
+
+Uma tabela só, somando as três, responderia uma pergunta que ninguém faz.
+
+**A fila divide por EQUIPE, não por tecnologia.** `BKO` é a equipe *Validação de dados*
+— protocolo parado na conferência de cadastro; `AGENDADOS` são as equipes de campo —
+já tem agenda, espera a rua. É a divisão que responde a pergunta operacional, e o tipo
+(fibra/rádio) é o segundo eixo. Eu havia dividido só por tipo, o que juntava dois
+estados bem diferentes na mesma coluna.
+
+> **Dois clientes fora da conta de ativação.** O `filterConfig` de cada visual de
+> ativos exclui `Prefeitura Municipal de São Leopoldo/RS` e
+> `RESIDENCIAL MORRO DO ESPELHO` — contratos institucionais que entram como uma
+> ativação e valem um prédio inteiro. A exclusão vale só para ATIVAÇÃO, nunca para
+> venda, e a tela diz quantas ativações ela tirou no mês. Recorte invisível gera
+> chamado.
+
+**Porto Alegre fica fora da matriz de clima**, também por filtro do visual de origem:
+a cidade existe na busca porque as outras seis são a região metropolitana dela, mas a
+operação não instala lá.
+
+Conferido contra uma captura do Power BI do mesmo dia: Canoas, Esteio e Porto Alegre
+saíram com os sete números idênticos, e o total de telefonia também. As diferenças nas
+demais linhas eram as vendas que entraram entre o print e a medição.
 
 ### Filtro em painel, não em popover (Clientes Base)
 
@@ -397,6 +418,12 @@ cliques por troca e esconde o gráfico justamente na hora de comparar.
 Então cidade e bairro saíram da barra de cima e viraram um `FiltroLateral` — mas
 continuam sendo contados e limpos pela barra (campo `extras` na declaração da aba),
 senão o botão "limpar N filtros" mentiria sobre o que está ativo.
+
+O slicer de lá é uma **hierarquia** cidade > bairro, e a réplica também: escolher
+Canoas deixa a lista de baixo com os 40 bairros de Canoas, não com os 277 de todas as
+cidades. E trocar de cidade **descarta** o bairro que não pertence a ela — sem isso a
+lista deixava de mostrar o bairro mas ele continuava na URL, recortando a tela sem
+aparecer em lugar nenhum.
 
 ### A régua de dias do Relatório Diário
 
