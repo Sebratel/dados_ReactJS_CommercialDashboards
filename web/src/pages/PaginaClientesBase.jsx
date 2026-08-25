@@ -67,7 +67,7 @@ export function PaginaClientesBase({ filtros }) {
 
   return (
     <>
-      <section className="grid linha-quatro">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(c.contratos)}
           label="CLIENTES NA BASE"
@@ -90,7 +90,7 @@ export function PaginaClientesBase({ filtros }) {
           label="CIDADES"
           desc="com cliente conectado"
         />
-      </section>
+      </div>
 
       <section className="grid">
         <Visual

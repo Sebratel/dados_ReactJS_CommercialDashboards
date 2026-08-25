@@ -69,7 +69,7 @@ export function PaginaPesquisaCancelamento({ filtros }) {
         </p>
       )}
 
-      <section className="grid linha-quatro">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(c.protocolos)}
           label="PESQUISAS"
@@ -92,7 +92,7 @@ export function PaginaPesquisaCancelamento({ filtros }) {
           label="ITENS"
           desc="linhas de checklist, respondidas ou não"
         />
-      </section>
+      </div>
 
       <section className="grid">
         <Visual
@@ -120,11 +120,18 @@ export function PaginaPesquisaCancelamento({ filtros }) {
       </section>
 
       <section className="grid linha-dupla">
+        {/*
+          Sem `flush`, e isso importa: com o padding do corpo removido, o SVG do
+          gráfico fica da altura EXATA do container, e o arredondamento sub-pixel
+          o empurra 4px além. O corpo tem `overflow: auto`, então aparece a barra
+          vertical, que rouba largura, que faz aparecer a horizontal, que rouba
+          altura — as duas se alimentam e o gráfico fica tremendo. As telas que
+          usam este gráfico e não tremem não passam `flush`.
+        */}
         <Visual
           title="MOTIVO DO CANCELAMENTO"
           sub={vazio ? null : 'motivo registrado no contrato, não a resposta da pesquisa'}
           className="v-meia"
-          flush
         >
           {vazio ? <Loading /> : data.porMotivo.length
             ? <BarrasHorizontais data={data.porMotivo} keyLabel="nome" keyValue="valor" nome="Protocolos" larguraCategoria={210} />
@@ -133,8 +140,8 @@ export function PaginaPesquisaCancelamento({ filtros }) {
 
         <Visual
           title="POR CIDADE"
+          sub={vazio ? null : 'protocolos de pesquisa por cidade do cliente'}
           className="v-meia"
-          flush
         >
           {vazio ? <Loading /> : data.porCidade.length
             ? <BarrasHorizontais data={data.porCidade} keyLabel="nome" keyValue="valor" nome="Protocolos" />

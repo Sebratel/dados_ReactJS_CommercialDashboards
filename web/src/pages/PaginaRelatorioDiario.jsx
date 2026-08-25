@@ -84,7 +84,7 @@ export function PaginaRelatorioDiario({ filtros }) {
         </p>
       )}
 
-      <section className="grid linha-cinco">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(c.vendas)}
           label="VENDAS"
@@ -113,7 +113,7 @@ export function PaginaRelatorioDiario({ filtros }) {
           desc="já passados, na mesma régua"
           title="Conta só até ontem. Incluir o dia de hoje, ainda em andamento, derrubaria a média por dia toda manhã."
         />
-      </section>
+      </div>
 
       <section className="grid linha-dupla">
         {vazio ? <Visual title="VENDAS POR CIDADE" className="v-tabela"><Loading /></Visual>

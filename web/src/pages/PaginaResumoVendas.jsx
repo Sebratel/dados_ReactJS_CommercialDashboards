@@ -69,7 +69,7 @@ export function PaginaResumoVendas({ filtros }) {
 
   return (
     <>
-      <section className="grid linha-quatro">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(c.contratos)}
           label="CONTRATOS"
@@ -93,7 +93,7 @@ export function PaginaResumoVendas({ filtros }) {
           desc="valor mensal ÷ contratos"
           title="Média da mensalidade por contrato. Não é por cliente: cliente com dois contratos entra duas vezes."
         />
-      </section>
+      </div>
 
       <section className="grid">
         <Visual

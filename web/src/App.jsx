@@ -38,7 +38,7 @@ const PAGINAS = [
   { id: 'vendas-canceladas', path: '/vendas-canceladas', label: 'Vendas Canceladas', el: <VendasCanceladas /> },
   { id: 'condominios', path: '/condominios', label: 'Condomínios', el: <Condominios /> },
   { id: 'leads', path: '/leads', label: 'Leads e Negociações', el: <LeadsNegociacoes /> },
-  { id: 'relatorios', path: '/relatorios', label: 'Relatórios', el: <Relatorios /> },
+  { id: 'relatorios', path: '/relatorios', label: 'Relatórios Comercial', el: <Relatorios /> },
   { id: 'preditivo', path: '/preditivo', label: 'Análise Preditiva', el: <Preditivo /> },
 ];
 

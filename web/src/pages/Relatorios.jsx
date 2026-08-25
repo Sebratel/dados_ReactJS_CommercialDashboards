@@ -152,7 +152,7 @@ function PaginaGeral({ filtros }) {
 
   return (
     <>
-      <section className="grid linha-cinco">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(c.contratos)}
           label="CONTRATOS"
@@ -183,7 +183,7 @@ function PaginaGeral({ filtros }) {
           desc="instalações em aberto"
           title="Protocolos de instalação de fibra ou rádio sem equipamento entregue. Não respeita o período: fila em aberto é retrato do agora."
         />
-      </section>
+      </div>
 
       <section className="grid">
         <Visual

@@ -47,7 +47,7 @@ export function PaginaClima({ filtros }) {
 
   return (
     <>
-      <section className="grid linha-quatro">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(data.cidades.length)}
           label="CIDADES"
@@ -72,7 +72,7 @@ export function PaginaClima({ filtros }) {
           desc="uma busca por dia, guardada em disco"
           title="Chuva de ontem não muda, e a previsão de hoje não melhora se pedirmos de dez em dez minutos. Bater numa API de terceiro sem ganho não se faz."
         />
-      </section>
+      </div>
 
       {!vazio && data.erro && (
         <p className="aviso-recorte">

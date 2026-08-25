@@ -44,7 +44,7 @@ export function PaginaQuadroEquipes({ filtros }) {
 
   return (
     <>
-      <section className="grid linha-cinco">
+      <div className="kpi-faixa">
         <Kpi
           value={vazio ? '—' : int(data.vendedores)}
           label="VENDEDORES"
@@ -73,7 +73,7 @@ export function PaginaQuadroEquipes({ filtros }) {
           desc="(cadastros − ativações) ÷ cadastros"
           title="É a medida %CHURN da origem. O nome engana: não é cliente que cancelou, é venda que ainda não instalou. Em período recente ela é naturalmente alta, porque a instalação vem depois da venda."
         />
-      </section>
+      </div>
 
       <section className="grid">
         <Visual
