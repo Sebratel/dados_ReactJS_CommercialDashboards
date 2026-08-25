@@ -6,10 +6,11 @@
 import { config } from '../config.js';
 import { loadSql, pool as pgPool } from '../db/pg.js';
 import * as maria from '../db/maria.js';
-import { SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
+import { GENERAL_COMMERCIAL_SQL, SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
 import { getState } from './store.js';
 import { getEstadoCondominios } from './condominios.js';
 import { getEstadoLeads } from './leads.js';
+import { getEstadoRelatorios } from './relatorios.js';
 
 export const CATALOGO = [
   {
@@ -115,6 +116,57 @@ export const CATALOGO = [
     origemPbi: 'negotiations (dsn=dbVoalle)',
     params: () => [config.crmSince],
   },
+  {
+    id: 'cesta',
+    titulo: 'Cesta de produtos',
+    descricao: 'Um item de contrato por linha (produto ou serviço avulso com produto definido). A origem lê a tabela inteira — 452.630 linhas, com contrato datado de 1000-01-01; aqui a consulta obedece à Janela de dados.',
+    banco: 'voalle',
+    fonte: 'cesta',
+    modelo: 'relatorios',
+    origemPbi: 'Cesta de Produtos (dsn=dbVoalle)',
+    params: () => [config.since],
+  },
+  {
+    id: 'cancelamento',
+    titulo: 'Pesquisa de cancelamento',
+    descricao: 'Atendimentos de cancelamento cujo checklist final registra a pesquisa. O JSON do checklist viaja inteiro e é aberto em pergunta × resposta no modelo, para que um checklist malformado derrube só a própria linha.',
+    banco: 'voalle',
+    fonte: 'cancelamento',
+    modelo: 'relatorios',
+    origemPbi: 'Cancelamento (dsn=dbVoalle)',
+    params: () => [config.since],
+  },
+  {
+    id: 'backlog',
+    titulo: 'Fila de instalação',
+    descricao: 'Instalações de fibra e rádio em aberto, com equipamento ainda em estoque. Uma consulta no lugar das duas da origem (backlog agregada e Consulta1 detalhada): a coluna no_detalhe marca as linhas que o detalhe de lá enxergava, porque a lista de equipes das duas divergia. Sem recorte de data, de propósito.',
+    banco: 'voalle',
+    fonte: 'backlog',
+    modelo: 'relatorios',
+    origemPbi: 'backlog + Consulta1 (dsn=dbVoalle)',
+    params: () => [],
+  },
+  {
+    id: 'contratos_base',
+    titulo: 'Base de clientes conectados',
+    descricao: 'Contratos com ponto de autenticação — o que caracteriza cliente conectado. A tecnologia sai pronta do SQL, replicando as vinte comparações de prefixo da coluna DAX de origem, na mesma ordem (ST_NH antes de ST_N, e assim por diante).',
+    banco: 'voalle',
+    fonte: 'base',
+    modelo: 'relatorios',
+    origemPbi: 'authentication_contracts (dsn=dbVoalle)',
+    params: () => [config.since],
+  },
+  {
+    id: 'ponte',
+    titulo: 'Ponte histórica de vendas',
+    descricao: 'Venda registrada fora do Voalle, de 2022 a 2024. O relatório de origem anexa esta tabela ao general; medido no banco, 98,4% das linhas de 2024 são o mesmo cliente na mesma data que o Voalle já tem. Por isso aqui ela entra só onde o Voalle não tem — 444 linhas em vez de 26.218.',
+    banco: 'maria',
+    fonte: 'ponte',
+    modelo: 'relatorios',
+    origemPbi: 'General_Commercial (dsn=dbMaria)',
+    sql: GENERAL_COMMERCIAL_SQL,
+    params: () => [config.since],
+  },
 ];
 
 const sqlDe = (item) => (item.sql != null ? item.sql : loadSql(item.id));
@@ -123,7 +175,8 @@ export function listarQueries() {
   const { sources } = getState();
   const fontesCond = getEstadoCondominios().fontes;
   const fontesLeads = getEstadoLeads().fontes;
-  const POR_MODELO = { condominios: fontesCond, leads: fontesLeads };
+  const fontesRel = getEstadoRelatorios().fontes;
+  const POR_MODELO = { condominios: fontesCond, leads: fontesLeads, relatorios: fontesRel };
   return CATALOGO.map((item) => {
     // as estatísticas de execução vivem no modelo que a consulta alimenta
     const s = (item.modelo ? POR_MODELO[item.modelo] : sources)[item.fonte] || {};
@@ -164,7 +217,9 @@ export async function testarQuery(id, limite = 20) {
     };
   }
 
-  const { rows } = await maria.query(envolvido);
+  // A ponte histórica é a primeira consulta de MariaDB com parâmetro; antes daqui
+  // este ramo ignorava `params` e a consulta quebrava no `?` sem valor.
+  const { rows } = await maria.query(envolvido, item.params ? item.params() : []);
   return {
     colunas: rows.length ? Object.keys(rows[0]) : [],
     linhas: rows,

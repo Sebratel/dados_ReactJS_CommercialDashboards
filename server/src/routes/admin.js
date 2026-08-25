@@ -7,6 +7,8 @@ import {
 } from '../auth/access.js';
 import { listarQueries, testarQuery } from '../model/catalogo.js';
 import { definirJanela, estadoRecarga, janela, marcarRecarga, restaurarJanela } from '../janela.js';
+import { definirFeriados, estadoFeriados, restaurarFeriados } from '../feriados.js';
+import { definirMetas, estadoMetas, restaurarMetas } from '../metas.js';
 import { refreshAll } from '../etl/refresh.js';
 import { getState } from '../model/store.js';
 import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
@@ -179,6 +181,53 @@ admin.post('/janela/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) =>
   const mudou = MUTAVEIS.some((c) => antes[c] !== depois[c]);
   if (mudou) recarregar('restauração do .env');
   return res.json({ ...depois, recarga: estadoRecarga(), recarregando: mudou });
+});
+
+// ----------------------------------------------------- feriados e metas
+/**
+ * Os dois cadastros que o RELATÓRIO DIÁRIO usa. Nenhum dos dois recarrega o banco:
+ * feriado e meta são cálculo em cima do que já está em memória, então a próxima
+ * requisição da tela já sai com o valor novo. É por isso que aqui não tem
+ * `recarregar()` como na janela de dados.
+ */
+admin.get('/feriados', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  res.json(estadoFeriados());
+});
+
+admin.put('/feriados', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    const antes = estadoFeriados();
+    const depois = definirFeriados(req.body || {}, req.usuario.email);
+    console.log(`[feriados] ${req.usuario.email}: ${antes.extras.length} -> ${depois.extras.length} cadastrados, ${depois.removidos.length} removidos`);
+    return res.json(depois);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+admin.post('/feriados/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  console.log(`[feriados] ${req.usuario.email}: cadastro apagado, valem só os calculados`);
+  res.json(restaurarFeriados());
+});
+
+admin.get('/metas', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  res.json(estadoMetas());
+});
+
+admin.put('/metas', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    const depois = definirMetas(req.body || {}, req.usuario.email);
+    const cidades = Object.keys(depois.vendas).length;
+    console.log(`[metas] ${req.usuario.email}: ${cidades} cidade(s), rádio ${depois.vendasRadio}/${depois.ativosRadio}`);
+    return res.json(depois);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+admin.post('/metas/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  console.log(`[metas] ${req.usuario.email}: voltou para a semente do relatório`);
+  res.json(restaurarMetas());
 });
 
 // ------------------------------------------------- catálogo de queries (DEV)

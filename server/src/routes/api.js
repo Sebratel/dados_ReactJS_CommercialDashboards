@@ -21,6 +21,15 @@ import {
   painelCondominios, parseFiltrosCondominios,
 } from '../model/condominios.js';
 import {
+  filtrosBase, filtrosClima, filtrosDiario, filtrosEquipes, filtrosGeral,
+  filtrosPesquisa, filtrosResumo,
+  getEstadoRelatorios, painelBase, painelClima, painelDiario, painelEquipes,
+  painelGeral, painelPesquisa, painelResumo,
+  parseFiltrosBase, parseFiltrosClima, parseFiltrosDiario, parseFiltrosEquipes,
+  parseFiltrosGeral, parseFiltrosPesquisa, parseFiltrosResumo,
+  relatoriosPronto,
+} from '../model/relatorios.js';
+import {
   erroNegociacoes, filtrosDesempenho, filtrosLeads, filtrosNegociacoes,
   getEstadoLeads, leadsPronto, negociacoesPronto, painelDesempenho, painelLeads,
   painelNegociacoes, parseFiltrosDesempenho, parseFiltrosLeads,
@@ -55,6 +64,7 @@ api.use((req, res, next) => {
   if (req.path.startsWith('/leads')) return next();
   if (req.path.startsWith('/negociacoes')) return next();
   if (req.path.startsWith('/desempenho')) return next();
+  if (req.path.startsWith('/relatorios')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
     return res.status(503).json({ error: 'Carregando dados do Voalle/MariaDB…', carregando: true });
@@ -66,6 +76,18 @@ api.use((req, res, next) => {
 const exigirCondominios = (req, res, next) => {
   if (!condominiosPronto()) {
     return res.status(503).json({ error: 'Carregando a rede de splitters do Voalle…', carregando: true });
+  }
+  return next();
+};
+
+/**
+ * O modelo de relatórios depende do comercial (ele lê os contratos de lá) E das
+ * quatro fontes próprias. Checar as duas coisas evita a tela abrir com a cesta
+ * vazia parecendo "nenhum produto" quando o que houve foi carga incompleta.
+ */
+const exigirRelatorios = (req, res, next) => {
+  if (!relatoriosPronto()) {
+    return res.status(503).json({ error: 'Carregando os relatórios comerciais…', carregando: true });
   }
   return next();
 };
@@ -98,6 +120,7 @@ const exigirNegociacoes = (req, res, next) => {
 function meta() {
   const s = getState();
   const c = getEstadoCondominios();
+  const r = getEstadoRelatorios();
   const l = getEstadoLeads();
   return {
     version: s.version,
@@ -122,6 +145,19 @@ function meta() {
       portas: c.fatos.length,
       splitters: c.splitters.length,
       ready: condominiosPronto(),
+    },
+    relatorios: {
+      version: r.versao,
+      builtAt: r.geradoEm,
+      buildMs: r.buildMs ?? null,
+      contratos: r.fatos.length,
+      cesta: r.cesta.length,
+      pesquisa: r.pesquisa.length,
+      fila: r.fila.length,
+      base: r.base.length,
+      clima: r.clima.length,
+      avisos: r.avisos,
+      ready: relatoriosPronto(),
     },
     refresh: config.refresh,
     since: config.since,
@@ -268,6 +304,62 @@ api.get('/desempenho/filtros', auth('leads'), exigirNegociacoes, (req, res) => {
 api.get('/desempenho', auth('leads'), exigirNegociacoes, (req, res) => {
   const por = req.query.por === 'cidade' ? 'cidade' : 'vendedor';
   res.json(withMeta(painelDesempenho(parseFiltrosDesempenho(req.query), por)));
+});
+
+// ------------------------------------------------------- RELATÓRIOS COMERCIAL
+/**
+ * Sete sub-páginas, um ACL só (`relatorios`), cada uma com o seu recorte e as suas
+ * dimensões. A separação por endpoint é a mesma dos outros relatórios: cada aba
+ * pede o que precisa, e uma aba lenta não segura as outras.
+ */
+api.get('/relatorios/geral/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(filtrosGeral()));
+});
+api.get('/relatorios/geral', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(painelGeral(parseFiltrosGeral(req.query))));
+});
+
+api.get('/relatorios/resumo/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(filtrosResumo()));
+});
+api.get('/relatorios/resumo', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(painelResumo(parseFiltrosResumo(req.query))));
+});
+
+api.get('/relatorios/equipes/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(filtrosEquipes()));
+});
+api.get('/relatorios/equipes', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(painelEquipes(parseFiltrosEquipes(req.query))));
+});
+
+api.get('/relatorios/diario/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(filtrosDiario()));
+});
+api.get('/relatorios/diario', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(painelDiario(parseFiltrosDiario(req.query))));
+});
+
+api.get('/relatorios/base/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(filtrosBase()));
+});
+api.get('/relatorios/base', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(painelBase(parseFiltrosBase(req.query))));
+});
+
+api.get('/relatorios/pesquisa/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(filtrosPesquisa()));
+});
+api.get('/relatorios/pesquisa', auth('relatorios'), exigirRelatorios, (req, res) => {
+  res.json(withMeta(painelPesquisa(parseFiltrosPesquisa(req.query))));
+});
+
+// O clima não depende de banco nenhum: se as consultas falharem, esta aba abre.
+api.get('/relatorios/clima/filtros', auth('relatorios'), (req, res) => {
+  res.json(withMeta(filtrosClima()));
+});
+api.get('/relatorios/clima', auth('relatorios'), (req, res) => {
+  res.json(withMeta(painelClima(parseFiltrosClima(req.query))));
 });
 
 // -------------------------------------------------------------- PREMIAÇÕES

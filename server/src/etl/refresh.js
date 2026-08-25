@@ -1,15 +1,19 @@
 import { config } from '../config.js';
 import { queryFile } from '../db/pg.js';
 import * as maria from '../db/maria.js';
-import { SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
+import { GENERAL_COMMERCIAL_SQL, SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
 import { build, mergeSource, setSource, setSourceError } from '../model/store.js';
 import {
   construirCondominios, setFonteCondominios, setFonteErroCondominios,
 } from '../model/condominios.js';
 import { construirLeads, setFonteErroLeads, setFonteLeads } from '../model/leads.js';
+import {
+  construirRelatorios, setFonteErroRelatorios, setFonteRelatorios,
+} from '../model/relatorios.js';
+import { atualizarClima } from '../clima.js';
 
 /**
- * Quatro cadências:
+ * Seis cadências:
  *  - hot   : janela dos últimos N dias (consultas leves) -> vendas, ativações e
  *            primeiro pagamento ficam quase em tempo real
  *  - full  : recarga completa desde DATA_SINCE (corrige qualquer alteração
@@ -18,6 +22,10 @@ import { construirLeads, setFonteErroLeads, setFonteLeads } from '../model/leads
  *  - cond  : splitters de condomínio e a ocupação das portas (modelo próprio,
  *            em `model/condominios.js`)
  *  - crm   : leads e negociações (modelo próprio, em `model/leads.js`)
+ *  - rel   : cesta de produtos, pesquisa de cancelamento, fila de instalação e base
+ *            de clientes (modelo próprio, em `model/relatorios.js`)
+ *  - clima : chuva por cidade, uma vez por dia, na Open-Meteo (em `clima.js`) —
+ *            a única fonte que não é banco nosso
  */
 function corte() {
   const d = new Date();
@@ -54,15 +62,65 @@ const SOURCES = {
   // --- CRM: leads e negociações (modelo próprio) ---
   leads: { grupo: 'crm', destino: 'leads', alvo: 'leads', run: () => queryFile('leads', [config.crmSince]) },
   negociacoes: { grupo: 'crm', destino: 'leads', alvo: 'negociacoes', run: () => queryFile('negotiations', [config.crmSince]) },
+
+  // --- Relatórios Comercial (modelo próprio) ---
+  cesta: { grupo: 'rel', destino: 'relatorios', alvo: 'cesta', run: () => queryFile('cesta', [config.since]) },
+  cancelamento: { grupo: 'rel', destino: 'relatorios', alvo: 'cancelamento', run: () => queryFile('cancelamento', [config.since]) },
+  contratosBase: { grupo: 'rel', destino: 'relatorios', alvo: 'base', run: () => queryFile('contratos_base', [config.since]) },
+  // Sem recorte: fila em aberto é retrato do agora (ver o cabeçalho de backlog.sql).
+  fila: { grupo: 'rel', destino: 'relatorios', alvo: 'backlog', run: () => queryFile('backlog', []) },
+  // A ponte histórica do MariaDB, que só este modelo usa.
+  ponte: { grupo: 'rel', destino: 'relatorios', alvo: 'ponte', run: () => maria.query(GENERAL_COMMERCIAL_SQL, [config.since]) },
 };
 
 const rodando = new Map();
 const rebuildTimers = {};
 
 /**
- * Para onde vai o resultado de cada fonte. Existem dois modelos em memória —
- * o comercial e o de condomínios — e eles não se cruzam; o `destino` diz qual
- * dos dois recebe as linhas e qual deles precisa ser reconstruído.
+ * Quantas fontes podem estar em execução ao mesmo tempo.
+ *
+ * POR QUE ISSO EXISTE. O pool do Voalle tem 5 conexões. Com quatro relatórios
+ * replicados, a carga inicial passou a ter 13 consultas, e disparar as 13 de uma vez
+ * quebrou de duas maneiras ao mesmo tempo: as que ficaram na fila estouraram o tempo
+ * de espera por conexão (`timeout exceeded when trying to connect`), e as que
+ * conseguiram conexão passaram a competir por I/O no banco e estouraram o
+ * `statement_timeout` — a consulta de ativações, que sozinha leva 31 s, passou de
+ * 130 s. Resultado: seis fontes falhando por carga.
+ *
+ * Aumentar os timeouts de novo só empurraria o problema; o gargalo é o banco de
+ * produção, que é compartilhado. Limitar a três consultas simultâneas usa bem o pool,
+ * deixa folga para o teste de consulta da tela de configurações, e ainda protege os
+ * ciclos agendados — `full` (30 min) e `rel` (15 min) coincidem de hora em hora.
+ */
+const LIMITE_SIMULTANEO = Math.max(1, config.voalle.max - 2);
+let emExecucao = 0;
+const fila = [];
+
+function liberar() {
+  emExecucao -= 1;
+  const proximo = fila.shift();
+  if (proximo) proximo();
+}
+
+/** Espera uma vaga. Devolve a função que libera — sempre chamada em `finally`. */
+function vaga() {
+  if (emExecucao < LIMITE_SIMULTANEO) {
+    emExecucao += 1;
+    return Promise.resolve(liberar);
+  }
+  return new Promise((resolve) => {
+    fila.push(() => {
+      emExecucao += 1;
+      resolve(liberar);
+    });
+  });
+}
+
+/**
+ * Para onde vai o resultado de cada fonte. São QUATRO modelos em memória —
+ * comercial, condomínios, leads e relatórios — e o `destino` diz qual deles recebe as
+ * linhas e qual precisa ser reconstruído. Os três primeiros são independentes; o de
+ * relatórios lê os contratos do comercial, e por isso está em `REBUILD_JUNTO`.
  */
 const DESTINOS = {
   comercial: {
@@ -84,7 +142,20 @@ const DESTINOS = {
     construir: construirLeads,
     resumo: (s) => `${s.leads.length} leads · ${s.negociacoes.length} negociações · ${s.vendedores.length} vendedores`,
   },
+  relatorios: {
+    set: setFonteRelatorios,
+    erro: setFonteErroRelatorios,
+    construir: construirRelatorios,
+    resumo: (s) => `${s.fatos.length} contratos · ${s.cesta.length} itens de cesta · ${s.pesquisa.length} respostas · ${s.fila.length} na fila · ${s.base.length} na base`,
+  },
 };
+
+/**
+ * Modelos que precisam ser reconstruídos junto de outro. O de relatórios lê os
+ * contratos do modelo comercial, então uma carga de vendas que não o reconstruísse
+ * deixaria as telas de Relatórios com a base da carga anterior.
+ */
+const REBUILD_JUNTO = { comercial: ['relatorios'] };
 
 const destinoDe = (src) => DESTINOS[src.destino || 'comercial'];
 
@@ -102,7 +173,7 @@ const assinaturaJanela = () => `${config.since}|${config.phoneSince}|${config.cr
  * condomínios não tem recorte nenhum, e descartar a carga dele por causa disso
  * seria refazer 60 s de consulta por nada.
  */
-const SENSIVEL_A_JANELA = new Set(['comercial', 'leads']);
+const SENSIVEL_A_JANELA = new Set(['comercial', 'leads', 'relatorios']);
 
 function agendarRebuild(chave) {
   if (rebuildTimers[chave]) return;
@@ -112,6 +183,7 @@ function agendarRebuild(chave) {
     try {
       const s = destino.construir();
       console.log(`[etl] modelo ${chave} reconstruído: ${destino.resumo(s)} (${s.buildMs}ms, v${s.version ?? s.versao})`);
+      for (const dependente of REBUILD_JUNTO[chave] || []) agendarRebuild(dependente);
     } catch (err) {
       console.error(`[etl] falha ao reconstruir o modelo ${chave}:`, err);
     }
@@ -123,6 +195,7 @@ async function executar(nome, src) {
   const chave = src.destino || 'comercial';
   const destino = destinoDe(src);
   const janela = assinaturaJanela();
+  const soltar = await vaga();
   try {
     const { rows, ms } = await src.run();
     if (SENSIVEL_A_JANELA.has(chave) && assinaturaJanela() !== janela) {
@@ -142,6 +215,8 @@ async function executar(nome, src) {
     destino.erro(src.alvo, err);
     console.error(`[etl] ${nome} falhou:`, err.message);
     return false;
+  } finally {
+    soltar();
   }
 }
 
@@ -190,6 +265,7 @@ export async function refreshAll() {
   await refreshGroup('dims');
   await Promise.all([
     refreshGroup('full'), refreshSource('phone'), refreshGroup('cond'), refreshGroup('crm'),
+    refreshGroup('rel'), atualizarClima(),
   ]);
 }
 
@@ -200,7 +276,17 @@ export function startScheduler() {
     dims: config.refresh.dims,
     cond: config.refresh.cond,
     crm: config.refresh.crm,
+    rel: config.refresh.rel,
   };
+  // O clima não é banco nosso: uma busca por dia, e só. Ver src/clima.js.
+  if (config.refresh.clima > 0) {
+    const tc = setInterval(() => {
+      atualizarClima().catch((err) => console.error(`[clima] ${err.message}`));
+    }, config.refresh.clima);
+    tc.unref?.();
+    console.log(`[etl] clima verifica a cada ${Math.round(config.refresh.clima / 1000)}s`);
+  }
+
   for (const [grupo, intervalo] of Object.entries(grupos)) {
     if (!intervalo || intervalo <= 0) continue;
     const t = setInterval(() => {

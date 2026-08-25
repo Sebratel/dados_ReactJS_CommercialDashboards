@@ -95,6 +95,15 @@ export const config = {
     // ocupado só com esta tela; a 10 vira 4%, e um lead que entrou agora aparece
     // em no máximo dez minutos — que é o tempo de alguém abrir a tela.
     crm: num(process.env.REFRESH_CRM_MS, 600000), // 10 min
+    // relatórios: cesta de produtos, pesquisa de cancelamento, fila de instalação e
+    // base de clientes. A cesta é a mais cara do conjunto — 220 mil linhas em ~21 s,
+    // medido no banco de produção. A 15 minutos isso é 2% do tempo com o Voalle
+    // ocupado por esta tela, e nenhum dos quatro números muda de minuto a minuto.
+    rel: num(process.env.REFRESH_REL_MS, 900000), // 15 min
+    // clima: a verificação é de hora em hora, mas a BUSCA acontece uma vez por dia —
+    // `atualizarClima` só vai à rede se o cache não for de hoje. O intervalo curto
+    // existe para o dia virar sem esperar reinício, não para pedir de novo.
+    clima: num(process.env.REFRESH_CLIMA_MS, 3600000), // 1 h
   },
 };
 

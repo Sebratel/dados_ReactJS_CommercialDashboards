@@ -8,10 +8,12 @@ SELECT
     cadastro_cliente::date           AS cadastro_cliente,
     clientes,
     cidade,
+    bairro,
     vendedor,
     regiao_vendedor,
     status_contrato,
     status_cancelamento,
+    data_cancelado,
     contrato,
     valor::float8                    AS valor,
     canal,
@@ -25,6 +27,10 @@ FROM (
         p.created              AS cadastro_cliente,
         p.name                 AS clientes,
         p.city                 AS cidade,
+        -- bairro e data de cancelamento entraram para a tela de Relatórios (a
+        -- tabela GERAL mostra as duas). As demais telas não as usam; a coluna a
+        -- mais não muda nenhum número já conferido.
+        p.neighborhood         AS bairro,
         p2.name                AS vendedor,
         rc.city                AS regiao_vendedor,
         c.v_status             AS status_contrato,
@@ -37,6 +43,7 @@ FROM (
         bool_or(it.id IN ('12', '1014', '1136', '249', '275', '1011', '1015'))
              OVER (PARTITION BY c.contract_number) AS tem_tipo_padrao,
         c.cancellation_motive  AS status_cancelamento,
+        c.cancellation_date::date AS data_cancelado,
         isc.title              AS canal,
         CASE
             WHEN it.id IN ('12', '1014', '1254', '1255', '1136') THEN 'FIBRA'
