@@ -64,13 +64,13 @@ const SOURCES = {
   negociacoes: { grupo: 'crm', destino: 'leads', alvo: 'negociacoes', run: () => queryFile('negotiations', [config.crmSince]) },
 
   // --- Relatórios Comercial (modelo próprio) ---
-  cesta: { grupo: 'rel', destino: 'relatorios', alvo: 'cesta', run: () => queryFile('cesta', [config.since]) },
-  cancelamento: { grupo: 'rel', destino: 'relatorios', alvo: 'cancelamento', run: () => queryFile('cancelamento', [config.since]) },
-  contratosBase: { grupo: 'rel', destino: 'relatorios', alvo: 'base', run: () => queryFile('contratos_base', [config.since]) },
+  cesta: { grupo: 'rel', destino: 'relatorios', alvo: 'cesta', run: () => queryFile('cesta', [config.relSince]) },
+  cancelamento: { grupo: 'rel', destino: 'relatorios', alvo: 'cancelamento', run: () => queryFile('cancelamento', [config.relSince]) },
+  contratosBase: { grupo: 'rel', destino: 'relatorios', alvo: 'base', run: () => queryFile('contratos_base', [config.relSince]) },
   // Sem recorte: fila em aberto é retrato do agora (ver o cabeçalho de backlog.sql).
   fila: { grupo: 'rel', destino: 'relatorios', alvo: 'backlog', run: () => queryFile('backlog', []) },
   // A ponte histórica do MariaDB, que só este modelo usa.
-  ponte: { grupo: 'rel', destino: 'relatorios', alvo: 'ponte', run: () => maria.query(GENERAL_COMMERCIAL_SQL, [config.since]) },
+  ponte: { grupo: 'rel', destino: 'relatorios', alvo: 'ponte', run: () => maria.query(GENERAL_COMMERCIAL_SQL, [config.relSince]) },
 };
 
 const rodando = new Map();
@@ -165,7 +165,7 @@ const destinoDe = (src) => DESTINOS[src.destino || 'comercial'];
  * recorte e não pode entrar no cache — antes disso, a consulta velha terminava
  * depois da nova e sobrescrevia tudo, com a tela informando sucesso.
  */
-const assinaturaJanela = () => `${config.since}|${config.phoneSince}|${config.crmSince}`;
+const assinaturaJanela = () => `${config.since}|${config.phoneSince}|${config.crmSince}|${config.relSince}`;
 
 /**
  * Quais modelos recebem recorte de data por parâmetro. Só para estes vale

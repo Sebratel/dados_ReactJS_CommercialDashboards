@@ -622,13 +622,13 @@ function AbaJanela() {
   const [estado, setEstado] = useState(null);
   const [erro, setErro] = useState(null);
   const [salvando, setSalvando] = useState(false);
-  const [form, setForm] = useState({ since: '', phoneSince: '', crmSince: '' });
+  const [form, setForm] = useState({ since: '', phoneSince: '', crmSince: '', relSince: '' });
 
   const carregar = useCallback(async (sincronizarForm = true) => {
     try {
       const d = await apiJson('/janela');
       setEstado(d);
-      if (sincronizarForm) setForm({ since: d.since, phoneSince: d.phoneSince, crmSince: d.crmSince });
+      if (sincronizarForm) setForm({ since: d.since, phoneSince: d.phoneSince, crmSince: d.crmSince, relSince: d.relSince });
       setErro(null);
       return d;
     } catch (e) { setErro(e); return null; }
@@ -656,7 +656,7 @@ function AbaJanela() {
     try {
       const d = await apiJson('/janela/restaurar', { method: 'POST' });
       setEstado(d);
-      setForm({ since: d.since, phoneSince: d.phoneSince, crmSince: d.crmSince });
+      setForm({ since: d.since, phoneSince: d.phoneSince, crmSince: d.crmSince, relSince: d.relSince });
     } catch (e) { setErro(e); } finally { setSalvando(false); }
   };
 
@@ -664,7 +664,8 @@ function AbaJanela() {
 
   const alterado = estado && (form.since !== estado.since
     || form.phoneSince !== estado.phoneSince
-    || form.crmSince !== estado.crmSince);
+    || form.crmSince !== estado.crmSince
+    || form.relSince !== estado.relSince);
   const recarga = estado?.recarga || {};
 
   return (
@@ -677,11 +678,20 @@ function AbaJanela() {
         deixa a carga completa mais lenta; reduzir acelera, mas encurta a base de comparação.
       </p>
       <p className="cfg-nota">
+        <b>Esta é a alavanca de memória do servidor.</b> A cesta de produtos de Relatórios
+        Comercial são 220 mil linhas e 89 MB com o recorte de 2024 — é o conjunto mais pesado
+        do dashboard, e aquelas telas respondem &ldquo;onde está este contrato agora&rdquo;,
+        raramente sobre 2024. Estreitar a data de Relatórios é o que mais devolve memória sem
+        tirar histórico da Diretoria.
+      </p>
+      <p className="cfg-nota">
         Cada data alcança o seu modelo: a <b>inicial</b> vale para contratos, ativações e
         primeiro pagamento — ou seja, Diretoria, Vendas, Ativações, 1º Pagamento, Rampagem,
         Premiações, Canceladas, Históricos e Preditiva. A de <b>telefonia</b> recorta só as
         ativações de telefonia. A do <b>CRM</b> vale para as quatro sub-páginas de Leads e
-        Negociações.
+        Negociações. A de <b>Relatórios</b> vale para a cesta de produtos, a pesquisa de
+        cancelamento, a base de clientes e a ponte histórica — sem valor próprio, ela segue a
+        data inicial.
       </p>
       <p className="cfg-nota">
         <b>Condomínios não aparece aqui de propósito.</b> A rede de splitters é um retrato do
@@ -717,6 +727,15 @@ function AbaJanela() {
             value={form.crmSince}
             max={new Date().toISOString().slice(0, 10)}
             onChange={(e) => setForm({ ...form, crmSince: e.target.value })}
+          />
+        </label>
+        <label>
+          <span>Relatórios Comercial a partir de</span>
+          <input
+            type="date"
+            value={form.relSince}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setForm({ ...form, relSince: e.target.value })}
           />
         </label>
       </div>
@@ -756,7 +775,8 @@ function AbaJanela() {
       <ul className="cfg-legenda">
         <li>
           Em vigor: <b>{estado?.since}</b> (telefonia a partir de <b>{estado?.phoneSince}</b>,
-          {' '}CRM a partir de <b>{estado?.crmSince}</b>)
+          {' '}CRM a partir de <b>{estado?.crmSince}</b>, relatórios a partir de{' '}
+          <b>{estado?.relSince}</b>)
           {estado?.origem === 'env'
             ? ' — valor de semente, vindo do .env.'
             : ` — definido na tela${estado?.atualizadoPor ? ` por ${estado.atualizadoPor}` : ''}${estado?.atualizadoEm ? ` em ${labelDataHora(estado.atualizadoEm)}` : ''}.`}

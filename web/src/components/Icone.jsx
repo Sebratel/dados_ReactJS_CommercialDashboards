@@ -24,6 +24,10 @@ const CAMINHOS = {
   baixar: <><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M4 20h16" /></>,
   ia: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><rect x="6.5" y="6.5" width="11" height="11" rx="2.5" /><circle cx="12" cy="12" r="2" /></>,
   planilha: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18" /></>,
+  // Enquadrar: as quatro quinas apontando para dentro, o gesto universal de "cabe
+  // tudo na tela". A variante `expandir` aponta para fora, para sair do modo.
+  enquadrar: <><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4" /></>,
+  expandir: <><path d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4" /></>,
   // Clima. Existem porque o relatório de origem usa emoji (☀️ ⛅ 🌧️ ⛈️) na célula
   // da matriz, e emoji muda de desenho por sistema operacional e desalinha a linha.
   sol: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></>,

@@ -370,6 +370,10 @@ export function build() {
     const dtVenda = toIso(r.data_criacao_contrato);
 
     facts.push({
+      // 'voalle' aqui e nao no modelo de relatorios: la, acrescentar o campo custava
+      // clonar 120 mil objetos (92 MB medidos). Um campo a mais no objeto que ja
+      // existe custa nada, e o modelo de relatorios passa a apontar para estes.
+      origem: 'voalle',
       contrato,
       cliente,
       protocolo: r.protocolo ?? null,

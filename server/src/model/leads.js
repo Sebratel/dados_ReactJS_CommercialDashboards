@@ -69,8 +69,86 @@ export const leadsPronto = () => estado.leads.length > 0;
 export const negociacoesPronto = () => Boolean(estado.fontes.negociacoes?.updatedAt);
 export const erroNegociacoes = () => estado.fontes.negociacoes?.error || null;
 
+/**
+ * Equipe por vendedor, do MariaDB que o modelo comercial já carrega.
+ *
+ * Lê a fonte CRUA (`raw.teams`), e não o `teamsByName` derivado, de propósito: o
+ * derivado só existe depois de `build()`, que roda com 250 ms de atraso, então
+ * depender dele deixava a primeira montagem sem equipe nenhuma, à sorte de quem
+ * terminasse primeiro.
+ */
+function equipesPorVendedor() {
+  const mapa = new Map();
+  for (const t of getState().raw?.teams || []) {
+    const nome = norm(t.vendedores);
+    if (!nome) continue;
+    mapa.set(nome.toUpperCase(), {
+      equipe: norm(t.equipes),
+      situacao: norm(t.situacao),
+      ativo: norm(t.ativo).toUpperCase() === 'TRUE',
+    });
+  }
+  return mapa;
+}
+
+/**
+ * A NEGOCIAÇÃO VIRA OBJETO NA ENTRADA, e não na construção.
+ *
+ * Antes o modelo guardava a linha crua do banco E a negociação derivada: medido no
+ * processo, 35 MB de bruto parados ao lado de 22,6 MB de derivado, para o mesmo dado.
+ * Como esta transformação é mapeamento puro de campo — sem depender de leads nem de
+ * nada que só exista na construção —, ela cabe aqui, e a linha crua vive o tempo de
+ * uma passada.
+ *
+ * A dos LEADS continua na construção: a classificação de cada lead depende das
+ * negociações dele, e isso só se sabe com as duas fontes em mãos.
+ */
+function transformarNegociacoes(rows) {
+  const equipePorVendedor = equipesPorVendedor();
+  const equipeDe = (nome) => equipePorVendedor.get(norm(nome).toUpperCase())?.equipe || '';
+  return rows.map((r) => {
+    const inicio = paraData(r.data_inicio_negociacao);
+    const fim = paraData(r.data_fim_negociacao);
+    const criacao = paraData(r.data_criacao_negociacao);
+    return {
+      negociacaoId: Number(r.negociacao_id),
+      leadId: r.lead_id == null ? null : Number(r.lead_id),
+      nome: norm(r.nome),
+      campanha: norm(r.campanha),
+      origem: norm(r.origem),
+      responsavel: norm(r.responsavel),
+      // equipe do RESPONSÁVEL. No modelo de origem a relação com dVendedores que
+      // está ativa é a do dono do LEAD, então lá a página de negociações filtra
+      // equipe pelo dono do lead, não pelo responsável — o que faz o rótulo
+      // "EQUIPE" ao lado de "VENDEDOR" significar duas pessoas diferentes na
+      // mesma barra. Aqui os dois se referem à mesma pessoa.
+      equipe: equipeDe(r.responsavel),
+      motivo: norm(r.motivo),
+      status: norm(r.status_negociacao),
+      faseFunil: norm(r.fase_funil),
+      probabilidade: num(r.probabilidade_venda),
+      regiao: norm(r.regiao),
+      contrato: norm(r.contrato),
+      tipoContrato: norm(r.tipo_contrato),
+      titulo: norm(r.titulo_negociacao),
+      time: norm(r.time_descricao),
+      forma: norm(r.forma),
+      servico: norm(r.servico),
+      valor: num(r.valor_servico),
+      protocolo: norm(r.protocolo),
+      deletado: r.deletado === true,
+      dtCriacao: criacao ? criacao.toISOString() : null,
+      dtProvavelFechamento: toIso(r.data_provavel_fechamento),
+      dtInicio: inicio ? inicio.toISOString() : null,
+      dtFim: fim ? fim.toISOString() : null,
+      // duração em minutos, como o DATEDIFF(..., MINUTE) do DAX
+      duracaoMin: inicio && fim ? Math.round((fim - inicio) / 60000) : null,
+    };
+  });
+}
+
 export function setFonteLeads(nome, rows, meta = {}) {
-  estado.raw[nome] = rows;
+  estado.raw[nome] = nome === 'negociacoes' ? transformarNegociacoes(rows) : rows;
   estado.fontes[nome] = {
     updatedAt: new Date().toISOString(),
     rows: rows.length,
@@ -135,70 +213,17 @@ const unico = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => a.locale
 export function construirLeads() {
   const iniciou = Date.now();
 
-  // ---- equipe do vendedor, do MariaDB que o modelo comercial já carrega ----
-  // Lê a fonte CRUA (`raw.teams`), e não o `teamsByName` derivado, de propósito:
-  // o derivado só existe depois de `build()`, que roda com 250ms de atraso, então
-  // depender dele deixava a primeira montagem dos leads sem equipe nenhuma
-  // dependendo de quem terminasse primeiro. `raw.teams` é preenchido de forma
-  // síncrona pela carga, então esta função não tem mais ordem para respeitar.
-  const equipePorVendedor = new Map();
-  for (const t of getState().raw?.teams || []) {
-    const nome = norm(t.vendedores);
-    if (!nome) continue;
-    equipePorVendedor.set(nome.toUpperCase(), {
-      equipe: norm(t.equipes),
-      situacao: norm(t.situacao),
-      ativo: norm(t.ativo).toUpperCase() === 'TRUE',
-    });
-  }
+  const equipePorVendedor = equipesPorVendedor();
 
   // ---- negociações --------------------------------------------------------
-  const negociacoes = [];
+  // Já chegaram prontas (ver `transformarNegociacoes`, na entrada). Aqui só se monta
+  // o índice por lead, que é o que a classificação de cada lead consulta.
+  const negociacoes = estado.raw.negociacoes || [];
   const negociacoesPorLead = new Map();
-  const equipeDe = (nome) => equipePorVendedor.get(norm(nome).toUpperCase())?.equipe || '';
-  for (const r of estado.raw.negociacoes) {
-    const inicio = paraData(r.data_inicio_negociacao);
-    const fim = paraData(r.data_fim_negociacao);
-    const criacao = paraData(r.data_criacao_negociacao);
-    const n = {
-      negociacaoId: Number(r.negociacao_id),
-      leadId: r.lead_id == null ? null : Number(r.lead_id),
-      nome: norm(r.nome),
-      campanha: norm(r.campanha),
-      origem: norm(r.origem),
-      responsavel: norm(r.responsavel),
-      // equipe do RESPONSÁVEL. No modelo de origem a relação com dVendedores que
-      // está ativa é a do dono do LEAD, então lá a página de negociações filtra
-      // equipe pelo dono do lead, não pelo responsável — o que faz o rótulo
-      // "EQUIPE" ao lado de "VENDEDOR" significar duas pessoas diferentes na
-      // mesma barra. Aqui os dois se referem à mesma pessoa.
-      equipe: equipeDe(r.responsavel),
-      motivo: norm(r.motivo),
-      status: norm(r.status_negociacao),
-      faseFunil: norm(r.fase_funil),
-      probabilidade: num(r.probabilidade_venda),
-      regiao: norm(r.regiao),
-      contrato: norm(r.contrato),
-      tipoContrato: norm(r.tipo_contrato),
-      titulo: norm(r.titulo_negociacao),
-      time: norm(r.time_descricao),
-      forma: norm(r.forma),
-      servico: norm(r.servico),
-      valor: num(r.valor_servico),
-      protocolo: norm(r.protocolo),
-      deletado: r.deletado === true,
-      dtCriacao: criacao ? criacao.toISOString() : null,
-      dtProvavelFechamento: toIso(r.data_provavel_fechamento),
-      dtInicio: inicio ? inicio.toISOString() : null,
-      dtFim: fim ? fim.toISOString() : null,
-      // duração em minutos, como o DATEDIFF(..., MINUTE) do DAX
-      duracaoMin: inicio && fim ? Math.round((fim - inicio) / 60000) : null,
-    };
-    negociacoes.push(n);
-    if (n.leadId != null) {
-      if (!negociacoesPorLead.has(n.leadId)) negociacoesPorLead.set(n.leadId, []);
-      negociacoesPorLead.get(n.leadId).push(n);
-    }
+  for (const n of negociacoes) {
+    if (n.leadId == null) continue;
+    if (!negociacoesPorLead.has(n.leadId)) negociacoesPorLead.set(n.leadId, []);
+    negociacoesPorLead.get(n.leadId).push(n);
   }
 
   // ---- leads --------------------------------------------------------------

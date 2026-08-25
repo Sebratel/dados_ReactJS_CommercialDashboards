@@ -280,21 +280,70 @@ FERNANDO DOS SANTOS`, 2 de 3). Com 3/4 eles caem e continuam passando
 Os dois grupos ficam contados em `GET /api/meta` (`juncaoVendedores`), com nome e sem
 e-mail: os sete recusados são erro de cadastro numa das bases, e alguém precisa olhar.
 
+### Memória: onde ela estava indo
+
+O container começou a cair. A causa não era volume de dado, era **cópia**: cada modelo
+guardava a linha CRUA do banco e o objeto derivado dela, e o modelo de relatórios ainda
+clonava os 120 mil contratos do modelo comercial só para acrescentar um campo.
+
+Medido com `node --expose-gc medir.mjs` (na raiz do servidor), balde por balde:
+
+| | heap | residente |
+|---|---|---|
+| antes | 771 MB | 1.255 MB |
+| depois | **537 MB** | **753 MB** |
+
+O que mudou, em ordem de tamanho:
+
+1. **O clone dos contratos** (−92 MB). `relatorios.js` fazia
+   `facts.map((f) => ({ ...f, origem: 'voalle' }))`. O campo `origem` agora nasce no
+   próprio fato, em `store.js`, e o modelo de relatórios aponta para os mesmos objetos.
+2. **A linha crua guardada ao lado da derivada** (−140 MB). Cesta, pesquisa, base de
+   clientes, portas de splitter e negociações passaram a ser transformadas na ENTRADA
+   (`setFonte…`), não na construção. A linha do banco vive o tempo de uma passada.
+   As portas ganham os campos de ocupação por enriquecimento **no lugar** — criar um
+   segundo objeto ali custaria os mesmos 39 MB de volta.
+3. **Uma janela própria para Relatórios** (ver abaixo), que é a alavanca do admin.
+
+> **Por que não se limpa o bruto no fim da construção**, que seria mais simples: a
+> reconstrução é disparada por fonte, e as fontes chegam em momentos diferentes — a
+> ocupação leva 1 s e as portas 11 s. Limpar no fim faria a segunda reconstrução
+> encontrar o bruto vazio e publicar um modelo pela metade. Transformar na entrada não
+> tem esse problema.
+
+O que **sobra** de duplicação conhecida: `raw.leads` (56 MB), porque a classificação de
+cada lead depende das negociações dele e só pode ser feita com as duas fontes em mãos;
+e `raw.base` (69 MB), que a carga incremental de 2 minutos precisa para fazer o merge.
+
 ### Janela de dados
 
 O recorte histórico da carga fica em **Configurações → Janela de dados** (só admin). Ele
 decide até onde o dashboard enxerga: é o que limita a comparação entre meses, as coortes e
 as projeções.
 
-São **três datas**, uma por modelo que tem recorte:
+São **quatro datas**, uma por modelo que tem recorte:
 
 | Campo | `.env` | Alcança |
 |---|---|---|
 | Carregar contratos a partir de | `DATA_SINCE` | contratos, ativações e primeiro pagamento — Diretoria, Vendas, Ativações, 1º Pagamento, Rampagem, Premiações, Canceladas, Históricos e Preditiva |
 | Ativações de telefonia a partir de | `PHONE_SINCE` | só as ativações de telefonia |
 | Leads e negociações a partir de | `CRM_SINCE` | as quatro sub-páginas de Leads e Negociações |
+| Relatórios Comercial a partir de | `REL_SINCE` | cesta de produtos, pesquisa de cancelamento, base de clientes e a ponte histórica |
 
-As três variáveis do `.env` continuam valendo como **semente** — enquanto ninguém definir nada
+A data de **Relatórios é a alavanca de memória do servidor**, e o efeito está medido:
+
+| recorte | cesta de produtos | base de clientes | pesquisa |
+|---|---|---|---|
+| 2024-01-01 (segue a data inicial) | 219.963 | 54.672 | 5.535 |
+| 2025-01-01 | 137.658 | 39.143 | 5.533 |
+| 2026-01-01 | 37.843 | 18.692 | 3.182 |
+
+Estreitar para 2026 devolve cerca de 100 MB sem tirar histórico da Diretoria — aquelas
+telas respondem "onde está este contrato agora", raramente sobre 2024. Sem valor
+próprio, a data de Relatórios segue a data inicial, para que ligar esta versão não mude
+número nenhum sem alguém pedir.
+
+As variáveis do `.env` continuam valendo como **semente** — enquanto ninguém definir nada
 na tela, e como destino do botão "voltar ao valor do .env". O que a tela grava tem precedência
 e vive em `janela.json`, no volume de dados. `config.since`, `config.phoneSince` e
 `config.crmSince` são getters, e todos os pontos que montam SQL já os liam de forma preguiçosa,

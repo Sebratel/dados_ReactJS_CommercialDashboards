@@ -136,7 +136,7 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
  * recorte do CRM gravava o valor novo e não recarregava nada — a tela dizia
  * "salvo" e os leads continuavam os do recorte antigo até o ciclo de 10 minutos.
  */
-const MUTAVEIS = ['since', 'phoneSince', 'crmSince'];
+const MUTAVEIS = ['since', 'phoneSince', 'crmSince', 'relSince'];
 
 function recarregar(motivo) {
   marcarRecarga({ rodando: true, erro: null });

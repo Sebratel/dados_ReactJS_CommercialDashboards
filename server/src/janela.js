@@ -40,6 +40,7 @@ function semente() {
   const d = process.env.DATA_SINCE;
   const p = process.env.PHONE_SINCE;
   const c = process.env.CRM_SINCE;
+  const rl = process.env.REL_SINCE;
   return {
     since: ISO.test(d || '') ? d : '2024-01-01',
     phoneSince: ISO.test(p || '') ? p : '2024-11-01',
@@ -47,6 +48,20 @@ function semente() {
     // '2026-01-01' escrita dentro das duas consultas; aqui ele entrou junto dos
     // outros dois para o admin mexer nos três no mesmo lugar.
     crmSince: ISO.test(c || '') ? c : '2026-01-01',
+    /**
+     * Recorte de Relatórios Comercial: cesta de produtos, pesquisa de cancelamento
+     * e base de clientes.
+     *
+     * Ganhou data própria porque é o conjunto mais PESADO do dashboard e o mais
+     * operacional. Medido: a cesta são 220 mil linhas e 89 MB com o recorte de 2024,
+     * e aquelas telas respondem "onde está este contrato agora" — raramente sobre
+     * 2024. Amarrá-la à janela dos contratos obrigava a escolher entre histórico na
+     * Diretoria e memória no container.
+     *
+     * Sem valor definido vale a data inicial, para que ligar esta versão não mude
+     * número nenhum sem alguém pedir.
+     */
+    relSince: ISO.test(rl || '') ? rl : null,
   };
 }
 
@@ -86,6 +101,8 @@ export function janela() {
     since: valido(salvo.since) || base.since,
     phoneSince: valido(salvo.phoneSince) || base.phoneSince,
     crmSince: valido(salvo.crmSince) || base.crmSince,
+    // sem definição própria, segue a data inicial dos contratos
+    relSince: valido(salvo.relSince) || base.relSince || (valido(salvo.since) || base.since),
     origem: valido(salvo.since) ? 'tela' : 'env',
     semente: base,
     atualizadoEm: salvo.atualizadoEm || null,
@@ -101,18 +118,20 @@ export function janela() {
  * modelo próprio, e nada impede querer mais histórico de CRM que de contrato (ou
  * o contrário). Amarrar os dois só criaria um erro de validação sem motivo.
  */
-export function definirJanela({ since, phoneSince, crmSince }, porQuem) {
+export function definirJanela({ since, phoneSince, crmSince, relSince }, porQuem) {
   const atual = janela();
   const novo = {
     since: since ?? atual.since,
     phoneSince: phoneSince ?? atual.phoneSince,
     crmSince: crmSince ?? atual.crmSince,
+    relSince: relSince ?? atual.relSince,
   };
 
   for (const [campo, rotulo] of [
     ['since', 'Data inicial'],
     ['phoneSince', 'Início da telefonia'],
     ['crmSince', 'Início do CRM'],
+    ['relSince', 'Início dos relatórios'],
   ]) {
     if (!ISO.test(novo[campo])) throw new Error(`${rotulo}: use o formato AAAA-MM-DD.`);
     if (!dataReal(novo[campo])) throw new Error(`${rotulo}: ${novo[campo]} não existe no calendário.`);

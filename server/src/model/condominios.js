@@ -47,8 +47,106 @@ const estado = {
 export const getEstadoCondominios = () => estado;
 export const condominiosPronto = () => estado.fatos.length > 0;
 
+/**
+ * ONDE A LINHA VIRA PORTA — e por que na entrada, não na construção.
+ *
+ * Antes este modelo guardava a linha crua de `splitters.sql` E a porta derivada:
+ * medido no processo, 39,8 MB de bruto ao lado de 39,3 MB de derivado, para o mesmo
+ * dado. Transformando aqui, a linha crua vive o tempo de uma passada.
+ *
+ * A porta nasce SEM os cinco campos de ocupação (capacidade, ocupadas, disponíveis,
+ * percentual, classificação), porque eles vêm da outra consulta. A construção
+ * preenche-os no MESMO objeto — enriquecer no lugar, e não criar uma segunda cópia.
+ * É idempotente: rodar duas vezes sobrescreve os mesmos cinco campos.
+ */
+const TRANSFORMA = {
+  portas: (rows) => {
+    const vistos = new Set(); // (splitter, porta) é a chave natural da linha
+    const saida = [];
+    for (const r of rows) {
+      const splitterId = Number(r.splitter_id);
+      const porta = num(r.porta);
+      const chave = `${splitterId} ${porta}`;
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+
+      const splitter = norm(r.splitter);
+      const condominio = nomeDoCondominio(splitter);
+      if (!condominio) continue; // filtro de página do relatório
+
+      // aprovado = o que a consulta CONTRATOS do Power BI deixaria passar; fora
+      // disso o merge de lá devolvia nulo nestas quatro colunas
+      const aprovado = r.contrato_aprovado === true;
+
+      saida.push({
+        splitterId,
+        splitter,
+        splitterCodigo: norm(r.splitter_codigo),
+        condominio,
+        criado: toIso(r.splitter_criado),
+        diasDeVida: null, // depende de "hoje": resolvido na construção
+        primarioId: Number(r.splitter_primario_id) || null,
+        primario: norm(r.splitter_primario),
+        concentrador: norm(r.concentrador),
+        pontoAcesso: norm(r.ponto_acesso),
+        site: norm(r.site),
+        porta,
+        // "tem cliente" é o que a consulta de ocupação conta (porta com conexão);
+        // é esta a definição usada em todo indicador de cliente desta tela
+        temCliente: r.conexao_id != null,
+        usuario: norm(r.usuario),
+        cliente: norm(r.cliente),
+        // cidade do endereço da conexão. NÃO é o campo de filtro — quem filtra é
+        // `cidade`, a do equipamento, resolvida no segundo passe da construção.
+        cidadeCliente: norm(r.cidade),
+        cidade: '',
+        rua: norm(r.rua),
+        numero: norm(r.numero),
+        bairro: norm(r.bairro),
+        clienteLat: norm(r.cliente_lat),
+        clienteLng: norm(r.cliente_lng),
+        placa: r.placa == null ? null : num(r.placa),
+        pon: r.pon == null ? null : num(r.pon),
+        contrato: aprovado ? norm(r.contrato) : '',
+        dataAprovacao: aprovado ? toIso(r.data_aprovacao) : null,
+        statusContrato: aprovado ? norm(r.status_contrato) : '',
+        splitterCidade: norm(r.splitter_cidade),
+        splitterLat: norm(r.splitter_lat),
+        splitterLng: norm(r.splitter_lng),
+        capacidadeDoSplitter: num(r.splitter_capacidade),
+        capacidade: 0,
+        ocupadas: 0,
+        disponiveis: 0,
+        percentual: 0,
+        classificacao: '',
+      });
+    }
+    return saida;
+  },
+
+  ocupacao: (rows) => {
+    // O Power BI relaciona esta tabela por TÍTULO do equipamento; aqui a chave é o
+    // id, que é o que o join deveria ter usado desde o começo. Dois splitters com
+    // o mesmo título derrubariam a relação 1:N de lá.
+    const mapa = new Map();
+    for (const o of rows) {
+      const capacidade = num(o.capacidade);
+      const ocupadas = num(o.ocupadas);
+      mapa.set(Number(o.splitter_id), {
+        capacidade,
+        ocupadas,
+        disponiveis: num(o.disponiveis),
+        percentual: capacidade ? ocupadas / capacidade : 0,
+        classificacao: classificar(capacidade, ocupadas),
+      });
+    }
+    return mapa;
+  },
+};
+
 export function setFonteCondominios(nome, rows, meta = {}) {
-  estado.raw[nome] = rows;
+  const transformar = TRANSFORMA[nome];
+  estado.raw[nome] = transformar ? transformar(rows) : rows;
   estado.fontes[nome] = {
     updatedAt: new Date().toISOString(),
     rows: rows.length,
@@ -121,115 +219,48 @@ export function construirCondominios() {
   const iniciou = Date.now();
   const hoje = today();
 
-  // ---- ocupação por splitter --------------------------------------------
-  // O Power BI relaciona esta tabela por TÍTULO do equipamento; aqui a chave é o
-  // id, que é o que o join deveria ter usado desde o começo. Dois splitters com
-  // o mesmo título derrubariam a relação 1:N de lá.
-  const ocupacaoPorId = new Map();
-  for (const o of estado.raw.ocupacao) {
-    const capacidade = num(o.capacidade);
-    const ocupadas = num(o.ocupadas);
-    ocupacaoPorId.set(Number(o.splitter_id), {
-      capacidade,
-      ocupadas,
-      disponiveis: num(o.disponiveis),
-      percentual: capacidade ? ocupadas / capacidade : 0,
-      classificacao: classificar(capacidade, ocupadas),
-    });
-  }
-
-  // ---- fatos: uma linha por porta ---------------------------------------
-  const vistos = new Set(); // (splitter, porta) é a chave natural da linha
-  const fatos = [];
+  // A ocupação já chega como Map, e as portas já chegam como objeto: as duas
+  // transformações acontecem na entrada (ver TRANSFORMA acima). O que sobra para
+  // aqui é o CRUZAMENTO — o que só pode ser feito com as duas fontes em mãos.
+  const ocupacaoPorId = estado.raw.ocupacao instanceof Map ? estado.raw.ocupacao : new Map();
+  const fatos = estado.raw.portas || [];
   const porSplitter = new Map();
 
-  for (const r of estado.raw.portas) {
-    const splitterId = Number(r.splitter_id);
-    const porta = num(r.porta);
-    const chave = `${splitterId} ${porta}`;
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
+  for (const fato of fatos) {
+    const ocup = ocupacaoPorId.get(fato.splitterId);
+    // enriquece o MESMO objeto: uma segunda cópia aqui custaria 39 MB
+    fato.diasDeVida = fato.criado ? diffDays(fato.criado, hoje) : null;
+    fato.capacidade = ocup ? ocup.capacidade : fato.capacidadeDoSplitter;
+    fato.ocupadas = ocup ? ocup.ocupadas : 0;
+    fato.disponiveis = ocup ? ocup.disponiveis : fato.capacidadeDoSplitter;
+    fato.percentual = ocup ? ocup.percentual : 0;
+    fato.classificacao = ocup
+      ? ocup.classificacao
+      : classificar(fato.capacidadeDoSplitter, 0);
 
-    const splitter = norm(r.splitter);
-    const condominio = nomeDoCondominio(splitter);
-    if (!condominio) continue; // filtro de página do relatório
-
-    const criado = toIso(r.splitter_criado);
-    const ocup = ocupacaoPorId.get(splitterId) || {
-      capacidade: num(r.splitter_capacidade),
-      ocupadas: 0,
-      disponiveis: num(r.splitter_capacidade),
-      percentual: 0,
-      classificacao: classificar(num(r.splitter_capacidade), 0),
-    };
-
-    // aprovado = o que a consulta CONTRATOS do Power BI deixaria passar; fora
-    // disso o merge de lá devolvia nulo nestas quatro colunas
-    const aprovado = r.contrato_aprovado === true;
-
-    const fato = {
-      splitterId,
-      splitter,
-      splitterCodigo: norm(r.splitter_codigo),
-      condominio,
-      criado,
-      diasDeVida: criado ? diffDays(criado, hoje) : null,
-      primarioId: Number(r.splitter_primario_id) || null,
-      primario: norm(r.splitter_primario),
-      concentrador: norm(r.concentrador),
-      pontoAcesso: norm(r.ponto_acesso),
-      site: norm(r.site),
-      porta,
-      // "tem cliente" é o que a consulta de ocupação conta (porta com conexão);
-      // é esta a definição usada em todo indicador de cliente desta tela
-      temCliente: r.conexao_id != null,
-      usuario: norm(r.usuario),
-      cliente: norm(r.cliente),
-      // cidade do endereço da conexão. NÃO é o campo de filtro — quem filtra é
-      // `cidade`, a do equipamento, resolvida no segundo passe abaixo.
-      cidadeCliente: norm(r.cidade),
-      cidade: '',
-      rua: norm(r.rua),
-      numero: norm(r.numero),
-      bairro: norm(r.bairro),
-      clienteLat: norm(r.cliente_lat),
-      clienteLng: norm(r.cliente_lng),
-      placa: r.placa == null ? null : num(r.placa),
-      pon: r.pon == null ? null : num(r.pon),
-      contrato: aprovado ? norm(r.contrato) : '',
-      dataAprovacao: aprovado ? toIso(r.data_aprovacao) : null,
-      statusContrato: aprovado ? norm(r.status_contrato) : '',
-      splitterCidade: norm(r.splitter_cidade),
-      splitterLat: norm(r.splitter_lat),
-      splitterLng: norm(r.splitter_lng),
-      capacidade: ocup.capacidade,
-      ocupadas: ocup.ocupadas,
-      disponiveis: ocup.disponiveis,
-      percentual: ocup.percentual,
-      classificacao: ocup.classificacao,
-    };
-    fatos.push(fato);
+    const splitterId = fato.splitterId;
 
     if (!porSplitter.has(splitterId)) {
       porSplitter.set(splitterId, {
         splitterId,
-        splitter,
-        condominio,
+        splitter: fato.splitter,
+        condominio: fato.condominio,
         concentrador: fato.concentrador,
         pontoAcesso: fato.pontoAcesso,
         site: fato.site,
         primario: fato.primario,
-        criado,
+        criado: fato.criado,
         diasDeVida: fato.diasDeVida,
         cidade: '',                     // resolvida no segundo passe
         cidadesDosClientes: new Map(),  // descartada depois de resolver
         lat: fato.splitterLat,
         lng: fato.splitterLng,
-        capacidade: ocup.capacidade,
-        ocupadas: ocup.ocupadas,
-        disponiveis: ocup.disponiveis,
-        percentual: ocup.percentual,
-        classificacao: ocup.classificacao,
+        // já enriquecidos no próprio fato, logo acima
+        capacidade: fato.capacidade,
+        ocupadas: fato.ocupadas,
+        disponiveis: fato.disponiveis,
+        percentual: fato.percentual,
+        classificacao: fato.classificacao,
         portas: 0,
         clientes: 0,
       });

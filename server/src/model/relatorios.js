@@ -78,10 +78,134 @@ export const relatoriosPronto = () => estado.fatos.length > 0;
 export const fontePronta = (nome) => Boolean(estado.fontes[nome]?.updatedAt);
 export const erroFonte = (nome) => estado.fontes[nome]?.error || null;
 
-const fontesBrutas = {};
+/**
+ * ONDE A LINHA VIRA OBJETO DO MODELO — e por que é aqui e não na construção.
+ *
+ * Antes este modelo guardava a linha CRUA do banco em `fontesBrutas` e o objeto
+ * derivado em `estado`. Duas cópias de tudo. Medido no processo: a cesta são 89 MB
+ * derivados mais cerca de 90 MB de linha bruta parada, e o mesmo vale para a base de
+ * clientes e a pesquisa. Só aqui eram uns 115 MB de cópia que nada lia.
+ *
+ * Transformando na ENTRADA, a linha crua vive o tempo de uma passada e é liberada.
+ * De brinde, some um risco: a reconstrução do modelo é disparada também quando o
+ * modelo comercial recarrega (a cada 2 min), e uma versão que descartasse o bruto no
+ * fim da construção esvaziaria a cesta na reconstrução seguinte.
+ *
+ * `ponte` é a única que fica quase crua: ela precisa dos contratos do Voalle para
+ * saber quais linhas descartar, e isso só existe na construção. Guarda-se a versão
+ * mínima — nove campos em vez da linha inteira do MariaDB.
+ */
+const TRANSFORMA = {
+  cesta: (rows) => rows.map((r) => ({
+    contrato: norm(r.contrato),
+    tipoContrato: norm(r.tipo_contrato),
+    valorPlano: numero(r.valor_plano),
+    estagio: norm(r.estagio_contrato),
+    statusContrato: norm(r.status_contrato),
+    etiqueta: norm(r.etiqueta),
+    descricaoEtiqueta: norm(r.descricao_etiqueta),
+    servico: norm(r.servico_principal),
+    codigoServico: norm(r.codigo_servico_principal),
+    unidades: numero(r.unidades),
+    valor: numero(r.valor),
+    adicionadoEm: toIso(r.adicionado_em),
+    situacaoItem: norm(r.situacao_item),
+  })),
+
+  cancelamento: (rows) => {
+    const saida = [];
+    let invalidos = 0;
+    for (const r of rows) {
+      const cabecalho = {
+        protocolo: norm(r.protocolo),
+        numeroProtocolo: norm(r.numero_protocolo),
+        status: norm(r.status),
+        criado: toIso(r.criado),
+        colaborador: norm(r.colaborador),
+        encerradoPor: norm(r.encerrado_por),
+        cliente: norm(r.cliente),
+        etiqueta: norm(r.etiqueta),
+        contrato: norm(r.contrato),
+        dataCancelamento: toIso(r.data_cancelamento),
+        motivoCancelamento: norm(r.motivo_cancelamento),
+        cidade: norm(r.cidade),
+        rua: norm(r.rua),
+        numero: norm(r.numero),
+        bairro: norm(r.bairro),
+      };
+      let itens;
+      try {
+        itens = JSON.parse(r.checklist);
+        if (!Array.isArray(itens)) throw new Error('checklist não é lista');
+      } catch {
+        // um checklist malformado perde as próprias respostas, não a consulta inteira
+        invalidos += 1;
+        saida.push({ ...cabecalho, ordem: '', pergunta: '', resposta: 'Vazio' });
+        continue;
+      }
+      for (const it of itens) {
+        saida.push({
+          ...cabecalho,
+          ordem: norm(it?.order),
+          pergunta: norm(it?.label),
+          // A origem troca por SUBSTRING ('0'->'Não'), o que estragaria resposta em
+          // texto livre. Medido: os valores são só null, '', '0' e '1' — então o
+          // mapeamento exato dá o mesmo resultado e não tem o risco.
+          resposta: it?.value === '1' ? 'Sim' : it?.value === '0' ? 'Não' : 'Vazio',
+        });
+      }
+    }
+    saida.invalidos = invalidos;
+    return saida;
+  },
+
+  backlog: (rows) => rows.map((r) => ({
+    protocolo: norm(r.protocolo),
+    tipoId: Number(r.tipo_id) || null,
+    tipoProtocolo: norm(r.tipo_protocolo),
+    equipe: norm(r.equipe),
+    cidade: norm(r.cidade),
+    status: norm(r.status),
+    criado: toIso(r.criado),
+    noDetalhe: r.no_detalhe !== false,
+  })),
+
+  base: (rows) => rows.map((r) => ({
+    contrato: norm(r.contrato),
+    data: toIso(r.data),
+    descricao: norm(r.descricao),
+    usuario: norm(r.usuario),
+    cidade: norm(r.cidade),
+    bairro: norm(r.bairro),
+    pontoAcesso: norm(r.ponto_acesso),
+    valor: numero(r.valor),
+    tecnologia: norm(r.tecnologia) || '(sem ponto de acesso)',
+  })),
+
+  ponte: (rows) => rows.map((r) => ({
+    cliente: norm(r.clientes),
+    dtVenda: toIso(r.data_criacao_contrato),
+    cidadeBruta: norm(r.cidade),
+    vendedor: norm(r.vendedor),
+    valor: numero(r.valor),
+    tecnologia: norm(r.tecnologia).toUpperCase(),
+    dtAtiv: toIso(r.data_ativacao),
+    dtCadastroCliente: toIso(r.cadastro_cliente),
+    statusCancelamento: norm(r.status_cancelamento),
+  })),
+};
+
+/** Onde cada fonte aterrissa dentro do modelo. */
+const ALVO_DA_FONTE = { cancelamento: 'pesquisa', backlog: 'fila' };
+
+const derivadas = { cesta: [], pesquisa: [], fila: [], base: [], ponte: [] };
+let checklistInvalido = 0;
 
 export function setFonteRelatorios(nome, rows, meta = {}) {
-  fontesBrutas[nome] = rows;
+  const transformar = TRANSFORMA[nome];
+  const pronto = transformar ? transformar(rows) : rows;
+  if (nome === 'cancelamento') checklistInvalido = pronto.invalidos || 0;
+  derivadas[ALVO_DA_FONTE[nome] || nome] = pronto;
   estado.fontes = {
     ...estado.fontes,
     [nome]: { rows: rows.length, ms: meta.ms ?? null, updatedAt: new Date().toISOString(), error: null },
@@ -136,35 +260,33 @@ function pontes(linhas, fatosVoalle) {
   const saida = [];
   let descartadas = 0;
   for (const r of linhas) {
-    const cliente = norm(r.clientes);
-    const dtVenda = toIso(r.data_criacao_contrato);
-    if (!cliente || !dtVenda) { descartadas += 1; continue; }
-    if (jaTem.has(`${cliente.toUpperCase()}|${dtVenda}`)) { descartadas += 1; continue; }
+    if (!r.cliente || !r.dtVenda) { descartadas += 1; continue; }
+    if (jaTem.has(`${r.cliente.toUpperCase()}|${r.dtVenda}`)) { descartadas += 1; continue; }
 
-    const k = chaveCidade(r.cidade);
+    const k = chaveCidade(r.cidadeBruta);
     const cidade = cidadeConhecida.get(k) || APELIDOS_CIDADE.get(k)
       || (k ? k.charAt(0) + k.slice(1).toLowerCase() : '');
 
     saida.push({
       origem: 'ponte',
       contrato: '',
-      cliente,
+      cliente: r.cliente,
       protocolo: null,
       cidade,
       bairro: '',
-      vendedor: norm(r.vendedor),
+      vendedor: r.vendedor,
       regiao: '',
       statusContrato: '',
-      statusCancelamento: norm(r.status_cancelamento),
+      statusCancelamento: r.statusCancelamento,
       dtCancelado: null,
       canal: '',
-      tecnologia: norm(r.tecnologia).toUpperCase(),
+      tecnologia: r.tecnologia,
       tipoSolicitacao: '',
-      valor: numero(r.valor),
-      dtVenda,
+      valor: r.valor,
+      dtVenda: r.dtVenda,
       horaVenda: null,
-      dtCadastroCliente: toIso(r.cadastro_cliente),
-      dtAtiv: toIso(r.data_ativacao),
+      dtCadastroCliente: r.dtCadastroCliente,
+      dtAtiv: r.dtAtiv,
       dtPagto: null,
       plano: '',
       equipe: '',
@@ -178,112 +300,30 @@ function pontes(linhas, fatosVoalle) {
 export function construirRelatorios() {
   const t0 = Date.now();
   const comercial = getState();
-  const equipes = comercial.raw?.teams || [];
-  const porVendedor = new Map();
-  for (const t of equipes) {
-    const nome = norm(t.vendedores);
-    if (nome) porVendedor.set(nome.toUpperCase(), t);
-  }
 
-  // ---- contratos: o modelo comercial + a ponte ----------------------------
-  const doVoalle = (comercial.facts || []).map((f) => ({ ...f, origem: 'voalle' }));
-  const { linhas: daPonte, descartadas, semBase } = pontes(fontesBrutas.ponte || [], doVoalle);
-  const fatos = doVoalle.concat(daPonte);
+  /**
+   * Os contratos do Voalle entram POR REFERÊNCIA, não copiados.
+   *
+   * A versão anterior fazia `facts.map((f) => ({ ...f, origem: 'voalle' }))`, o que
+   * clonava 120 mil objetos só para acrescentar um campo: 92 MB de cópia, medidos no
+   * processo, e a maior linha isolada do consumo de memória. O campo `origem` agora
+   * nasce no próprio fato, em `store.js`, e aqui o array só aponta para eles.
+   */
+  const doVoalle = comercial.facts || [];
+  const { linhas: daPonte, descartadas, semBase } = pontes(derivadas.ponte || [], doVoalle);
+  const fatos = daPonte.length ? doVoalle.concat(daPonte) : doVoalle;
 
-  // ---- cesta de produtos --------------------------------------------------
-  const cesta = (fontesBrutas.cesta || []).map((r) => ({
-    contrato: norm(r.contrato),
-    tipoContrato: norm(r.tipo_contrato),
-    valorPlano: numero(r.valor_plano),
-    estagio: norm(r.estagio_contrato),
-    statusContrato: norm(r.status_contrato),
-    etiqueta: norm(r.etiqueta),
-    descricaoEtiqueta: norm(r.descricao_etiqueta),
-    servico: norm(r.servico_principal),
-    codigoServico: norm(r.codigo_servico_principal),
-    unidades: numero(r.unidades),
-    valor: numero(r.valor),
-    adicionadoEm: toIso(r.adicionado_em),
-    situacaoItem: norm(r.situacao_item),
-  }));
-
-  // ---- pesquisa de cancelamento: abre o checklist -------------------------
-  const pesquisa = [];
-  let checklistInvalido = 0;
-  for (const r of fontesBrutas.cancelamento || []) {
-    const cabecalho = {
-      protocolo: norm(r.protocolo),
-      numeroProtocolo: norm(r.numero_protocolo),
-      status: norm(r.status),
-      criado: toIso(r.criado),
-      colaborador: norm(r.colaborador),
-      encerradoPor: norm(r.encerrado_por),
-      cliente: norm(r.cliente),
-      etiqueta: norm(r.etiqueta),
-      contrato: norm(r.contrato),
-      dataCancelamento: toIso(r.data_cancelamento),
-      motivoCancelamento: norm(r.motivo_cancelamento),
-      cidade: norm(r.cidade),
-      rua: norm(r.rua),
-      numero: norm(r.numero),
-      bairro: norm(r.bairro),
-    };
-    let itens;
-    try {
-      itens = JSON.parse(r.checklist);
-      if (!Array.isArray(itens)) throw new Error('checklist não é lista');
-    } catch {
-      // um checklist malformado perde as próprias respostas, não a consulta inteira
-      checklistInvalido += 1;
-      pesquisa.push({ ...cabecalho, ordem: '', pergunta: '', resposta: 'Vazio' });
-      continue;
-    }
-    for (const it of itens) {
-      pesquisa.push({
-        ...cabecalho,
-        ordem: norm(it?.order),
-        pergunta: norm(it?.label),
-        // A origem troca por SUBSTRING ('0'->'Não'), o que estragaria resposta em
-        // texto livre. Medido: os valores são só null, '', '0' e '1' — então o
-        // mapeamento exato dá o mesmo resultado e não tem o risco.
-        resposta: it?.value === '1' ? 'Sim' : it?.value === '0' ? 'Não' : 'Vazio',
-      });
-    }
-  }
-
-  // ---- fila de instalação -------------------------------------------------
-  const fila = (fontesBrutas.backlog || []).map((r) => ({
-    protocolo: norm(r.protocolo),
-    tipoId: Number(r.tipo_id) || null,
-    tipoProtocolo: norm(r.tipo_protocolo),
-    equipe: norm(r.equipe),
-    cidade: norm(r.cidade),
-    status: norm(r.status),
-    criado: toIso(r.criado),
-    noDetalhe: r.no_detalhe !== false,
-  }));
-
-  // ---- base de clientes ---------------------------------------------------
-  const base = (fontesBrutas.base || []).map((r) => ({
-    contrato: norm(r.contrato),
-    data: toIso(r.data),
-    descricao: norm(r.descricao),
-    usuario: norm(r.usuario),
-    cidade: norm(r.cidade),
-    bairro: norm(r.bairro),
-    pontoAcesso: norm(r.ponto_acesso),
-    valor: numero(r.valor),
-    tecnologia: norm(r.tecnologia) || '(sem ponto de acesso)',
-  }));
+  const { cesta, pesquisa, fila, base } = derivadas;
 
   // ---- dimensões ----------------------------------------------------------
   const unico = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const equipes = comercial.raw?.teams || [];
   const dims = {
     cidades: unico(fatos.map((f) => f.cidade)),
     bairros: unico(fatos.map((f) => f.bairro)),
     vendedores: unico(fatos.map((f) => f.vendedor)),
-    equipes: unico([...fatos.map((f) => f.equipe), ...porVendedor.values()].map((v) => (typeof v === 'string' ? v : norm(v.equipes)))),
-    situacoes: unico([...porVendedor.values()].map((t) => norm(t.situacao))),
+    equipes: unico(equipes.map((t) => norm(t.equipes))),
+    situacoes: unico(equipes.map((t) => norm(t.situacao))),
     tecnologias: unico(fatos.map((f) => f.tecnologia)),
     statusContrato: unico(fatos.map((f) => f.statusContrato)),
     tiposSolicitacao: unico(fatos.map((f) => f.tipoSolicitacao)),
@@ -302,10 +342,10 @@ export function construirRelatorios() {
     cidadesBase: unico(base.map((b) => b.cidade)),
     bairrosBase: unico(base.map((b) => b.bairro)),
     /**
-     * Bairros de cada cidade. Existe porque o slicer da origem e uma HIERARQUIA
+     * Bairros de cada cidade. Existe porque o slicer da origem é uma HIERARQUIA
      * cidade > bairro: escolher Canoas deixa a lista de baixo com os bairros de
      * Canoas. Sem este mapa a lista mostrava os 277 bairros de todas as cidades, e
-     * marcar um bairro de outra cidade zerava a tela sem explicacao.
+     * marcar um bairro de outra cidade zerava a tela sem explicação.
      */
     bairrosPorCidade: Object.fromEntries(
       [...base.reduce((mapa, b) => {

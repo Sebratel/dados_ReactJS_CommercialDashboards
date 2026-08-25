@@ -184,6 +184,7 @@ function meta() {
     since: config.since,
     phoneSince: config.phoneSince,
     crmSince: config.crmSince,
+    relSince: config.relSince,
     iaConfigurada: iaConfigurada(),
     ready: isReady(),
   };

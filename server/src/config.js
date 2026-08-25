@@ -62,6 +62,9 @@ export const config = {
   // Configurações → Janela de dados. Getter pelo mesmo motivo dos outros dois: a
   // carga seguinte já usa o valor novo, sem reiniciar o processo.
   get crmSince() { return janela().crmSince; },
+  // Recorte de Relatórios Comercial (cesta, pesquisa e base de clientes) — o
+  // conjunto mais pesado do dashboard. Getter pelo mesmo motivo dos outros três.
+  get relSince() { return janela().relSince; },
 
   // Autenticação (Google) e controle de acesso
   auth: {

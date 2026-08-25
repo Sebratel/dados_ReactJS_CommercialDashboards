@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDados } from '../api';
 import { BotaoExportar, Erro, Loading, Vazio, Visual } from '../components/ui';
 import { CHUVA, CORES, escalaGradiente } from '../components/charts';
@@ -95,9 +96,93 @@ function TabelaFila({ titulo, sub, bloco, vazio, tom }) {
   );
 }
 
+/**
+ * Encaixa a tela inteira numa janela, para virar print de uma vez.
+ *
+ * ESTA TELA É USADA PARA PRINTAR E COMPARTILHAR, e ela tem 2,4 telas de altura — o
+ * mesmo tamanho da página de origem. Sem isto, o print sai em três pedaços e alguém
+ * cola os três num chat.
+ *
+ * `transform: scale` e não zoom do navegador: o zoom mudaria o tamanho da fonte da
+ * barra de filtros e reflowaria o layout, então o que se vê enquadrado não seria o
+ * que se vê normalmente. O scale reduz o desenho pronto, sem mexer no layout.
+ *
+ * O fator é medido, não chutado: altura e largura reais do conteúdo contra o espaço
+ * disponível, sempre <= 1 (não faz sentido ampliar). Remede quando a janela muda de
+ * tamanho e quando os dados mudam — uma cidade a mais na tabela muda a altura.
+ */
+function usarEnquadramento(dependencia) {
+  const [ativo, setAtivo] = useState(false);
+  const [fator, setFator] = useState(1);
+  const palco = useRef(null);
+
+  const medir = useCallback(() => {
+    const el = palco.current;
+    if (!el || !ativo) return;
+    // mede o conteúdo no tamanho natural: zera escala e margem antes de ler
+    el.style.setProperty('--fator', '1');
+    el.style.marginBottom = '';
+    const alturaConteudo = el.scrollHeight;
+    const larguraConteudo = el.scrollWidth;
+    const topo = el.getBoundingClientRect().top;
+    const disponivelAltura = window.innerHeight - topo - 12;
+    const disponivelLargura = el.parentElement?.clientWidth || window.innerWidth;
+    if (!alturaConteudo || !larguraConteudo) return;
+    const k = Math.max(Math.min(
+      1,
+      disponivelAltura / alturaConteudo,
+      disponivelLargura / larguraConteudo,
+    ), 0.35); // abaixo de 0,35 o número fica ilegível
+    /**
+     * A variável CSS é escrita AQUI, no elemento, e não pela prop `style` do React.
+     *
+     * Com as duas escrevendo, elas se atropelavam: esta função zera a escala para
+     * medir o tamanho natural, o React repintava com o valor do estado, e o que
+     * sobrava no elemento era o zero da medição — o botão dizia 44% e a tela
+     * continuava do tamanho original. Um dono só resolve.
+     *
+     * O estado guarda o fator apenas para o rótulo mostrar a porcentagem.
+     */
+    el.style.setProperty('--fator', String(k));
+    /**
+     * `scale` reduz o DESENHO, não o espaço que o elemento ocupa no fluxo: sem isto
+     * a tela caberia na janela mas a página continuaria rolando por mais mil pixels
+     * de nada. A margem negativa devolve exatamente a sobra.
+     */
+    el.style.marginBottom = `${-Math.round(alturaConteudo * (1 - k))}px`;
+    setFator(k);
+  }, [ativo]);
+
+  useLayoutEffect(() => {
+    if (!ativo) {
+      palco.current?.style.removeProperty('--fator');
+      if (palco.current) palco.current.style.marginBottom = '';
+      setFator(1);
+      return undefined;
+    }
+    // duas passadas: a primeira mede, a segunda corrige o que o scale mudou
+    medir();
+    const t = setTimeout(medir, 60);
+    window.addEventListener('resize', medir);
+    return () => { clearTimeout(t); window.removeEventListener('resize', medir); };
+  }, [ativo, medir, dependencia]);
+
+  // Esc sai do modo: é o gesto esperado de qualquer coisa que ocupa a tela
+  useEffect(() => {
+    if (!ativo) return undefined;
+    const sair = (e) => { if (e.key === 'Escape') setAtivo(false); };
+    window.addEventListener('keydown', sair);
+    return () => window.removeEventListener('keydown', sair);
+  }, [ativo]);
+
+  return { ativo, alternar: () => setAtivo((v) => !v), fator, palco };
+}
+
 export function PaginaRelatorioDiario({ filtros }) {
   const { data, error, isLoading } = useDados('/relatorios/diario', filtros);
   const vazio = isLoading && !data;
+  // remede quando os dados mudam: uma cidade a mais muda a altura da tabela
+  const enq = usarEnquadramento(data?.versaoDoRecorte ?? `${data?.fibra?.vendas?.linhas?.length}-${data?.telefonia?.linhas?.length}`);
 
   if (error) return <Erro erro={error} />;
 
@@ -129,7 +214,27 @@ export function PaginaRelatorioDiario({ filtros }) {
   );
 
   return (
-    <div className="tela-diario">
+    <div className={`tela-diario${enq.ativo ? ' enquadrada' : ''}`}>
+      <div className="barra-enquadrar">
+        <button
+          type="button"
+          className={`botao-enquadrar${enq.ativo ? ' on' : ''}`}
+          onClick={enq.alternar}
+          title={enq.ativo
+            ? 'Voltar ao tamanho normal (ou aperte Esc)'
+            : 'Reduzir a tela até ela caber inteira, para tirar um print único'}
+        >
+          <Icone nome={enq.ativo ? 'expandir' : 'enquadrar'} tamanho={13} />
+          {enq.ativo ? 'Tamanho normal' : 'Enquadrar na tela'}
+        </button>
+        {enq.ativo && (
+          <span className="dica-enquadrar">
+            {Math.round(enq.fator * 100)}% do tamanho · a tela cabe inteira no print · Esc para sair
+          </span>
+        )}
+      </div>
+
+      <div className="palco" ref={enq.palco}>
       {!vazio && data.periodo.padrao && (
         <p className="aviso-recorte">
           <Icone nome="relogio" tamanho={12} />
@@ -273,6 +378,7 @@ export function PaginaRelatorioDiario({ filtros }) {
           {vazio ? <Loading /> : <MatrizClima clima={data.clima} />}
         </Visual>
       </section>
+      </div>
     </div>
   );
 }
