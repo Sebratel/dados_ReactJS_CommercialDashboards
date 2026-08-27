@@ -162,10 +162,20 @@ const eixoTick = { fontSize: 11, fontWeight: 700, fill: CORES.ink };
  * quando `escalaSecundaria` é usada os eixos ficam ocultos e a leitura é feita
  * pelos rótulos diretos, como no relatório original.
  */
+/**
+ * `onSelect` recebe a CHAVE do período da coluna clicada (`periodo`), não o rótulo:
+ * '2026-08' é o que o servidor sabe virar intervalo, 'ago/26' não. Quando a coluna é o
+ * período, clicar nela recorta o período — e o gráfico continua desenhando todas as
+ * colunas, com as outras esmaecidas, porque ele é justamente quem mostra esse campo.
+ *
+ * A linha sobreposta não esmaece: ela é uma segunda medida ao longo do tempo, e apagar
+ * pedaço dela não diria nada — a leitura da seleção está nas colunas.
+ */
 export function ComboChart({
   data, xKey = 'label', barKey, barName, lineKey, lineName,
   barFmt = int, lineFmt = int, escalaSecundaria = false,
   corLinha = CORES.orange, rotuloBarra = 'centro',
+  onSelect = null, selecionados = [], keyPeriodo = 'periodo',
 }) {
   const valores = data.map((d) => Number(d[barKey]) || 0);
   const min = Math.min(...valores, 0);
@@ -174,6 +184,7 @@ export function ComboChart({
   // deixamos a leitura pelo tooltip
   const denso = data.length > 24;
   const muitoDenso = data.length > 70;
+  const temSelecao = selecionados.length > 0;
   return (
     <AutoSizer>
       {({ w, h }) => (
@@ -196,9 +207,22 @@ export function ComboChart({
           cursor={{ fill: 'rgba(136,15,23,0.06)' }}
           content={<PbiTooltip fmts={{ [barKey]: barFmt, [lineKey]: lineFmt }} />}
         />
-        <Bar yAxisId="l" dataKey={barKey} name={barName} maxBarSize={denso ? 22 : 54} radius={[4, 4, 0, 0]} isAnimationActive={false}>
+        <Bar
+          yAxisId="l"
+          dataKey={barKey}
+          name={barName}
+          maxBarSize={denso ? 22 : 54}
+          radius={[4, 4, 0, 0]}
+          isAnimationActive={false}
+          onClick={onSelect ? (d) => onSelect(d[keyPeriodo]) : undefined}
+          cursor={onSelect ? 'pointer' : undefined}
+        >
           {data.map((d, i) => (
-            <Cell key={i} fill={escalaGradiente(Number(d[barKey]) || 0, min, max)} />
+            <Cell
+              key={i}
+              fill={escalaGradiente(Number(d[barKey]) || 0, min, max)}
+              fillOpacity={temSelecao && !selecionados.includes(d[keyPeriodo]) ? 0.32 : 1}
+            />
           ))}
           {!denso && (
             <LabelList dataKey={barKey} content={(p) => <ChipLabel {...p} fmt={barFmt} posicao={rotuloBarra} />} />

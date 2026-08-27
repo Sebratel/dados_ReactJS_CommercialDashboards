@@ -9,7 +9,9 @@ import { brl, dec1, int, labelDia, labelMesLongo, labelPeriodo, labelTotalVended
 import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Vendas() {
-  const { filtros, alternar } = useFilters();
+  const { filtros, alternar, alternarUnico } = useFilters();
+  // a coluna É o mês: clicar nela recorta o período (e clicar de novo devolve)
+  const periodoAceso = filtros.zoom ? [filtros.zoom] : [];
   const { data, error, isLoading } = useDados('/vendas', filtros);
 
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
@@ -45,6 +47,8 @@ export default function Vendas() {
                   barName="VENDAS"
                   lineKey="ativacoes"
                   lineName="ATIVAÇÕES"
+                  onSelect={(p) => alternarUnico('zoom', p)}
+                  selecionados={periodoAceso}
                 />
               </div>
             </>

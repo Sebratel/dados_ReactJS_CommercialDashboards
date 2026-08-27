@@ -5,7 +5,10 @@
  */
 import { dayWeight } from './holidays.js';
 import { getState } from './store.js';
-import { addDays, diffDays, endOfMonth, monthKey, startOfNextMonth, tempoContrato, today } from './dates.js';
+import {
+  addDays, diffDays, endOfMonth, intervaloDePeriodo, monthKey, startOfNextMonth,
+  tempoContrato, today,
+} from './dates.js';
 
 export const DATE_FIELD = {
   vendas: 'dtVenda',
@@ -40,6 +43,40 @@ export function parseFilters(q = {}) {
     canal: asArray(q.canal),
     cliente: q.cliente ? String(q.cliente).trim().toUpperCase() : null,
     vendedorAtivo: q.vendedorAtivo || null, // 'TRUE' | 'FALSE'
+
+    /**
+     * Filtros de PÁGINA, e não do modelo: `matchDims` não os aplica, quem aplica é o
+     * painel dono do visual — `motivo` e `tipo` em `painelCanceladas`, `plano` em
+     * `painelPrimeiroPagamento`.
+     *
+     * Ficam de fora do `matchDims` por três razões diferentes:
+     *
+     * - `motivo` não é campo: é o rótulo que o classificador de motivo deriva por
+     *   votação sobre a lista inteira, então não existe comparação linha a linha.
+     * - `plano` só existe no fato que teve primeiro pagamento. Aplicado no modelo, ele
+     *   viraria um filtro escondido de "contratos que já pagaram" nas telas de venda.
+     * - `tipo` existe em todo fato, mas o visual dele vive numa página só, e o Power BI
+     *   também recorta a PÁGINA no clique, não o relatório.
+     *
+     * O nome vem sem prefixo porque nenhuma outra tela tem campo com esse nome — se um
+     * dia tiver, o prefixo entra aqui, como em `rcidade`/`lcidade`.
+     */
+    motivo: asArray(q.motivo),
+    tipo: asArray(q.tipo),
+    plano: asArray(q.plano),
+
+    /**
+     * Recorte de período vindo do CLIQUE numa coluna do gráfico — a chave do período,
+     * já virada intervalo.
+     *
+     * Campo próprio, e não `de`/`ate` reescritos: o slicer da barra continua dizendo
+     * "Este ano" enquanto o clique recorta agosto, e apagar o chip devolve o ano
+     * inteiro. Sobrescrever `de`/`ate` perderia o período que a pessoa escolheu e não
+     * haveria como voltar a ele.
+     *
+     * Os dois se CRUZAM em `rows`: o clique estreita o período, nunca o alarga.
+     */
+    zoom: intervaloDePeriodo(q.zoom),
   };
 }
 
@@ -65,6 +102,9 @@ function matchDims(f, flt) {
  */
 export const semCampo = (flt, campo) => (flt[campo] ? { ...flt, [campo]: null } : flt);
 
+/** `semCampo` para mais de um campo — o gráfico de tecnologia por mês ignora os dois. */
+export const semCampos = (flt, ...campos) => campos.reduce((f, c) => semCampo(f, c), flt);
+
 /**
  * Linhas de um dataset ignorando um campo do filtro.
  *
@@ -74,21 +114,27 @@ export const semCampo = (flt, campo) => (flt[campo] ? { ...flt, [campo]: null } 
  * custo do cross-highlight em uma varredura por dimensão CLICADA, e não uma por visual
  * da tela — sem filtro nenhum, a tela custa exatamente o que custava antes.
  */
-export function rowsExceto(dataset, flt, campo, jaFiltrada) {
-  if (!flt[campo]) return jaFiltrada;
-  return rows(dataset, semCampo(flt, campo));
+export function rowsExceto(dataset, flt, campos, jaFiltrada) {
+  const lista = Array.isArray(campos) ? campos : [campos];
+  if (!lista.some((c) => flt[c])) return jaFiltrada;
+  return rows(dataset, semCampos(flt, ...lista));
 }
 
 /** Linhas de um dataset (vendas/ativos/pagantes) já filtradas. */
 export function rows(dataset, flt) {
   const field = DATE_FIELD[dataset];
-  const { de, ate } = flt;
+  const { de, ate, zoom } = flt;
+  // o clique na coluna cruza com o período do slicer, nunca o substitui
+  const zDe = zoom ? zoom.de : null;
+  const zAte = zoom ? zoom.ate : null;
   const out = [];
   for (const f of getState().facts) {
     const d = f[field];
     if (!d) continue;
     if (de && d < de) continue;
     if (ate && d > ate) continue;
+    if (zDe && d < zDe) continue;
+    if (zAte && d > zAte) continue;
     if (!matchDims(f, flt)) continue;
     out.push(f);
   }
@@ -471,6 +517,9 @@ export function rampagem(flt, granularidade = 'mes') {
   // vendas/ativações dentro dos 90 dias de rampagem do vendedor
   const vendas = rows('vendas', flt).filter((f) => f.venda90 === 1);
   const ativos = rows('ativos', flt).filter((f) => f.ativo90 === 1);
+  // o gráfico do topo MOSTRA o período, então ignora o recorte que saiu do clique nele
+  const vendasSemZoom = rowsExceto('vendas', flt, 'zoom', vendas).filter((f) => f.venda90 === 1);
+  const ativosSemZoom = rowsExceto('ativos', flt, 'zoom', ativos).filter((f) => f.ativo90 === 1);
 
   const map = new Map();
   const bump = (f, campo) => {
@@ -530,10 +579,10 @@ export function rampagem(flt, granularidade = 'mes') {
   }).sort((a, b) => b.vendas - a.vendas || a.vendedor.localeCompare(b.vendedor, 'pt-BR'));
 
   const meses = new Map();
-  for (const m of serie(vendas, 'dtVenda', granularidade)) {
+  for (const m of serie(vendasSemZoom, 'dtVenda', granularidade)) {
     meses.set(m.periodo, { periodo: m.periodo, vendas: m.qtd, ativos: 0 });
   }
-  for (const m of serie(ativos, 'dtAtiv', granularidade)) {
+  for (const m of serie(ativosSemZoom, 'dtAtiv', granularidade)) {
     const cur = meses.get(m.periodo) || { periodo: m.periodo, vendas: 0, ativos: 0 };
     cur.ativos = m.qtd;
     meses.set(m.periodo, cur);

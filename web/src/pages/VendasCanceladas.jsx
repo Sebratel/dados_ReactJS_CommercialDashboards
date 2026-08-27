@@ -23,7 +23,7 @@ import { baixar, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../expor
  * rola, e é proposital: comprimir quatro faixas numa tela deixaria todas ilegíveis.
  */
 export default function VendasCanceladas() {
-  const { filtros, alternar } = useFilters();
+  const { filtros, alternar, alternarUnico } = useFilters();
   const { data, error, isLoading } = useDados('/canceladas', filtros);
   // 'venda' é o padrão porque é a data que o filtro de período usa; 'cadastro'
   // reproduz o agrupamento do relatório de origem, para conferência
@@ -104,7 +104,7 @@ export default function VendasCanceladas() {
 
   return (
     <main className="page">
-      <SlicerBar rotuloPeriodo="Data da venda" />
+      <SlicerBar rotuloPeriodo="Data da venda" chipsExtra={['motivo', 'tipo']} />
       {error && <Erro erro={error} />}
 
       <div className="banner">
@@ -188,7 +188,7 @@ export default function VendasCanceladas() {
       {/* y=1195: tipo estreito à esquerda, motivo largo à direita */}
       <div className="grid linha-33-67">
         <Visual title="POR TIPO DE ATENDIMENTO" flush className="v-meia" ia="vendas-canceladas:tipo">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('TIPO DE ATENDIMENTO', CORES.gold)} dados={data?.porTipo || []} />}
+          {vazio ? <Loading /> : <Tabela colunas={contagem('TIPO DE ATENDIMENTO', CORES.gold)} dados={data?.porTipo || []} {...cruzar('tipo')} />}
         </Visual>
 
         <Visual
@@ -204,7 +204,13 @@ export default function VendasCanceladas() {
           )}
         >
           {vazio ? <Loading /> : (
-            <BarrasHorizontais data={data?.porMotivo || []} nome="CANCELADAS" larguraCategoria={170} />
+            <BarrasHorizontais
+              data={data?.porMotivo || []}
+              nome="CANCELADAS"
+              larguraCategoria={170}
+              selecionados={filtros.motivo}
+              onSelect={(m) => alternar('motivo', m)}
+            />
           )}
         </Visual>
       </div>
@@ -230,7 +236,19 @@ export default function VendasCanceladas() {
         )}
       >
         {vazio ? <Loading /> : (
-          <ComboChart data={serie} barKey="canceladas" barName="CANCELADAS" />
+          <ComboChart
+            data={serie}
+            barKey="canceladas"
+            barName="CANCELADAS"
+            /**
+             * O clique só recorta no agrupamento por DATA DA VENDA. No de cadastro do
+             * cliente a coluna é um mês de cadastro, mas o recorte de período do
+             * modelo é sobre a venda: clicar ali filtraria um mês diferente do que a
+             * coluna mostra — o tipo de erro que ninguém confere.
+             */
+            onSelect={porData === 'venda' ? (p) => alternarUnico('zoom', p) : undefined}
+            selecionados={porData === 'venda' && filtros.zoom ? [filtros.zoom] : []}
+          />
         )}
       </Visual>
     </main>

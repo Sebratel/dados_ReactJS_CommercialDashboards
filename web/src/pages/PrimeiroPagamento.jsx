@@ -9,7 +9,7 @@ import { brl, brl2, dec1, int, labelData, labelPeriodo } from '../format';
 import { baixar, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function PrimeiroPagamento() {
-  const { filtros } = useFilters();
+  const { filtros, alternar, alternarUnico } = useFilters();
   const { data, error, isLoading } = useDados('/primeiro-pagamento', filtros);
 
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
@@ -31,7 +31,7 @@ export default function PrimeiroPagamento() {
 
   return (
     <main className="page">
-      <SlicerBar rotuloPeriodo="Data do pagamento" />
+      <SlicerBar rotuloPeriodo="Data do pagamento" chipsExtra={['plano']} />
       {error && <Erro erro={error} />}
 
       <div className="grid linha-pagto">
@@ -56,6 +56,8 @@ export default function PrimeiroPagamento() {
                   lineFmt={brl}
                   corLinha={CORES.ink}
                   escalaSecundaria
+                  onSelect={(p) => alternarUnico('zoom', p)}
+                  selecionados={filtros.zoom ? [filtros.zoom] : []}
                 />
               </div>
             </>
@@ -86,6 +88,8 @@ export default function PrimeiroPagamento() {
               colunas={colunasPlanos}
               dados={data?.planos || []}
               ordemInicial={{ key: 'qtd', dir: 'desc' }}
+              onSelect={(l) => alternar('plano', l.plano)}
+              selecionada={(l) => filtros.plano.includes(l.plano)}
             />
           )}
         </Visual>

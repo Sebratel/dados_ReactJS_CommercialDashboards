@@ -1046,14 +1046,13 @@ hoje.
 
 ---
 
-### Cross-filter: onde clicar, e o que ele ainda não faz
+### Cross-filter: onde clicar
 
 No Power BI, clicar num visual recorta a página. Aqui também, e o mecanismo é o mesmo de
 sempre: o clique escreve o valor no **filtro da URL** (`?cidade=SALVADOR`), a página refaz
 a única chamada que ela tem, e o link continua compartilhável. Clicar de novo remove.
 
-**O que responde ao clique** (só campos que existem no filtro do modelo comercial —
-vendedor, equipe, tecnologia, situação, cidade e canal):
+**O que responde ao clique:**
 
 | Onde | Filtra |
 |---|---|
@@ -1063,13 +1062,48 @@ vendedor, equipe, tecnologia, situação, cidade e canal):
 | Segmento da coluna empilhada por tecnologia | a tecnologia |
 | Item da legenda `FIBRA / RÁDIO / TELEFONIA` | a tecnologia |
 | Cinco das seis contagens de Vendas Canceladas | vendedor, equipe, situação, cidade, tecnologia |
+| Barra de `MOTIVO DO CANCELAMENTO` | o motivo (rótulo classificado) |
+| `POR TIPO DE ATENDIMENTO` em Vendas Canceladas | o tipo |
+| Linha de `Planos mais vendidos` (Primeiro Pagamento) | o plano |
+| Coluna do gráfico de período (Vendas, Canceladas, Primeiro Pagamento, Rampagem) | o mês ou o dia da coluna |
 
-**O que não responde, de propósito:** `POR VALOR` e `POR TIPO DE ATENDIMENTO` em Vendas
-Canceladas, motivo do cancelamento, plano e as colunas de mês dos gráficos de linha. Nenhum
-desses existe como campo de filtro no modelo — e linha que convida ao clique sem filtrar
-nada é pior do que linha que não convida. Cada um deles custa um campo novo em quatro
-lugares (`filters.jsx`, `buildQuery`, `parseFilters` e `matchDims`), então entram por
-demanda, não por completude.
+**O que não responde, e por quê:** `POR VALOR` em Vendas Canceladas (é o preço do plano,
+que já se filtra pelo plano em Primeiro Pagamento); a coluna do gráfico de Ativações e a
+de `TOTAL DE VENDAS / DIA`, porque ali o clique no segmento já significa a tecnologia e o
+mesmo alvo não pode querer dizer duas coisas; a área de Diretoria, que não tem coluna para
+clicar; e o gráfico de Canceladas quando agrupado por **cadastro do cliente** — a coluna é
+um mês de cadastro, mas o recorte de período do modelo é sobre a venda, e filtrar um mês
+diferente do que a coluna mostra é o tipo de erro que ninguém confere.
+
+#### Três dimensões que existem numa página só
+
+`motivo`, `tipo` e `plano` **não entram no `matchDims`**: quem os aplica é o painel dono do
+visual. Cada um por uma razão diferente, e as três estão em `parseFilters`:
+
+- **`motivo`** não é campo, é o rótulo que o classificador deriva por votação sobre a lista
+  inteira — não existe comparação linha a linha. O classificador é treinado na base *sem* o
+  filtro de motivo, senão o rótulo clicado mudaria de nome no clique seguinte.
+- **`plano`** só existe no contrato que já teve primeiro pagamento. Aplicado no modelo, ele
+  viraria um filtro escondido de "quem pagou" nas telas de venda.
+- **`tipo`** existe em todo fato, mas o visual dele vive numa página só — e o Power BI
+  também recorta a PÁGINA no clique, não o relatório.
+
+Cada tela declara as suas na barra (`chipsExtra`), então um motivo esquecido não aparece
+como chip em Vendas, onde ele também não faria nada. O nome vai sem prefixo porque nenhuma
+outra tela tem campo com esse nome; se um dia tiver, o prefixo entra aqui, como em
+`rcidade`/`lcidade`.
+
+#### O recorte de período é um campo próprio
+
+Clicar na coluna de março escreve `?zoom=2026-03`, e o servidor cruza isso com o período do
+slicer — **estreita, nunca alarga**. Campo próprio, e não `de`/`ate` reescritos: o seletor
+da barra continua dizendo "Este ano" enquanto a tela mostra março, e apagar o chip devolve o
+ano inteiro. Sobrescrever o período perderia o que a pessoa escolheu, sem volta.
+
+Duas consequências boas: o gráfico que mostra o período ignora esse recorte (senão colapsa
+numa coluna só, com as outras esmaecidas ao redor da clicada), e o visual
+`TOTAL DE VENDAS / DIA` passa a abrir **os dias do mês clicado** — o detalhamento que a
+pessoa está pedindo com aquele clique.
 
 **Três decisões que vieram com isso:**
 
@@ -1135,8 +1169,33 @@ quatro cliques — a tela filtrada é mais BARATA, porque a varredura é a mesma
 agregações recebem menos linha. Com 250 mil fatos: 47 ms sem filtro, 12–24 ms no caso
 típico. A varredura extra só existe por dimensão CLICADA, não por visual da tela.
 
-Ainda de fora: o cache de resultado no servidor por `(version, rota, querystring)`, que
-colapsaria cliques repetidos e o refetch de 60 s no mesmo recorte.
+#### O cache que o cross-filter exigiu
+
+Explorar é clicar, voltar e clicar de novo, e cada volta refazia a varredura inteira. Com o
+auto-refresh por cima, vinte abas na tela de Vendas com o período padrão são vinte
+varreduras idênticas por minuto. As sete rotas comerciais passam por um cache LRU de 240
+entradas com validade de dois minutos — o intervalo da carga incremental, o mesmo tempo que
+o dado leva para poder mudar (`model/cache.js`).
+
+A chave tem duas coisas que a tornam segura em vez de esperta:
+
+1. **A versão do modelo.** Uma carga nova troca todas as chaves de uma vez, então não existe
+   invalidação para alguém esquecer de chamar.
+2. **A query inteira, já reescrita pelo middleware de escopo.** É `aplicarEscopo` que cruza
+   `equipe` com as equipes que a pessoa pode ver, e ele escreve em `req.query`. Cachear por
+   rota e filtro *pedido* serviria o dado de uma equipe para quem não pode enxergá-la.
+
+`/meta` expõe entradas, acertos, faltas e taxa: cache sem medida é fé, e é a taxa que
+denuncia chave errada. O `/refresh` manual limpa tudo — o botão existe para quem quer ver
+agora, e se a carga não mexeu na versão ele não pode devolver a resposta de antes dele.
+
+No front, `apiGet` repassa o `signal` do react-query: quatro cliques em rajada abriam quatro
+requisições que iam até o fim, e a penúltima resposta podia chegar depois da última.
+
+Sete testes em `server/test/cache.test.mjs` (`npm test` no server) cobrem a chave, o teto de
+entradas e a integração — um deles monta o roteador de verdade sobre fatos sintéticos e
+confere o acerto pelo `/meta`, porque dá para escrever um cache perfeito e esquecer de
+ligá-lo em metade das rotas.
 
 ---
 

@@ -38,6 +38,19 @@ export function endOfMonth(iso) {
   return addDays(startOfNextMonth(iso), -1);
 }
 
+/**
+ * Chave de período -> intervalo de datas. '2026-08' vira o mês inteiro; '2026-08-14'
+ * vira o dia. É o que traduz o clique numa coluna do gráfico em recorte de período: a
+ * coluna sabe o seu rótulo, e o rótulo é a chave.
+ */
+export function intervaloDePeriodo(periodo) {
+  if (!periodo) return null;
+  const p = String(periodo).trim();
+  if (/^\d{4}-\d{2}$/.test(p)) return { de: `${p}-01`, ate: endOfMonth(`${p}-01`) };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return { de: p, ate: p };
+  return null;
+}
+
 export function startOfMonth(iso) {
   return iso ? `${iso.slice(0, 7)}-01` : null;
 }

@@ -25,7 +25,26 @@ export const ROTULOS = {
   cidade: 'Cidade',
   canal: 'Canal Voalle',
   cliente: 'Cliente',
+  motivo: 'Motivo',
+  tipo: 'Tipo de atendimento',
+  plano: 'Plano',
+  zoom: 'Período',
 };
+
+/**
+ * Dimensões que existem numa PÁGINA só, e não no modelo: motivo e tipo de atendimento
+ * em Vendas Canceladas, plano em Primeiro Pagamento.
+ *
+ * Ficam fora de `LISTAS` por dois motivos. Não são slicers da barra — só existem como
+ * clique num visual, porque uma lista de 200 motivos de cancelamento em popover não
+ * ajuda ninguém. E o servidor as aplica no painel dono do visual, não no `matchDims`:
+ * `plano` só existe no contrato que já pagou, e aplicá-lo no modelo viraria um filtro
+ * escondido de "quem pagou" nas telas de venda.
+ *
+ * Cada tela declara as suas na barra (`chipsExtra`), então um motivo esquecido não
+ * aparece como chip em Vendas — onde ele também não faz nada.
+ */
+export const LISTAS_PAGINA = ['motivo', 'tipo', 'plano'];
 
 /**
  * Seletores da tela de condomínios. Ficam no MESMO provider porque o mecanismo é
@@ -86,7 +105,7 @@ export const LISTAS_REL_PESQUISA = ['pcidade', 'petiq', 'pstatus', 'pperg', 'pre
 export const LISTAS_REL_CLIMA = ['ccidade'];
 
 const TODAS_AS_LISTAS = [
-  ...LISTAS, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO, ...LISTAS_DESEMPENHO,
+  ...LISTAS, ...LISTAS_PAGINA, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO, ...LISTAS_DESEMPENHO,
   ...LISTAS_REL_GERAL, ...LISTAS_REL_RESUMO, ...LISTAS_REL_EQUIPES, ...LISTAS_REL_DIARIO,
   ...LISTAS_REL_BASE, ...LISTAS_REL_PESQUISA, ...LISTAS_REL_CLIMA,
 ];
@@ -117,6 +136,15 @@ export function FiltersProvider({ children }) {
       de: params.get('de') ?? inicial.de,
       ate: params.get('ate') ?? inicial.ate,
       cliente: params.get('cliente') || '',
+      /**
+       * Recorte de período nascido do CLIQUE numa coluna do gráfico, guardado como a
+       * chave do período ('2026-08' ou '2026-08-14').
+       *
+       * Campo próprio, e não `de`/`ate` reescritos: assim o seletor da barra continua
+       * dizendo "Este ano" enquanto a tela mostra agosto, e apagar o chip devolve o ano
+       * inteiro. Sobrescrever o período perderia o que a pessoa escolheu, sem volta.
+       */
+      zoom: params.get('zoom') || '',
       // granularidade dos gráficos de coluna (não conta como filtro)
       g: params.get('g') === 'dia' ? 'dia' : 'mes',
       /**
@@ -232,6 +260,23 @@ export function FiltersProvider({ children }) {
   }, [setParams]);
 
   /**
+   * Versão de valor ÚNICO do `alternar`, para campo que não é lista — hoje o recorte
+   * de período. Clicar na mesma coluna de novo remove; clicar em outra troca.
+   *
+   * Empilha no histórico pelo mesmo motivo do `alternar`: é clique de exploração, e o
+   * botão voltar tem que desfazer.
+   */
+  const alternarUnico = useCallback((campo, valor) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const v = valor === null || valor === undefined ? '' : String(valor);
+      if (!v || next.get(campo) === v) next.delete(campo);
+      else next.set(campo, v);
+      return next;
+    });
+  }, [setParams]);
+
+  /**
    * Limpa filtros.
    *
    * Sem argumento, volta tudo ao estado inicial — é o que as barras antigas fazem.
@@ -283,8 +328,8 @@ export function FiltersProvider({ children }) {
   const ativos = useMemo(() => contar([...LISTAS, 'cliente']), [contar]);
 
   const value = useMemo(
-    () => ({ filtros, setFiltro, alternar, limpar, presetAtivo, ativos, contar }),
-    [filtros, setFiltro, alternar, limpar, presetAtivo, ativos, contar],
+    () => ({ filtros, setFiltro, alternar, alternarUnico, limpar, presetAtivo, ativos, contar }),
+    [filtros, setFiltro, alternar, alternarUnico, limpar, presetAtivo, ativos, contar],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

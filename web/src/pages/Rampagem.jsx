@@ -9,7 +9,7 @@ import { dec1, int, labelData, labelPeriodo } from '../format';
 import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Rampagem() {
-  const { filtros, alternar } = useFilters();
+  const { filtros, alternar, alternarUnico } = useFilters();
   const { data, error, isLoading } = useDados('/rampagem', filtros);
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
   const colunasTabela = [
@@ -48,7 +48,15 @@ export default function Rampagem() {
                 { label: 'ATIVAÇÕES (90d)', cor: CORES.orange, linha: true },
               ]} />
               <div style={{ flex: 1, minHeight: 0 }}>
-                <ComboChart data={serie} barKey="vendas" barName="VENDAS (90d)" lineKey="ativos" lineName="ATIVAÇÕES (90d)" />
+                <ComboChart
+                  data={serie}
+                  barKey="vendas"
+                  barName="VENDAS (90d)"
+                  lineKey="ativos"
+                  lineName="ATIVAÇÕES (90d)"
+                  onSelect={(p) => alternarUnico('zoom', p)}
+                  selecionados={filtros.zoom ? [filtros.zoom] : []}
+                />
               </div>
             </>
           )}

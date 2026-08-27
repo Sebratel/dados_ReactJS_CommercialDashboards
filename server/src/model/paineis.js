@@ -14,6 +14,25 @@ import {
 import { monthKey, today } from './dates.js';
 
 /**
+ * Corta a lista em `limite` mas mantém as linhas ESCOLHIDAS, mesmo fora do topo.
+ *
+ * É o `garantir` do `groupCount` para listas montadas à mão: sem ele, filtrar por um
+ * plano de cauda o tirava da tabela de quarenta linhas, e a tela ficava recortada por
+ * algo que não aparecia em lugar nenhum.
+ */
+function comOsEscolhidos(lista, limite, escolhidos, chaveDe) {
+  if (lista.length <= limite) return lista;
+  const cabeca = lista.slice(0, limite);
+  if (!escolhidos || !escolhidos.length) return cabeca;
+  const dentro = new Set(cabeca.map(chaveDe));
+  for (const linha of lista.slice(limite)) {
+    const k = chaveDe(linha);
+    if (escolhidos.includes(k) && !dentro.has(k)) cabeca.push(linha);
+  }
+  return cabeca;
+}
+
+/**
  * Marca os rótulos-sentinela — "(sem canal)", "(sem equipe)" — como não clicáveis.
  *
  * Eles não são valor de banco: `matchDims` compara com o campo cru, então filtrar por
@@ -29,6 +48,12 @@ export function painelDiretoria(flt, g) {
   const ativos = rows('ativos', flt);
   const pagantes = rows('pagantes', flt);
 
+  /**
+   * A série MOSTRA o período, então ignora o recorte de período (o `zoom`) — mesmo
+   * motivo de todo o resto: um visual que mostra um campo não pode ser calculado com o
+   * filtro daquele campo, senão colapsa numa coluna só. Os KPIs acima seguem
+   * recortados.
+   */
   const meses = new Map();
   const put = (list, field, campo) => {
     for (const m of serie(list, field, g)) {
@@ -37,9 +62,9 @@ export function painelDiretoria(flt, g) {
       meses.set(m.periodo, cur);
     }
   };
-  put(vendas, 'dtVenda', 'vendas');
-  put(pagantes, 'dtPagto', 'pagantes');
-  put(ativos, 'dtAtiv', 'ativacoes');
+  put(rowsExceto('vendas', flt, 'zoom', vendas), 'dtVenda', 'vendas');
+  put(rowsExceto('pagantes', flt, 'zoom', pagantes), 'dtPagto', 'pagantes');
+  put(rowsExceto('ativos', flt, 'zoom', ativos), 'dtAtiv', 'ativacoes');
 
   return {
     kpis: {
@@ -60,19 +85,25 @@ export function painelVendas(flt, g) {
   const vendas = rows('vendas', flt);
   const ativos = rows('ativos', flt);
 
-  // combo "TOTAL DE VENDAS / MÊS (ou DIA)": colunas = vendas, linha = ativações
+  // combo "TOTAL DE VENDAS / MÊS (ou DIA)": colunas = vendas, linha = ativações.
+  // A coluna É o período, e clicar nela recorta o período — então este visual ignora
+  // o próprio recorte, como o de cidades ignora o de cidade.
   const meses = new Map();
-  for (const m of serie(vendas, 'dtVenda', g)) {
+  for (const m of serie(rowsExceto('vendas', flt, 'zoom', vendas), 'dtVenda', g)) {
     meses.set(m.periodo, { periodo: m.periodo, vendas: m.qtd, ativacoes: 0, valor: m.valor });
   }
-  for (const m of serie(ativos, 'dtAtiv', g)) {
+  for (const m of serie(rowsExceto('ativos', flt, 'zoom', ativos), 'dtAtiv', g)) {
     const cur = meses.get(m.periodo) || { periodo: m.periodo, vendas: 0, ativacoes: 0, valor: 0 };
     cur.ativacoes = m.qtd;
     meses.set(m.periodo, cur);
   }
 
-  // "TOTAL DE VENDAS / DIA (MÊS ATUAL)" — último mês do período filtrado
-  const mesAtual = monthKey(flt.ate || today());
+  /**
+   * "TOTAL DE VENDAS / DIA (MÊS ATUAL)" — último mês do período filtrado, e o mês
+   * CLICADO quando há um: clicar na coluna de março abre os dias de março ao lado, que
+   * é o detalhamento que a pessoa está pedindo com aquele clique.
+   */
+  const mesAtual = monthKey((flt.zoom && flt.zoom.ate) || flt.ate || today());
 
   /**
    * Cross-highlight: cada visual CLICÁVEL ignora o seu próprio campo, senão ele
@@ -117,7 +148,9 @@ export function painelAtivacoes(flt, g) {
   const paraCidade = rowsExceto('ativos', flt, 'cidade', ativos);
   const paraVendedor = rowsExceto('ativos', flt, 'vendedor', ativos);
 
-  const porTec = seriePorTecnologia(paraTecnologia, 'dtAtiv', g, flt.tecnologia);
+  // a série é por período E por tecnologia, então ignora os dois filtros que ela mostra
+  const paraSerie = rowsExceto('ativos', flt, ['tecnologia', 'zoom'], ativos);
+  const porTec = seriePorTecnologia(paraSerie, 'dtAtiv', g, flt.tecnologia);
   const totalTelefonia = ativos.reduce((a, f) => a + (f.tecnologia === 'TELEFONIA' ? 1 : 0), 0);
 
   return {
@@ -144,13 +177,25 @@ export function painelAtivacoes(flt, g) {
 }
 
 export function painelPrimeiroPagamento(flt, g, { limit = 1500 } = {}) {
-  const pagantes = rows('pagantes', flt);
+  const doModelo = rows('pagantes', flt);
+
+  /**
+   * `plano` é filtro desta página (ver `parseFilters`). A tabela de planos MOSTRA o
+   * campo, então ela é montada sobre a lista SEM esse filtro — é o cross-highlight: a
+   * tabela continua listando todos os planos, com o escolhido aceso, enquanto o
+   * gráfico, os KPIs e o detalhamento recortam.
+   */
+  const nomePlano = (f) => f.plano || '(sem plano)';
+  const comPlano = (lista) => (
+    flt.plano ? lista.filter((f) => flt.plano.includes(nomePlano(f))) : lista
+  );
+  const pagantes = comPlano(doModelo);
 
   // "Planos mais vendidos": agrupado pelo valor do plano
   const planos = new Map();
-  for (const f of pagantes) {
-    const key = `${f.plano || '(sem plano)'}|${(Number(f.valor) || 0).toFixed(2)}`;
-    const cur = planos.get(key) || { plano: f.plano || '(sem plano)', valorPadrao: Number(f.valor) || 0, qtd: 0, valorTotal: 0 };
+  for (const f of doModelo) {
+    const key = `${nomePlano(f)}|${(Number(f.valor) || 0).toFixed(2)}`;
+    const cur = planos.get(key) || { plano: nomePlano(f), valorPadrao: Number(f.valor) || 0, qtd: 0, valorTotal: 0 };
     cur.qtd += 1;
     cur.valorTotal += Number(f.valor) || 0;
     planos.set(key, cur);
@@ -177,8 +222,20 @@ export function painelPrimeiroPagamento(flt, g, { limit = 1500 } = {}) {
       media: mediaPonderada(pagantes, 'dtPagto'),
     },
     granularidade: g,
-    serie: serie(pagantes, 'dtPagto', g).map((m) => ({ periodo: m.periodo, pagantes: m.qtd, valor: m.valor })),
-    planos: [...planos.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 40),
+    /**
+     * A série ignora o recorte de PERÍODO (é ela que o mostra) mas mantém o de plano:
+     * `rowsExceto` volta ao `rows`, que não conhece `plano`, então o filtro precisa ser
+     * reaplicado por cima — sem isso, clicar num plano e depois num mês devolvia a
+     * série de todos os planos.
+     */
+    serie: serie(comPlano(rowsExceto('pagantes', flt, 'zoom', doModelo)), 'dtPagto', g)
+      .map((m) => ({ periodo: m.periodo, pagantes: m.qtd, valor: m.valor })),
+    planos: comOsEscolhidos(
+      [...planos.values()].sort((a, b) => b.qtd - a.qtd),
+      40,
+      flt.plano,
+      (l) => l.plano,
+    ),
     porVendedor: porVendedor(pagantes, 'dtPagto'),
     detalhe,
     detalheTotal: pagantes.length,
@@ -310,24 +367,50 @@ function dobrarCauda(lista, manter) {
  *    a diferença é real; mantemos como está lá e dizemos no título do visual qual
  *    data cada um usa.
  */
+/**
+ * Campos que esta página recorta pelo `rows` — os cinco do modelo mais o `zoom`, que é
+ * o recorte de período nascido do clique na coluna do gráfico.
+ */
+const DIMS_CANCELADAS = ['cidade', 'tecnologia', 'equipe', 'situacao', 'vendedor', 'zoom'];
+
 export function painelCanceladas(flt) {
   // os dois filtros de página do relatório de origem, mais a marca de tipo padrão
   const recorte = (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao;
-  const canceladas = rows('vendas', flt).filter(recorte);
+  const daPagina = rows('vendas', flt).filter(recorte);
 
   /**
-   * Base de uma contagem, ignorando o campo que ela própria mostra (cross-highlight).
-   * O recorte de página é reaplicado por cima: sem ele a contagem por equipe passaria
-   * a somar contrato ativo, e a tela toda deixaria de ser "vendas canceladas".
-   *
-   * Devolve a lista já calculada quando o campo não está filtrado, então uma tela sem
-   * clique nenhum custa uma varredura só, como antes.
+   * O classificador é montado sobre a base SEM os filtros de motivo e tipo, de
+   * propósito: ele decide o rótulo de cada motivo por votação sobre a lista inteira, e
+   * treiná-lo já filtrado mudaria o nome do que sobrou — o rótulo clicado deixaria de
+   * existir no clique seguinte.
    */
-  const semSeuCampo = (campo) => (
-    flt[campo] ? rows('vendas', semCampo(flt, campo)).filter(recorte) : canceladas
-  );
+  const classificarMotivo = classificadorDeMotivo(daPagina);
 
-  const classificarMotivo = classificadorDeMotivo(canceladas);
+  /**
+   * Base de um visual, ignorando o campo que ele MOSTRA (cross-highlight).
+   *
+   * `campo` pode ser um dos cinco do modelo, e aí o recorte sai do próprio `rows`, ou
+   * um dos dois desta página (`motivo`, `tipo`), aplicados aqui porque `matchDims` não
+   * os conhece — o porquê está em `parseFilters`.
+   *
+   * Sem argumento devolve a base filtrada por tudo: é o que alimenta os KPIs, a série e
+   * o detalhamento. E quando o campo não está filtrado a lista já calculada volta como
+   * está, então tela sem clique custa uma varredura só, como antes.
+   */
+  const baseDo = (campo = null) => {
+    let out = campo && flt[campo] && DIMS_CANCELADAS.includes(campo)
+      ? rows('vendas', semCampo(flt, campo)).filter(recorte)
+      : daPagina;
+    if (flt.motivo && campo !== 'motivo') {
+      out = out.filter((f) => flt.motivo.includes(classificarMotivo(f)));
+    }
+    if (flt.tipo && campo !== 'tipo') {
+      out = out.filter((f) => flt.tipo.includes(f.tipoSolicitacao || '(sem tipo)'));
+    }
+    return out;
+  };
+
+  const canceladas = baseDo();
 
   // Duas séries, e a razão é prática: o relatório agrupa por cadastro do cliente,
   // mas o cliente pode ter se cadastrado anos antes de fechar o contrato. Num
@@ -335,9 +418,9 @@ export function painelCanceladas(flt) {
   // barra de valor 1 e um pico no fim — ilegível. A série por data da venda é a
   // coerente com o filtro de período e vira o padrão; a do cadastro fica a um
   // clique, para quem precisa conferir contra o Power BI.
-  const agrupar = (campo) => {
+  const agrupar = (campo, lista = canceladas) => {
     const m = new Map();
-    for (const f of canceladas) {
+    for (const f of lista) {
       const d = f[campo];
       const k = d ? monthKey(d) : '(sem data)';
       const cur = m.get(k) || { periodo: k, canceladas: 0, valor: 0 };
@@ -383,15 +466,16 @@ export function painelCanceladas(flt) {
       valor: soma(canceladas),
       ticketMedio: canceladas.length ? soma(canceladas) / canceladas.length : 0,
     },
-    serie: agrupar('dtVenda'),
-    serieCadastro: agrupar('dtCadastroCliente'),
-    porMotivo: dobrarCauda(groupCount(canceladas, classificarMotivo), 8),
-    porCidade: groupCount(semSeuCampo('cidade'), (f) => f.cidade, { limit: 20, garantir: flt.cidade }),
-    porTecnologia: groupCount(semSeuCampo('tecnologia'), (f) => f.tecnologia, { garantir: flt.tecnologia }),
-    porEquipe: semSentinela(groupCount(semSeuCampo('equipe'), (f) => f.equipe || '(sem equipe)', { limit: 20, garantir: flt.equipe })),
-    porSituacao: semSentinela(groupCount(semSeuCampo('situacao'), (f) => f.situacao || '(sem situação)', { garantir: flt.situacao })),
-    porVendedor: groupCount(semSeuCampo('vendedor'), (f) => f.vendedor, { limit: 30, garantir: flt.vendedor }),
-    porTipo: groupCount(canceladas, (f) => f.tipoSolicitacao || '(sem tipo)'),
+    // as duas séries mostram o período: ignoram o recorte que saiu do clique nelas
+    serie: agrupar('dtVenda', baseDo('zoom')),
+    serieCadastro: agrupar('dtCadastroCliente', baseDo('zoom')),
+    porMotivo: dobrarCauda(groupCount(baseDo('motivo'), classificarMotivo, { garantir: flt.motivo }), 8),
+    porCidade: groupCount(baseDo('cidade'), (f) => f.cidade, { limit: 20, garantir: flt.cidade }),
+    porTecnologia: groupCount(baseDo('tecnologia'), (f) => f.tecnologia, { garantir: flt.tecnologia }),
+    porEquipe: semSentinela(groupCount(baseDo('equipe'), (f) => f.equipe || '(sem equipe)', { limit: 20, garantir: flt.equipe })),
+    porSituacao: semSentinela(groupCount(baseDo('situacao'), (f) => f.situacao || '(sem situação)', { garantir: flt.situacao })),
+    porVendedor: groupCount(baseDo('vendedor'), (f) => f.vendedor, { limit: 30, garantir: flt.vendedor }),
+    porTipo: semSentinela(groupCount(baseDo('tipo'), (f) => f.tipoSolicitacao || '(sem tipo)', { garantir: flt.tipo })),
     porValor: [...porValor.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 25),
     detalhe,
     detalheTotal: canceladas.length,

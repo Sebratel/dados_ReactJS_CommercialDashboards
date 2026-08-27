@@ -2,13 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFiltros, useMeta } from '../api';
 import { LISTAS, PRESETS, ROTULOS, useFilters } from '../filters';
 import { useSession } from '../auth/session.jsx';
-import { labelData } from '../format';
+import { labelData, labelPeriodoLongo } from '../format';
 import { Icone } from './Icone';
 
 const TITULOS = ROTULOS;
 
-/** Campos do modelo comercial que os chips da barra representam. */
-const CAMPOS_COMERCIAL = [...LISTAS, 'cliente'];
+/**
+ * Campos do modelo comercial que os chips da barra representam. `zoom` entra em todas
+ * as telas porque o servidor o aplica no modelo inteiro: um recorte de período deixado
+ * para trás mexe no número de qualquer tela comercial, e precisa aparecer em todas.
+ */
+const CAMPOS_COMERCIAL = [...LISTAS, 'cliente', 'zoom'];
+
+/** O chip do período mostra 'agosto de 2026', não '2026-08'. */
+const FORMATOS = { zoom: labelPeriodoLongo };
 
 /** Fecha o popover ao clicar fora ou apertar Esc. */
 export function usarFechamento(aberto, fechar) {
@@ -254,8 +261,8 @@ export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets 
  * e a conta de altura da tela (`--util`) só reserva uma. O que sobra vai no `+N`,
  * com a lista completa no `title`.
  */
-export function ChipsAtivos({ campos, rotulos = ROTULOS, teto = 12 }) {
-  const { filtros, alternar, setFiltro } = useFilters();
+export function ChipsAtivos({ campos, rotulos = ROTULOS, formatos = FORMATOS, teto = 12 }) {
+  const { filtros, alternar, alternarUnico } = useFilters();
 
   const itens = useMemo(() => {
     const out = [];
@@ -263,19 +270,23 @@ export function ChipsAtivos({ campos, rotulos = ROTULOS, teto = 12 }) {
       const valor = filtros[campo];
       const rotulo = rotulos[campo] || campo;
       if (Array.isArray(valor)) {
-        for (const v of valor) out.push({ campo, valor: v, rotulo, tipo: 'lista' });
+        for (const v of valor) out.push({ campo, valor: v, rotulo, tipo: 'lista', texto: v });
       } else if (valor) {
-        out.push({ campo, valor, rotulo, tipo: 'texto' });
+        const fmt = formatos[campo];
+        out.push({ campo, valor, rotulo, tipo: 'unico', texto: fmt ? fmt(valor) : valor });
       }
     }
     return out;
-  }, [campos, filtros, rotulos]);
+  }, [campos, filtros, rotulos, formatos]);
 
   if (!itens.length) return null;
 
   const visiveis = itens.slice(0, teto);
   const escondidos = itens.slice(teto);
-  const remover = (i) => (i.tipo === 'lista' ? alternar(i.campo, i.valor) : setFiltro({ [i.campo]: '' }));
+  // remover chip também empilha no histórico: é clique, e o voltar tem que desfazer
+  const remover = (i) => (i.tipo === 'lista'
+    ? alternar(i.campo, i.valor)
+    : alternarUnico(i.campo, i.valor));
 
   return (
     <div className="chips">
@@ -286,17 +297,17 @@ export function ChipsAtivos({ campos, rotulos = ROTULOS, teto = 12 }) {
           type="button"
           className="chip"
           onClick={() => remover(i)}
-          title={`Remover o filtro ${i.rotulo}: ${i.valor}`}
+          title={`Remover o filtro ${i.rotulo}: ${i.texto}`}
         >
           <span className="chip-campo">{i.rotulo}</span>
-          <span className="chip-valor">{i.valor}</span>
+          <span className="chip-valor">{i.texto}</span>
           <Icone nome="fechar" tamanho={10} />
         </button>
       ))}
       {escondidos.length > 0 && (
         <span
           className="chip chip-resto"
-          title={escondidos.map((i) => `${i.rotulo}: ${i.valor}`).join('\n')}
+          title={escondidos.map((i) => `${i.rotulo}: ${i.texto}`).join('\n')}
         >
           +{escondidos.length}
         </span>
@@ -309,11 +320,17 @@ export function ChipsAtivos({ campos, rotulos = ROTULOS, teto = 12 }) {
  * Barra de filtros: uma linha só, fixa abaixo da navegação. Substitui os
  * seis cartões de slicer que ocupavam 125px de altura.
  */
+/**
+ * `chipsExtra` são as dimensões de PÁGINA daquela tela (motivo, tipo, plano). Entram
+ * nos chips e na contagem do botão de limpar, mas não ganham botão de seletor: elas só
+ * existem como clique num visual.
+ */
 export function SlicerBar({
   campos = ['cliente', 'periodo', 'vendedor', 'tecnologia', 'equipe', 'situacao'],
   rotuloPeriodo = 'Período',
+  chipsExtra = [],
 }) {
-  const { filtros, setFiltro, presetAtivo, ativos, limpar } = useFilters();
+  const { filtros, setFiltro, presetAtivo, contar, limpar } = useFilters();
   const { data: dims } = useFiltros();
   const { data: meta } = useMeta();
   const { escopo } = useSession();
@@ -337,6 +354,14 @@ export function SlicerBar({
   };
 
   const listas = campos.filter((c) => c !== 'cliente' && c !== 'periodo');
+  /**
+   * Os campos que esta barra representa. Conta daqui, e não do `ativos` do contexto,
+   * para o número do botão bater com os chips ao lado: com o `ativos` global, um
+   * motivo clicado virava chip mas não entrava na conta, e o botão prometia limpar
+   * menos do que limpava.
+   */
+  const daBarra = [...CAMPOS_COMERCIAL, ...chipsExtra];
+  const ativos = contar(daBarra);
 
   return (
     <div className="filtros">
@@ -396,7 +421,7 @@ export function SlicerBar({
       {/* Todos os campos do modelo comercial, não só os que têm botão aqui: o
           cross-filter preenche `cidade` e `canal`, que não estão entre os seis
           seletores desta barra. */}
-      <ChipsAtivos campos={CAMPOS_COMERCIAL} />
+      <ChipsAtivos campos={daBarra} />
     </div>
   );
 }

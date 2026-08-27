@@ -26,6 +26,12 @@ export function buildQuery(filtros = {}) {
   add('cliente', filtros.cliente);
   add('g', filtros.g);
   add('hg', filtros.hg);
+  // dimensões de página: o servidor as aplica no painel dono do visual
+  add('motivo', filtros.motivo);
+  add('tipo', filtros.tipo);
+  add('plano', filtros.plano);
+  // recorte de período vindo do clique na coluna; cruza com de/ate no servidor
+  add('zoom', filtros.zoom);
   // condomínios — nomes iguais aos da URL, então o link compartilhado e a
   // chamada de API falam a mesma língua
   add('condominio', filtros.condominio);
