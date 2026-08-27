@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getState, isReady } from '../model/store.js';
+import { comCache, estatisticasCache, limparCache } from '../model/cache.js';
 import { parseFilters, parseGranularidade, premiacoes, rampagem } from '../model/measures.js';
 import {
   granularidadeHistorico, painelAtivacoes, painelCanceladas, painelDiretoria,
@@ -181,6 +182,8 @@ function meta() {
       };
     })(),
     refresh: config.refresh,
+    // cache sem medida é fé: a taxa de acerto é o que denuncia chave errada
+    cache: estatisticasCache(),
     since: config.since,
     phoneSince: config.phoneSince,
     crmSince: config.crmSince,
@@ -191,6 +194,19 @@ function meta() {
 }
 
 const withMeta = (payload) => ({ ...payload, meta: meta() });
+
+/**
+ * Painel com cache, para as telas do modelo comercial.
+ *
+ * A versão é a do modelo comercial, então uma carga nova invalida tudo sozinha. A
+ * query vem do `req` DEPOIS do middleware — é lá que o escopo reescreve `equipe`, e
+ * cachear antes disso serviria dado de uma equipe para quem não pode ver (o porquê
+ * está em `model/cache.js`).
+ */
+const painelComCache = (nome, req, calcular) => comCache(
+  { nome, versao: getState().version, query: req.query },
+  calcular,
+);
 
 // público (healthcheck do Docker) — sem detalhes internos
 api.get('/health', (req, res) => {
@@ -238,25 +254,31 @@ api.get('/filters', auth(), (req, res) => {
 
 // --------------------------------------------------------------- DIRETORIA
 api.get('/diretoria', auth('diretoria'), (req, res) => {
-  res.json(withMeta(painelDiretoria(parseFilters(req.query), parseGranularidade(req.query))));
+  res.json(withMeta(painelComCache('diretoria', req, () => painelDiretoria(
+    parseFilters(req.query), parseGranularidade(req.query),
+  ))));
 });
 
 // ------------------------------------------------------------------ VENDAS
 api.get('/vendas', auth('vendas'), (req, res) => {
-  res.json(withMeta(painelVendas(parseFilters(req.query), parseGranularidade(req.query))));
+  res.json(withMeta(painelComCache('vendas', req, () => painelVendas(
+    parseFilters(req.query), parseGranularidade(req.query),
+  ))));
 });
 
 // --------------------------------------------------------------- ATIVAÇÕES
 api.get('/ativacoes', auth('ativacoes'), (req, res) => {
-  res.json(withMeta(painelAtivacoes(parseFilters(req.query), parseGranularidade(req.query))));
+  res.json(withMeta(painelComCache('ativacoes', req, () => painelAtivacoes(
+    parseFilters(req.query), parseGranularidade(req.query),
+  ))));
 });
 
 // ------------------------------------------------------- PRIMEIRO PAGAMENTO
 api.get('/primeiro-pagamento', auth('primeiro-pagamento'), (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 1500, 20000);
-  res.json(withMeta(painelPrimeiroPagamento(
+  res.json(withMeta(painelComCache('primeiro-pagamento', req, () => painelPrimeiroPagamento(
     parseFilters(req.query), parseGranularidade(req.query), { limit },
-  )));
+  ))));
 });
 
 // -------------------------------------------------------------- HISTÓRICOS
@@ -269,7 +291,7 @@ api.get('/historico/:dataset', authHistorico, (req, res) => {
    * nome faria o valor de uma vazar na outra — inofensivo hoje, confuso amanhã.
    */
   const g = granularidadeHistorico(req.query.hg, flt);
-  const painel = painelHistorico(dataset, flt, g);
+  const painel = painelComCache(`historico:${dataset}`, req, () => painelHistorico(dataset, flt, g));
   res.json(withMeta({
     ...painel,
     // o que a tela pediu, para ela saber se o automático foi respeitado
@@ -279,12 +301,14 @@ api.get('/historico/:dataset', authHistorico, (req, res) => {
 
 // ---------------------------------------------------------------- RAMPAGEM
 api.get('/rampagem', auth('rampagem'), (req, res) => {
-  res.json(withMeta(rampagem(parseFilters(req.query), parseGranularidade(req.query))));
+  res.json(withMeta(painelComCache('rampagem', req, () => rampagem(
+    parseFilters(req.query), parseGranularidade(req.query),
+  ))));
 });
 
 // -------------------------------------------------------- VENDAS CANCELADAS
 api.get('/canceladas', auth('vendas-canceladas'), (req, res) => {
-  res.json(withMeta(painelCanceladas(parseFilters(req.query))));
+  res.json(withMeta(painelComCache('canceladas', req, () => painelCanceladas(parseFilters(req.query)))));
 });
 
 // ------------------------------------------------------------- CONDOMÍNIOS
@@ -492,6 +516,10 @@ api.post('/refresh', auth(), async (req, res) => {
   try {
     if (group) await refreshGroup(String(group));
     else await refreshAll();
+    // A versão nova já troca as chaves, mas o refresh manual existe para quem quer
+    // ver AGORA: se a carga não mexeu na versão (nenhuma fonte mudou), o botão não
+    // pode devolver a resposta guardada de antes dele.
+    limparCache();
     res.json(withMeta({ ok: true }));
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

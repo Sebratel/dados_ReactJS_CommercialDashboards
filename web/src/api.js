@@ -176,9 +176,15 @@ export async function apiFetch(url, init = {}) {
   return res;
 }
 
-export async function apiGet(path, filtros) {
+/**
+ * `signal` vem do react-query. Repassar importa desde o cross-filter: quatro cliques
+ * em rajada abriam quatro requisições que iam até o fim, e a penúltima resposta podia
+ * chegar depois da última — a tela mostrava o recorte anterior com o chip do novo.
+ * Com o sinal, o react-query cancela o que já não interessa.
+ */
+export async function apiGet(path, filtros, { signal } = {}) {
   const qs = filtros ? buildQuery(filtros) : '';
-  const res = await apiFetch(`/api${path}${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(`/api${path}${qs ? `?${qs}` : ''}`, { signal });
   if (!res.ok) {
     let msg = `Erro ${res.status}`;
     try {
@@ -211,7 +217,7 @@ export async function apiJson(path, { method = 'GET', body } = {}) {
 export function useDados(path, filtros, options = {}) {
   return useQuery({
     queryKey: [path, filtros],
-    queryFn: () => apiGet(path, filtros),
+    queryFn: ({ signal }) => apiGet(path, filtros, { signal }),
     refetchInterval: AUTO_REFRESH_MS,
     refetchOnWindowFocus: true,
     staleTime: 20000,
