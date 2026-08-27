@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFiltros, useMeta } from '../api';
-import { PRESETS, useFilters } from '../filters';
+import { LISTAS, PRESETS, ROTULOS, useFilters } from '../filters';
 import { useSession } from '../auth/session.jsx';
 import { labelData } from '../format';
 import { Icone } from './Icone';
 
-const TITULOS = {
-  vendedor: 'Vendedor',
-  tecnologia: 'Tecnologia',
-  equipe: 'Equipe',
-  situacao: 'Canal',
-  cidade: 'Cidade',
-  canal: 'Canal Voalle',
-};
+const TITULOS = ROTULOS;
+
+/** Campos do modelo comercial que os chips da barra representam. */
+const CAMPOS_COMERCIAL = [...LISTAS, 'cliente'];
 
 /** Fecha o popover ao clicar fora ou apertar Esc. */
 export function usarFechamento(aberto, fechar) {
@@ -243,6 +239,73 @@ export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets 
 }
 
 /**
+ * Chips do que está filtrando agora — um por VALOR, não por campo.
+ *
+ * Existe por causa do cross-filter. Clicar numa barra de cidade preenche um campo
+ * que NÃO tem botão na barra (`cidade` não está entre os seis seletores da tela de
+ * vendas): o contador dizia "limpar 1 filtro" e não havia nada na tela dizendo qual.
+ * Filtro que soma mas não se mostra é o caminho mais curto para alguém apresentar
+ * um número recortado achando que é o total.
+ *
+ * Cada chip remove o SEU valor, e não o campo inteiro — clicar em três cidades e
+ * ter que desmarcar as três de uma vez é o mesmo problema com outro nome.
+ *
+ * `teto` limita o que vai ao DOM: com quinze cidades marcadas a linha viraria três,
+ * e a conta de altura da tela (`--util`) só reserva uma. O que sobra vai no `+N`,
+ * com a lista completa no `title`.
+ */
+export function ChipsAtivos({ campos, rotulos = ROTULOS, teto = 12 }) {
+  const { filtros, alternar, setFiltro } = useFilters();
+
+  const itens = useMemo(() => {
+    const out = [];
+    for (const campo of campos) {
+      const valor = filtros[campo];
+      const rotulo = rotulos[campo] || campo;
+      if (Array.isArray(valor)) {
+        for (const v of valor) out.push({ campo, valor: v, rotulo, tipo: 'lista' });
+      } else if (valor) {
+        out.push({ campo, valor, rotulo, tipo: 'texto' });
+      }
+    }
+    return out;
+  }, [campos, filtros, rotulos]);
+
+  if (!itens.length) return null;
+
+  const visiveis = itens.slice(0, teto);
+  const escondidos = itens.slice(teto);
+  const remover = (i) => (i.tipo === 'lista' ? alternar(i.campo, i.valor) : setFiltro({ [i.campo]: '' }));
+
+  return (
+    <div className="chips">
+      <span className="chips-rotulo">Filtrando por</span>
+      {visiveis.map((i) => (
+        <button
+          key={`${i.campo}:${i.valor}`}
+          type="button"
+          className="chip"
+          onClick={() => remover(i)}
+          title={`Remover o filtro ${i.rotulo}: ${i.valor}`}
+        >
+          <span className="chip-campo">{i.rotulo}</span>
+          <span className="chip-valor">{i.valor}</span>
+          <Icone nome="fechar" tamanho={10} />
+        </button>
+      ))}
+      {escondidos.length > 0 && (
+        <span
+          className="chip chip-resto"
+          title={escondidos.map((i) => `${i.rotulo}: ${i.valor}`).join('\n')}
+        >
+          +{escondidos.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
  * Barra de filtros: uma linha só, fixa abaixo da navegação. Substitui os
  * seis cartões de slicer que ocupavam 125px de altura.
  */
@@ -329,6 +392,11 @@ export function SlicerBar({
           <Icone nome="fechar" tamanho={12} /> limpar {ativos} filtro{ativos > 1 ? 's' : ''}
         </button>
       )}
+
+      {/* Todos os campos do modelo comercial, não só os que têm botão aqui: o
+          cross-filter preenche `cidade` e `canal`, que não estão entre os seis
+          seletores desta barra. */}
+      <ChipsAtivos campos={CAMPOS_COMERCIAL} />
     </div>
   );
 }

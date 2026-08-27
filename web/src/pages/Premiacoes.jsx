@@ -51,8 +51,12 @@ function AlternadorEscala({ porSituacao, onChange }) {
 }
 
 export default function Premiacoes() {
-  const { filtros } = useFilters();
+  const { filtros, alternar } = useFilters();
   const { data, error, isLoading } = useDados('/premiacoes', filtros);
+  const porVendedor = {
+    onSelect: (l) => alternar('vendedor', l.vendedor),
+    selecionada: (l) => filtros.vendedor.includes(l.vendedor),
+  };
   const [porSituacao, setPorSituacao] = useState(true);
 
   const pagantes = data?.pagantes || [];
@@ -121,6 +125,7 @@ export default function Premiacoes() {
               valorFinal: data?.totalPagantes || 0,
             }}
             ordemInicial={{ key: 'valorFinal', dir: 'desc' }}
+            {...porVendedor}
           />
         )}
       </Visual>
@@ -151,6 +156,7 @@ export default function Premiacoes() {
               valorFaixa: data?.totalAtivos || 0,
             }}
             ordemInicial={{ key: 'valorFaixa', dir: 'desc' }}
+            {...porVendedor}
           />
         )}
       </Visual>

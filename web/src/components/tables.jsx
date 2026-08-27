@@ -6,8 +6,17 @@ import { Icone } from './Icone';
 /**
  * Tabela no estilo do Power BI (tableEx): cabeçalho branco com linha dourada,
  * barras de dados opcionais, sparklines e linha de total fixa no rodapé.
+ *
+ * `onSelect` recebe a LINHA inteira, não um valor: quem chama decide qual campo
+ * dela vira filtro (a tabela de vendedores filtra por vendedor, a de contagem por
+ * cidade filtra por cidade), e a tabela não precisa saber qual é a dimensão.
+ * `selecionada(linha)` diz quais estão acesas — a tabela não tem como adivinhar,
+ * porque o nome do campo no filtro nem sempre é o nome da coluna.
  */
-export function Tabela({ colunas, dados, totais = null, ordemInicial, alturaMax }) {
+export function Tabela({
+  colunas, dados, totais = null, ordemInicial, alturaMax,
+  onSelect = null, selecionada = null,
+}) {
   const [ordem, setOrdem] = useState(ordemInicial || { key: colunas[1]?.key, dir: 'desc' });
 
   const maximos = useMemo(() => {
@@ -59,8 +68,17 @@ export function Tabela({ colunas, dados, totais = null, ordemInicial, alturaMax 
           </tr>
         </thead>
         <tbody>
-          {linhas.map((d, i) => (
-            <tr key={d.__key || d.vendedor || d.cliente || i}>
+          {linhas.map((d, i) => {
+            const sel = selecionada ? selecionada(d) : false;
+            return (
+            <tr
+              key={d.__key || d.vendedor || d.cliente || i}
+              className={`${onSelect ? 'clicavel' : ''}${sel ? ' sel' : ''}`.trim() || undefined}
+              onClick={onSelect ? () => onSelect(d) : undefined}
+              title={onSelect
+                ? (sel ? 'Clique para remover este filtro da tela' : 'Clique para filtrar a tela por esta linha')
+                : undefined}
+            >
               {colunas.map((c) => {
                 if (c.tipo === 'spark') {
                   return (
@@ -100,7 +118,8 @@ export function Tabela({ colunas, dados, totais = null, ordemInicial, alturaMax 
                 );
               })}
             </tr>
-          ))}
+            );
+          })}
           {!linhas.length && (
             <tr><td colSpan={colunas.length} style={{ textAlign: 'center', padding: 22, color: '#605E5C' }}>Sem dados</td></tr>
           )}
@@ -121,8 +140,17 @@ export function Tabela({ colunas, dados, totais = null, ordemInicial, alturaMax 
   );
 }
 
-/** Matriz vendedor x dia com mapa de calor (branco -> dourado), como no PBI. */
-export function Matriz({ colunas, linhas, totalPorDia, total, rotuloColuna = labelDia }) {
+/**
+ * Matriz vendedor x dia com mapa de calor (branco -> dourado), como no PBI.
+ *
+ * `onSelect` fica no NOME do vendedor, não na célula do dia: a célula é o cruzamento
+ * de duas dimensões e o clique nela filtraria também um dia, que não existe como
+ * filtro nesta tela — dois filtros de um clique, um deles invisível.
+ */
+export function Matriz({
+  colunas, linhas, totalPorDia, total, rotuloColuna = labelDia,
+  onSelect = null, selecionados = [],
+}) {
   const max = useMemo(() => {
     let m = 1;
     for (const l of linhas) for (const c of colunas) m = Math.max(m, l.dias[c] || 0);
@@ -141,8 +169,14 @@ export function Matriz({ colunas, linhas, totalPorDia, total, rotuloColuna = lab
         </thead>
         <tbody>
           {linhas.map((l) => (
-            <tr key={l.vendedor}>
-              <td className="rowhead" title={l.vendedor}>{l.vendedor}</td>
+            <tr key={l.vendedor} className={selecionados.includes(l.vendedor) ? 'sel' : undefined}>
+              <td
+                className={`rowhead${onSelect ? ' clicavel' : ''}`}
+                title={onSelect ? `${l.vendedor} — clique para filtrar a tela por este vendedor` : l.vendedor}
+                onClick={onSelect ? () => onSelect(l.vendedor) : undefined}
+              >
+                {l.vendedor}
+              </td>
               {colunas.map((c) => {
                 const v = l.dias[c] || 0;
                 return (

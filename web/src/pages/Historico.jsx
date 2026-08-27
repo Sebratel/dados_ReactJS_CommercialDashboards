@@ -58,7 +58,7 @@ const OPCOES = [
 ];
 
 export function Historico({ dataset, titulo, rotuloPeriodo }) {
-  const { filtros, setFiltro } = useFilters();
+  const { filtros, setFiltro, alternar } = useFilters();
   const { data, error, isLoading } = useDados(`/historico/${dataset}`, filtros);
 
   const porMes = data?.granularidade === 'mes';
@@ -133,6 +133,8 @@ export function Historico({ dataset, titulo, rotuloPeriodo }) {
             totalPorDia={visao.totalPorDia}
             total={visao.total}
             rotuloColuna={rotulo}
+            onSelect={(v) => alternar('vendedor', v)}
+            selecionados={filtros.vendedor}
           />
         )}
       </Visual>

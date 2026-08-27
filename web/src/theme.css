@@ -26,7 +26,12 @@
   --h-nav: 36px;
   --h-filtros: 50px;
   --gap: 10px;
-  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + 34px);
+  /* A faixa de chips do cross-filter só existe quando há filtro clicado. Ela
+     entra na conta do cromo por uma variável própria, e não somada ao
+     --h-filtros, porque este último é ajustado por três media queries — somar ali
+     obrigaria a repetir a conta em cada uma delas. */
+  --h-chips: 0px;
+  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + 34px);
   --util: calc(100vh - var(--chrome));
 }
 
@@ -969,6 +974,81 @@ table.matrix tfoot td {
   :root { --h-filtros: 46px; }
   .kpi { min-height: 54px; }
 }
+
+/* ------------------------------------------------- chips do cross-filter */
+/* O que está filtrando agora, um chip por valor, em LINHA PRÓPRIA dentro da barra.
+   `flex: 0 0 100%` força a quebra sempre: se os chips coubessem na primeira linha
+   em algumas telas e não em outras, a altura da barra passaria a depender do texto
+   das cidades — e é dela que sai --util, a conta que faz a tela caber. */
+:root:has(.chips) { --h-chips: 33px; }
+
+.chips {
+  flex: 0 0 100%;
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0; height: 26px;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
+  /* Esmaece a borda direita: com muitos valores marcados a linha rola, e sem
+     barra de rolagem (ela comeria um terço dos 26px) nada diria que há mais.
+     A faixa cai sobre os últimos 22px da caixa: quando tudo cabe, é espaço vazio
+     e nada aparece esmaecido. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
+.chips::-webkit-scrollbar { display: none; }
+
+.chips-rotulo {
+  flex: none;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.9px; text-transform: uppercase;
+  color: var(--pbi-muted);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  height: 22px; max-width: 250px; padding: 0 8px;
+  border: 1px solid var(--pbi-primary); border-radius: 999px;
+  background: #FCF3F4; cursor: pointer;
+  font-family: var(--font); font-size: 11.5px; color: var(--pbi-primary);
+  white-space: nowrap;
+}
+.chip:hover { background: var(--pbi-primary); color: #fff; }
+.chip .chip-campo { font-weight: 700; opacity: 0.72; }
+.chip .chip-valor { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chip svg { flex: none; opacity: 0.85; }
+/* o "+N" é contagem, não botão: nada acontece ao clicar, então não se comporta
+   como os outros chips */
+.chip-resto { cursor: default; border-style: dashed; background: #fff; }
+.chip-resto:hover { background: #fff; color: var(--pbi-primary); }
+
+/* ---------------------------------------- cross-filter em tabela e legenda */
+/* Linha de tabela que filtra a tela. O realce é de SELEÇÃO (fundo dourado claro
+   e uma barra na primeira célula), não de esmaecimento das outras: numa tabela
+   ordenável, apagar as linhas não escolhidas esconde justamente a comparação que
+   levou a pessoa a clicar. */
+table.pbi tbody tr.clicavel { cursor: pointer; }
+table.pbi tbody tr.clicavel:hover td { background: #FCF3F4; }
+table.pbi tbody tr.sel td { background: #FBF3D9; }
+table.pbi tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--pbi-primary); }
+table.pbi tbody tr.sel:hover td { background: #F7EAC4; }
+
+table.matrix td.rowhead.clicavel { cursor: pointer; }
+table.matrix tr.sel td.rowhead { background: #FBF3D9; box-shadow: inset 3px 0 0 var(--pbi-primary); }
+table.matrix td.rowhead.clicavel:hover { background: #FCF3F4; }
+
+/* Item de legenda clicável — no Power BI a legenda também filtra. */
+.legend button {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid transparent; border-radius: 999px;
+  background: none; padding: 1px 8px; cursor: pointer;
+  font-family: var(--font); font-size: 11.5px; color: var(--pbi-ink);
+}
+.legend button:hover { background: #FCF3F4; color: var(--pbi-primary); }
+.legend button.on {
+  background: #FCF3F4; border-color: var(--pbi-primary);
+  color: var(--pbi-primary); font-weight: 700;
+}
+/* série que continua no gráfico, mas fora da seleção: mesma opacidade das barras */
+.legend button.off { opacity: 0.42; }
 
 /* ============================================================== LOGIN ==== */
 .login {

@@ -77,6 +77,19 @@ export default function VendasCanceladas() {
     { key: 'tecnologia', titulo: 'TECNOLOGIA', align: 'left' },
   ];
 
+  /**
+   * Cross-filter das contagens: todas têm a coluna `key` como dimensão, então o
+   * clique na linha só precisa saber em QUAL campo do filtro aquele valor entra.
+   *
+   * Duas das seis ficam de fora — VALOR DO PLANO e TIPO DE ATENDIMENTO não existem
+   * como filtro no modelo comercial, e uma linha clicável que não filtra nada é pior
+   * do que uma linha que não convida ao clique.
+   */
+  const cruzar = (campo) => ({
+    onSelect: (l) => alternar(campo, l.key),
+    selecionada: (l) => filtros[campo].includes(l.key),
+  });
+
   /** As seis contagens do relatório têm todas a mesma forma: rótulo + quantidade. */
   const contagem = (titulo, cor = CORES.primary) => [
     { key: 'key', titulo, align: 'left' },
@@ -153,22 +166,22 @@ export default function VendasCanceladas() {
       {/* y=770: as seis contagens, lado a lado */}
       <div className="grid linha-seis">
         <Visual title="POR VENDEDOR" flush className="v-meia" ia="vendas-canceladas:vendedor">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('VENDEDOR')} dados={data?.porVendedor || []} />}
+          {vazio ? <Loading /> : <Tabela colunas={contagem('VENDEDOR')} dados={data?.porVendedor || []} {...cruzar('vendedor')} />}
         </Visual>
         <Visual title="POR EQUIPE" flush className="v-meia">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('EQUIPE')} dados={data?.porEquipe || []} />}
+          {vazio ? <Loading /> : <Tabela colunas={contagem('EQUIPE')} dados={data?.porEquipe || []} {...cruzar('equipe')} />}
         </Visual>
         <Visual title="POR SITUAÇÃO" flush className="v-meia">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('SITUAÇÃO')} dados={data?.porSituacao || []} />}
+          {vazio ? <Loading /> : <Tabela colunas={contagem('SITUAÇÃO')} dados={data?.porSituacao || []} {...cruzar('situacao')} />}
         </Visual>
         <Visual title="POR CIDADE" flush className="v-meia" ia="vendas-canceladas:cidade">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('CIDADE')} dados={data?.porCidade || []} />}
+          {vazio ? <Loading /> : <Tabela colunas={contagem('CIDADE')} dados={data?.porCidade || []} {...cruzar('cidade')} />}
         </Visual>
         <Visual title="POR VALOR" flush className="v-meia">
           {vazio ? <Loading /> : <Tabela colunas={colunasValor} dados={data?.porValor || []} />}
         </Visual>
         <Visual title="POR TECNOLOGIA" flush className="v-meia">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('TECNOLOGIA', CORES.goldSoft)} dados={data?.porTecnologia || []} />}
+          {vazio ? <Loading /> : <Tabela colunas={contagem('TECNOLOGIA', CORES.goldSoft)} dados={data?.porTecnologia || []} {...cruzar('tecnologia')} />}
         </Visual>
       </div>
 

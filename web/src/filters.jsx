@@ -8,6 +8,26 @@ const Ctx = createContext(null);
 export const LISTAS = ['vendedor', 'equipe', 'tecnologia', 'situacao', 'cidade', 'canal'];
 
 /**
+ * Nome de cada campo na interface. Vive aqui, e não dentro da barra de filtros,
+ * porque agora há dois lugares mostrando o mesmo campo: o botão do seletor e o
+ * chip de "filtrando por". Nomes diferentes nos dois faria o chip parecer um
+ * filtro que a pessoa não criou — o pior tipo de filtro invisível.
+ *
+ * Os rótulos de `situacao` e `canal` são os do relatório de origem, não os do
+ * banco: lá a coluna de situação do vendedor aparece como "Canal" e o canal do
+ * Voalle como "Canal Voalle". Quem usa o relatório procura por esses nomes.
+ */
+export const ROTULOS = {
+  vendedor: 'Vendedor',
+  tecnologia: 'Tecnologia',
+  equipe: 'Equipe',
+  situacao: 'Canal',
+  cidade: 'Cidade',
+  canal: 'Canal Voalle',
+  cliente: 'Cliente',
+};
+
+/**
  * Seletores da tela de condomínios. Ficam no MESMO provider porque o mecanismo é
  * o mesmo (filtro na URL, compartilhável por link), mas em campos próprios: a
  * cidade daqui é `cidadeCond` porque a lista de valores é outra, e herdar a
@@ -185,16 +205,30 @@ export function FiltersProvider({ children }) {
     }, { replace: true });
   }, [setParams]);
 
-  /** cross-filter: clicar numa barra adiciona/remove o valor do filtro */
+  /**
+   * cross-filter: clicar numa barra, numa linha de tabela ou na legenda
+   * adiciona/remove o valor do filtro.
+   *
+   * Ao contrário de `setFiltro`, este EMPILHA no histórico (sem `replace`). O
+   * motivo é o Power BI: lá o cross-filter é uma exploração — a pessoa clica em
+   * cinco cidades seguidas e espera voltar. Com `replace`, o botão voltar saía do
+   * dashboard em vez de desfazer o clique, e não havia nenhum outro caminho de
+   * volta além de acertar qual barra desmarcar.
+   *
+   * Os seletores da barra continuam com `replace`, de propósito: ali o valor muda
+   * a cada caixa marcada e a cada tecla digitada na busca, e empilhar isso encheria
+   * o histórico de passos que ninguém quer desfazer um por um.
+   */
   const alternar = useCallback((campo, valor) => {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       const atual = (next.get(campo) || '').split(',').filter(Boolean);
-      const novo = atual.includes(valor) ? atual.filter((v) => v !== valor) : [...atual, valor];
+      const v = String(valor);
+      const novo = atual.includes(v) ? atual.filter((x) => x !== v) : [...atual, v];
       if (novo.length) next.set(campo, novo.join(','));
       else next.delete(campo);
       return next;
-    }, { replace: true });
+    });
   }, [setParams]);
 
   /**

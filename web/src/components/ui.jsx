@@ -93,15 +93,44 @@ export function Erro({ erro }) {
   );
 }
 
-export function Legenda({ itens }) {
+/**
+ * Marcadores de série.
+ *
+ * Com `onSelect`, cada item vira botão e filtra a tela: no Power BI a legenda
+ * também é cross-filter, e quem vem de lá clica nela antes de clicar na barra.
+ * `selecionados` acende o que está filtrando e esmaece o resto no mesmo 0.42 das
+ * barras — os dois contam a mesma história com o mesmo tom.
+ *
+ * `valor` só é necessário quando o rótulo mostrado difere do valor do filtro; sem
+ * ele o próprio rótulo é o valor. Um item com `semFiltro` continua sendo texto,
+ * para legendas mistas onde só parte das séries é uma dimensão filtrável.
+ */
+export function Legenda({ itens, onSelect = null, selecionados = [] }) {
+  const temSelecao = selecionados.length > 0;
   return (
     <div className="legend">
-      {itens.map((i) => (
-        <span key={i.label}>
+      {itens.map((i) => {
+        const marcador = (
           <i style={{ background: i.cor, borderRadius: i.linha ? 8 : 2, height: i.linha ? 3 : 11 }} />
-          {i.label}
-        </span>
-      ))}
+        );
+        if (!onSelect || i.semFiltro) {
+          return <span key={i.label}>{marcador}{i.label}</span>;
+        }
+        const chave = i.valor ?? i.label;
+        const aceso = selecionados.includes(chave);
+        return (
+          <button
+            key={i.label}
+            type="button"
+            className={temSelecao ? (aceso ? 'on' : 'off') : ''}
+            onClick={() => onSelect(chave)}
+            title={aceso ? `Remover o filtro ${chave}` : `Filtrar a tela por ${chave}`}
+          >
+            {marcador}
+            {i.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

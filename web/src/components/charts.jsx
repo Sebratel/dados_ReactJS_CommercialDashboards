@@ -299,13 +299,20 @@ export function BarrasHorizontais({
   );
 }
 
-/** Colunas empilhadas por tecnologia + rótulo de total (gráfico "por dia"). */
-export function ColunasPorTecnologia({ data, fmt = int }) {
+/**
+ * Colunas empilhadas por tecnologia + rótulo de total (gráfico "por dia").
+ *
+ * `onSelect` recebe o nome da tecnologia clicada — os três nomes aqui são os mesmos
+ * valores do campo `tecnologia` no modelo (`FIBRA`, `RÁDIO`, `TELEFONIA`), então o
+ * clique no segmento vai direto para o filtro sem tradução no meio.
+ */
+export function ColunasPorTecnologia({ data, fmt = int, onSelect = null, selecionados = [] }) {
   const series = [
     { key: 'FIBRA', cor: CORES.goldSoft },
     { key: 'RÁDIO', cor: CORES.ink },
     { key: 'TELEFONIA', cor: CORES.orangeSoft },
   ];
+  const temSelecao = selecionados.length > 0;
   return (
     <AutoSizer>
       {({ w, h }) => (
@@ -321,11 +328,14 @@ export function ColunasPorTecnologia({ data, fmt = int }) {
             name={s.key}
             stackId="t"
             fill={s.cor}
+            fillOpacity={temSelecao && !selecionados.includes(s.key) ? 0.32 : 1}
             maxBarSize={38}
             isAnimationActive={false}
             radius={i === series.length - 1 ? [4, 4, 0, 0] : 0}
             stroke="#fff"
             strokeWidth={1}
+            onClick={onSelect ? () => onSelect(s.key) : undefined}
+            cursor={onSelect ? 'pointer' : undefined}
           >
             {i === series.length - 1 && (
               <LabelList dataKey="total" content={(p) => <ChipLabel {...p} fmt={fmt} posicao="acima" fontSize={10.5} />} />

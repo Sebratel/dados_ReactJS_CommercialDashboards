@@ -1036,13 +1036,70 @@ hoje.
    idêntico, já que o eixo é oculto). Só a página de primeiro pagamento mantém escalas
    separadas (quantidade × R$), com rótulos diretos em ambas as séries.
 5. **Filtro de cliente** é uma busca por texto, não uma lista com 120 mil nomes.
-   O *cross-filter* do Power BI está nos gráficos de barras: clicar em uma cidade
-   (ou canal) filtra a página inteira; clicar de novo remove.
+   O *cross-filter* do Power BI existe e vai além das barras — detalhe em
+   *Cross-filter: onde clicar* logo abaixo.
 6. **Períodos longos** na página Histórico agrupam a matriz por mês (acima de ~2 meses),
    evitando uma tabela com centenas de colunas.
 7. A paleta é a do relatório (`#880F17`, `#D9B300`, `#E66C37`). O dourado tem contraste
    baixo sobre branco — por isso todas as barras trazem rótulo de valor legível, além da
    tabela equivalente ao lado.
+
+---
+
+### Cross-filter: onde clicar, e o que ele ainda não faz
+
+No Power BI, clicar num visual recorta a página. Aqui também, e o mecanismo é o mesmo de
+sempre: o clique escreve o valor no **filtro da URL** (`?cidade=SALVADOR`), a página refaz
+a única chamada que ela tem, e o link continua compartilhável. Clicar de novo remove.
+
+**O que responde ao clique** (só campos que existem no filtro do modelo comercial —
+vendedor, equipe, tecnologia, situação, cidade e canal):
+
+| Onde | Filtra |
+|---|---|
+| Barra horizontal (cidade, canal) | o valor da barra |
+| Linha da tabela por vendedor (Vendas, Ativações, Rampagem, Premiações) | o vendedor |
+| Nome do vendedor na matriz de Histórico | o vendedor |
+| Segmento da coluna empilhada por tecnologia | a tecnologia |
+| Item da legenda `FIBRA / RÁDIO / TELEFONIA` | a tecnologia |
+| Cinco das seis contagens de Vendas Canceladas | vendedor, equipe, situação, cidade, tecnologia |
+
+**O que não responde, de propósito:** `POR VALOR` e `POR TIPO DE ATENDIMENTO` em Vendas
+Canceladas, motivo do cancelamento, plano e as colunas de mês dos gráficos de linha. Nenhum
+desses existe como campo de filtro no modelo — e linha que convida ao clique sem filtrar
+nada é pior do que linha que não convida. Cada um deles custa um campo novo em quatro
+lugares (`filters.jsx`, `buildQuery`, `parseFilters` e `matchDims`), então entram por
+demanda, não por completude.
+
+**Três decisões que vieram com isso:**
+
+1. **O clique empilha no histórico** (`alternar` não usa `replace`), então o botão voltar
+   desfaz. Os seletores da barra continuam com `replace`: ali o valor muda a cada caixa
+   marcada e a cada tecla da busca, e empilhar isso encheria o histórico de passos que
+   ninguém quer desfazer um a um.
+2. **Uma faixa de chips diz o que está valendo.** Ela existe porque o cross-filter preenche
+   campos que não têm botão na barra — `cidade` não está entre os seis seletores da tela de
+   Vendas. O contador dizia "limpar 1 filtro" e nada na tela dizia qual: filtro que soma mas
+   não se mostra é o caminho mais curto para alguém apresentar um número recortado achando
+   que é o total. Cada chip remove o **seu** valor, não o campo inteiro.
+3. **A faixa entra na conta da altura.** `--h-chips` (33 px) soma no `--chrome`, e por isso
+   os cards encolhem quando ela aparece — medido sem rolagem em 1440×900 e 1920×1080. Em
+   720p os pisos do `clamp` ganham e a tela rola ~29 px, que é o comportamento desenhado:
+   abaixo do piso, rolar é melhor que comprimir.
+
+#### O que falta para ser igual ao Power BI
+
+O visual clicado **colapsa** em vez de destacar. Clicar em SALVADOR no gráfico de cidades
+deixa uma barra só, porque `porCidade` é calculado sobre a lista já filtrada
+(`paineis.js`). No Power BI o padrão é *cross-highlight*: o visual clicado mantém todas as
+categorias e destaca a fatia — e é para isso que o `fillOpacity` de esmaecimento das barras
+existe, hoje sem efeito nas telas em que o próprio campo é o filtro.
+
+Corrigir significa calcular cada visual categórico **excluindo o próprio campo** do filtro,
+o que custa uma varredura extra por dimensão (~17 ms cada, medido com 250 mil fatos
+sintéticos) ou uma varredura só com contadores paralelos. Fica para a etapa seguinte, junto
+com o cache de resultado no servidor por `(version, rota, querystring)`, que colapsaria
+cliques repetidos e o refetch de 60 s no mesmo recorte.
 
 ---
 
@@ -1406,3 +1463,5 @@ carrega o período (`vendas_2026-01-01_a_2026-08-15.csv`).
   Power BI trazia com emoji (`Resumo Diretoria`, `Resumo dos 3 principais indicadores`).
 * **Um estilo de card só** — borda 1 px, raio 8 px, cabeçalho vinho de 32 px.
 * **Altura derivada da janela** (`--util`), nunca fixa em pixels.
+* **Todo filtro ativo aparece**, mesmo o que veio de clique em gráfico: a faixa de chips
+  abaixo da barra mostra um chip por valor, e o chip remove só aquele valor.

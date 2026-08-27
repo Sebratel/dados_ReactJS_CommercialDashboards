@@ -92,6 +92,8 @@ export default function Rampagem() {
               colunas={colunasTabela}
               dados={data?.tabela || []}
               ordemInicial={{ key: 'vendas', dir: 'desc' }}
+              onSelect={(l) => alternar('vendedor', l.vendedor)}
+              selecionada={(l) => filtros.vendedor.includes(l.vendedor)}
             />
           )}
         </Visual>
@@ -113,6 +115,8 @@ export default function Rampagem() {
               colunas={colunasNovatos}
               dados={data?.novatos || []}
               ordemInicial={{ key: 'admissaoReal', dir: 'desc' }}
+              onSelect={(l) => alternar('vendedor', l.vendedor)}
+              selecionada={(l) => filtros.vendedor.includes(l.vendedor)}
             />
           )}
         </Visual>

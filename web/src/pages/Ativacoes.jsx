@@ -35,13 +35,21 @@ export default function Ativacoes() {
         >
           {isLoading && !data ? <Loading /> : (
             <>
-              <Legenda itens={[
-                { label: 'FIBRA', cor: CORES.goldSoft },
-                { label: 'RÁDIO', cor: CORES.ink },
-                { label: 'TELEFONIA', cor: CORES.orangeSoft },
-              ]} />
+              <Legenda
+                itens={[
+                  { label: 'FIBRA', cor: CORES.goldSoft },
+                  { label: 'RÁDIO', cor: CORES.ink },
+                  { label: 'TELEFONIA', cor: CORES.orangeSoft },
+                ]}
+                onSelect={(t) => alternar('tecnologia', t)}
+                selecionados={filtros.tecnologia}
+              />
               <div style={{ flex: 1, minHeight: 0 }}>
-                <ColunasPorTecnologia data={serie} />
+                <ColunasPorTecnologia
+                  data={serie}
+                  onSelect={(t) => alternar('tecnologia', t)}
+                  selecionados={filtros.tecnologia}
+                />
               </div>
             </>
           )}
@@ -103,6 +111,8 @@ export default function Ativacoes() {
                 media: data?.kpis?.mediaAtivos || 0,
               }}
               ordemInicial={{ key: 'total', dir: 'desc' }}
+              onSelect={(l) => alternar('vendedor', l.vendedor)}
+              selecionada={(l) => filtros.vendedor.includes(l.vendedor)}
             />
           )}
         </Visual>
