@@ -333,19 +333,19 @@ export function build() {
   const alocByKey = new Map();
   for (const a of aloc) {
     if (!a.data_ativacao) continue;
-    alocByKey.set(`${norm(a.contrato)} ${norm(a.cliente)}`, toIso(a.data_ativacao));
+    alocByKey.set(`${norm(a.contrato)}\x00${norm(a.cliente)}`, toIso(a.data_ativacao));
   }
 
   const phoneByKey = new Map();
   for (const p of phone) {
     if (!p.ativacao) continue;
-    phoneByKey.set(`${norm(p.contrato)} ${p.protocolo ?? ''}`, toIso(p.ativacao));
+    phoneByKey.set(`${norm(p.contrato)}\x00${p.protocolo ?? ''}`, toIso(p.ativacao));
   }
 
   const pagtoByKey = new Map();
   for (const p of pagto) {
     // join do Power Query: [DATA/HORA CRIAÇÃO CONTRATO, CLIENTES] x [DATA CRIAÇÃO, NOME]
-    pagtoByKey.set(`${p.created_key} ${norm(p.nome)}`, p);
+    pagtoByKey.set(`${p.created_key}\x00${norm(p.nome)}`, p);
   }
 
   // ---- tabela de fatos ("general") --------------------------------------
@@ -354,7 +354,7 @@ export function build() {
   for (const r of base) {
     const cliente = norm(r.clientes);
     const contrato = norm(r.contrato);
-    const dedupe = `${cliente} ${contrato}`;
+    const dedupe = `${cliente}\x00${contrato}`;
     if (seen.has(dedupe)) continue;
     seen.add(dedupe);
 
@@ -362,11 +362,11 @@ export function build() {
     const team = teamsByName.get(vendedor);
     const seller = sellersByName.get(vendedor);
 
-    const dtAtivFibra = alocByKey.get(`${contrato} ${cliente}`) || null;
-    const dtAtivTel = phoneByKey.get(`${contrato} ${r.protocolo ?? ''}`) || null;
+    const dtAtivFibra = alocByKey.get(`${contrato}\x00${cliente}`) || null;
+    const dtAtivTel = phoneByKey.get(`${contrato}\x00${r.protocolo ?? ''}`) || null;
     const tecnologia = norm(r.tecnologia);
     const dtAtiv = tecnologia === 'TELEFONIA' ? dtAtivTel : dtAtivFibra;
-    const pg = pagtoByKey.get(`${r.created_key} ${cliente}`);
+    const pg = pagtoByKey.get(`${r.created_key}\x00${cliente}`);
     const dtVenda = toIso(r.data_criacao_contrato);
 
     facts.push({
