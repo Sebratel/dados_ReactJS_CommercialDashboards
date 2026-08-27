@@ -8,9 +8,21 @@
  */
 import {
   DATE_FIELD, groupCount, matriz, mediaPonderada, porVendedor, premiacoes, rampagem,
-  rows, serie, serieDiaria, serieDiariaPorTecnologia, seriePorTecnologia, soma,
+  rows, rowsExceto, semCampo, serie, serieDiaria, serieDiariaPorTecnologia,
+  seriePorTecnologia, soma,
 } from './measures.js';
 import { monthKey, today } from './dates.js';
+
+/**
+ * Marca os rótulos-sentinela — "(sem canal)", "(sem equipe)" — como não clicáveis.
+ *
+ * Eles não são valor de banco: `matchDims` compara com o campo cru, então filtrar por
+ * "(sem canal)" devolvia tela vazia. A barra continua desenhada e contando; só não
+ * convida ao clique.
+ */
+const semSentinela = (linhas) => linhas.map((l) => (
+  String(l.key).startsWith('(') ? { ...l, semFiltro: true } : l
+));
 
 export function painelDiretoria(flt, g) {
   const vendas = rows('vendas', flt);
@@ -61,7 +73,20 @@ export function painelVendas(flt, g) {
 
   // "TOTAL DE VENDAS / DIA (MÊS ATUAL)" — último mês do período filtrado
   const mesAtual = monthKey(flt.ate || today());
-  const doMes = vendas.filter((f) => monthKey(f.dtVenda) === mesAtual);
+
+  /**
+   * Cross-highlight: cada visual CLICÁVEL ignora o seu próprio campo, senão ele
+   * colapsa na categoria que a pessoa acabou de clicar — clicar em SALVADOR deixava
+   * uma barra só no gráfico de cidades, sem nada para comparar, que é o oposto do
+   * motivo do clique.
+   *
+   * Os KPIs e a série do topo continuam com o filtro CHEIO, de propósito: eles
+   * respondem "quanto deu o que você escolheu", que é outra pergunta.
+   */
+  const paraCidade = rowsExceto('vendas', flt, 'cidade', vendas);
+  const paraVendedor = rowsExceto('vendas', flt, 'vendedor', vendas);
+  const paraTecnologia = rowsExceto('vendas', flt, 'tecnologia', vendas);
+  const doMes = paraTecnologia.filter((f) => monthKey(f.dtVenda) === mesAtual);
 
   return {
     kpis: {
@@ -72,16 +97,27 @@ export function painelVendas(flt, g) {
     },
     granularidade: g,
     serie: [...meses.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)),
-    porCidade: groupCount(vendas, (f) => f.cidade, { limit: 15 }),
-    porVendedor: porVendedor(vendas, 'dtVenda'),
+    porCidade: groupCount(paraCidade, (f) => f.cidade, { limit: 15, garantir: flt.cidade }),
+    porVendedor: porVendedor(paraVendedor, 'dtVenda'),
+    // Rodapé da tabela por vendedor. Com auto-exclusão ele não é mais o KPI da tela:
+    // a tabela mostra todos os vendedores e o cartão mostra o selecionado. Somar as
+    // linhas visíveis e chamar isso de "total" é a única leitura que fecha.
+    porVendedorTotais: { total: paraVendedor.length, media: mediaPonderada(paraVendedor, 'dtVenda') },
     mesAtual,
-    porDia: serieDiariaPorTecnologia(doMes, 'dtVenda'),
+    porDia: serieDiariaPorTecnologia(doMes, 'dtVenda', flt.tecnologia),
   };
 }
 
 export function painelAtivacoes(flt, g) {
   const ativos = rows('ativos', flt);
-  const porTec = seriePorTecnologia(ativos, 'dtAtiv', g);
+
+  // auto-exclusão dos visuais clicáveis — ver o comentário em `painelVendas`
+  const paraTecnologia = rowsExceto('ativos', flt, 'tecnologia', ativos);
+  const paraCanal = rowsExceto('ativos', flt, 'canal', ativos);
+  const paraCidade = rowsExceto('ativos', flt, 'cidade', ativos);
+  const paraVendedor = rowsExceto('ativos', flt, 'vendedor', ativos);
+
+  const porTec = seriePorTecnologia(paraTecnologia, 'dtAtiv', g, flt.tecnologia);
   const totalTelefonia = ativos.reduce((a, f) => a + (f.tecnologia === 'TELEFONIA' ? 1 : 0), 0);
 
   return {
@@ -98,9 +134,11 @@ export function painelAtivacoes(flt, g) {
     // `ativacoes` é o mesmo que `total`, mantido porque a série já era consumida
     // com esse nome pelo gráfico e pelas exportações
     serie: porTec.map((m) => ({ ...m, ativacoes: m.total })),
-    porCanal: groupCount(ativos, (f) => f.canal || '(sem canal)', { limit: 12 }),
-    porCidade: groupCount(ativos, (f) => f.cidade, { limit: 15 }),
-    porVendedor: porVendedor(ativos, 'dtAtiv'),
+    porCanal: semSentinela(groupCount(paraCanal, (f) => f.canal || '(sem canal)', { limit: 12, garantir: flt.canal })),
+    porCidade: groupCount(paraCidade, (f) => f.cidade, { limit: 15, garantir: flt.cidade }),
+    porVendedor: porVendedor(paraVendedor, 'dtAtiv'),
+    porVendedorTotais: { total: paraVendedor.length, media: mediaPonderada(paraVendedor, 'dtAtiv') },
+    // não é clicável (o eixo é o dia), então segue com o filtro cheio
     porDia: serieDiaria(ativos, 'dtAtiv'),
   };
 }
@@ -273,8 +311,20 @@ function dobrarCauda(lista, manter) {
  *    data cada um usa.
  */
 export function painelCanceladas(flt) {
-  const canceladas = rows('vendas', flt).filter(
-    (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao,
+  // os dois filtros de página do relatório de origem, mais a marca de tipo padrão
+  const recorte = (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao;
+  const canceladas = rows('vendas', flt).filter(recorte);
+
+  /**
+   * Base de uma contagem, ignorando o campo que ela própria mostra (cross-highlight).
+   * O recorte de página é reaplicado por cima: sem ele a contagem por equipe passaria
+   * a somar contrato ativo, e a tela toda deixaria de ser "vendas canceladas".
+   *
+   * Devolve a lista já calculada quando o campo não está filtrado, então uma tela sem
+   * clique nenhum custa uma varredura só, como antes.
+   */
+  const semSeuCampo = (campo) => (
+    flt[campo] ? rows('vendas', semCampo(flt, campo)).filter(recorte) : canceladas
   );
 
   const classificarMotivo = classificadorDeMotivo(canceladas);
@@ -336,11 +386,11 @@ export function painelCanceladas(flt) {
     serie: agrupar('dtVenda'),
     serieCadastro: agrupar('dtCadastroCliente'),
     porMotivo: dobrarCauda(groupCount(canceladas, classificarMotivo), 8),
-    porCidade: groupCount(canceladas, (f) => f.cidade, { limit: 20 }),
-    porTecnologia: groupCount(canceladas, (f) => f.tecnologia),
-    porEquipe: groupCount(canceladas, (f) => f.equipe || '(sem equipe)', { limit: 20 }),
-    porSituacao: groupCount(canceladas, (f) => f.situacao || '(sem situação)'),
-    porVendedor: groupCount(canceladas, (f) => f.vendedor, { limit: 30 }),
+    porCidade: groupCount(semSeuCampo('cidade'), (f) => f.cidade, { limit: 20, garantir: flt.cidade }),
+    porTecnologia: groupCount(semSeuCampo('tecnologia'), (f) => f.tecnologia, { garantir: flt.tecnologia }),
+    porEquipe: semSentinela(groupCount(semSeuCampo('equipe'), (f) => f.equipe || '(sem equipe)', { limit: 20, garantir: flt.equipe })),
+    porSituacao: semSentinela(groupCount(semSeuCampo('situacao'), (f) => f.situacao || '(sem situação)', { garantir: flt.situacao })),
+    porVendedor: groupCount(semSeuCampo('vendedor'), (f) => f.vendedor, { limit: 30, garantir: flt.vendedor }),
     porTipo: groupCount(canceladas, (f) => f.tipoSolicitacao || '(sem tipo)'),
     porValor: [...porValor.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 25),
     detalhe,

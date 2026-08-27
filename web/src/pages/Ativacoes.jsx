@@ -5,7 +5,7 @@ import { Granularidade } from '../components/Granularidade';
 import { BotaoExportar, Erro, KpiStack, Legenda, Loading, Visual } from '../components/ui';
 import { BarrasHorizontais, ColunasPorTecnologia, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
-import { dec1, int, labelPeriodo } from '../format';
+import { dec1, int, labelPeriodo, labelTotalVendedores } from '../format';
 import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Ativacoes() {
@@ -106,9 +106,9 @@ export default function Ativacoes() {
               colunas={colunasVendedor}
               dados={data?.porVendedor || []}
               totais={{
-                __label: `Total (${(data?.porVendedor || []).length} vendedores)`,
-                total: data?.kpis?.totalAtivos || 0,
-                media: data?.kpis?.mediaAtivos || 0,
+                __label: labelTotalVendedores(data?.porVendedor, filtros.vendedor),
+                total: data?.porVendedorTotais?.total ?? data?.kpis?.totalAtivos ?? 0,
+                media: data?.porVendedorTotais?.media ?? data?.kpis?.mediaAtivos ?? 0,
               }}
               ordemInicial={{ key: 'total', dir: 'desc' }}
               onSelect={(l) => alternar('vendedor', l.vendedor)}

@@ -1036,8 +1036,8 @@ hoje.
    idêntico, já que o eixo é oculto). Só a página de primeiro pagamento mantém escalas
    separadas (quantidade × R$), com rótulos diretos em ambas as séries.
 5. **Filtro de cliente** é uma busca por texto, não uma lista com 120 mil nomes.
-   O *cross-filter* do Power BI existe e vai além das barras — detalhe em
-   *Cross-filter: onde clicar* logo abaixo.
+   O *cross-filter* do Power BI existe, vai além das barras e destaca em vez de
+   colapsar — detalhe em *Cross-filter: onde clicar* logo abaixo.
 6. **Períodos longos** na página Histórico agrupam a matriz por mês (acima de ~2 meses),
    evitando uma tabela com centenas de colunas.
 7. A paleta é a do relatório (`#880F17`, `#D9B300`, `#E66C37`). O dourado tem contraste
@@ -1087,19 +1087,56 @@ demanda, não por completude.
    720p os pisos do `clamp` ganham e a tela rola ~29 px, que é o comportamento desenhado:
    abaixo do piso, rolar é melhor que comprimir.
 
-#### O que falta para ser igual ao Power BI
+#### Destacar, não colapsar: a auto-exclusão
 
-O visual clicado **colapsa** em vez de destacar. Clicar em SALVADOR no gráfico de cidades
-deixa uma barra só, porque `porCidade` é calculado sobre a lista já filtrada
-(`paineis.js`). No Power BI o padrão é *cross-highlight*: o visual clicado mantém todas as
-categorias e destaca a fatia — e é para isso que o `fillOpacity` de esmaecimento das barras
-existe, hoje sem efeito nas telas em que o próprio campo é o filtro.
+O padrão do Power BI é *cross-highlight*, e o detalhe que faz diferença é este: o visual
+clicado **mantém todas as categorias** e destaca a escolhida. Sem isso, clicar em SALVADOR
+no gráfico de cidades deixava uma barra só na tela — some justamente a comparação que
+motivou o clique.
 
-Corrigir significa calcular cada visual categórico **excluindo o próprio campo** do filtro,
-o que custa uma varredura extra por dimensão (~17 ms cada, medido com 250 mil fatos
-sintéticos) ou uma varredura só com contadores paralelos. Fica para a etapa seguinte, junto
-com o cache de resultado no servidor por `(version, rota, querystring)`, que colapsaria
-cliques repetidos e o refetch de 60 s no mesmo recorte.
+A regra no servidor é uma linha: **o visual que mostra um campo é calculado sem o filtro
+daquele campo** (`rowsExceto` em `measures.js`). O gráfico de cidades continua recortado por
+vendedor, tecnologia e período; só não por cidade. Os cartões de KPI e as séries do topo
+seguem com o filtro CHEIO, de propósito — eles respondem "quanto deu o que você escolheu",
+que é outra pergunta.
+
+Vale em **Vendas, Ativações e Vendas Canceladas**, as três telas de comparação. Três
+consequências que precisaram de cuidado:
+
+1. **Valor clicado nunca desaparece.** `groupCount` recebe `garantir` e fixa na lista os
+   valores selecionados mesmo fora do topo N. Sem isso, clicar numa cidade de 18º lugar a
+   tirava de um gráfico de 15 barras: a tela ficava filtrada por algo invisível.
+2. **O rótulo da coluna empilhada acompanha a seleção.** Com FIBRA clicada as três faixas
+   continuam desenhadas (as outras esmaecidas), mas o número no topo é o de fibra —
+   `seriePorTecnologia` conta só as faixas destacadas. Sem isso o rótulo somava as três e
+   brigava com o cartão de KPI, que é filtrado: dois números da mesma coisa discordando na
+   mesma tela.
+3. **O rodapé da tabela por vendedor soma o que a tabela mostra**, e o rótulo diz quantos
+   estão no filtro (`Total (12 vendedores · 1 no filtro)`). A tabela lista todos e o cartão
+   mostra o selecionado; os dois números são certos, e sem o aviso a diferença se lê como
+   erro de conta.
+
+**Rótulos-sentinela e caudas não clicam.** `(sem canal)`, `(sem equipe)` e `Outros (N)` não
+são valor de banco — `matchDims` compara com o campo cru, então filtrar por eles devolvia
+tela vazia. O servidor marca `semFiltro`/`agrupado` e a barra fica desenhada, contando, mas
+com cursor de seta.
+
+**Onde o clique ISOLA, e por quê.** Em **Histórico** o visual é a tela inteira: com
+auto-exclusão o clique não faria nada além de acender a linha. Em **Premiações** a tabela é
+uma lista de quem recebe — mostrar quem está fora do filtro numa lista de pagamento é
+convite a erro. Em **Rampagem** a pergunta é o desempenho de um vendedor nos primeiros 90
+dias, e isolar é o que se quer. Nessas três, clicar recorta.
+
+**Custo medido** (só CPU, fatos sintéticos, `bench` fora do repositório): sem filtro, o
+caminho é idêntico ao de antes — `rowsExceto` devolve a lista que o painel já calculou
+quando o campo não está filtrado, então **tela sem clique não custa nada a mais**. Com 120
+mil fatos (a ordem de grandeza da base real): 21 ms sem filtro contra 5–15 ms com um a
+quatro cliques — a tela filtrada é mais BARATA, porque a varredura é a mesma e as
+agregações recebem menos linha. Com 250 mil fatos: 47 ms sem filtro, 12–24 ms no caso
+típico. A varredura extra só existe por dimensão CLICADA, não por visual da tela.
+
+Ainda de fora: o cache de resultado no servidor por `(version, rota, querystring)`, que
+colapsaria cliques repetidos e o refetch de 60 s no mesmo recorte.
 
 ---
 

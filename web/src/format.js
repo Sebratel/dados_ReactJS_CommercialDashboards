@@ -45,6 +45,20 @@ export function haQuanto(iso) {
   return `há ${Math.round(s / 3600)}h`;
 }
 
+/**
+ * Rótulo do rodapé das tabelas por vendedor.
+ *
+ * Com cross-highlight a tabela mostra TODOS os vendedores e o cartão de KPI mostra só
+ * o selecionado: dois números diferentes na mesma tela, os dois certos. O rodapé diz
+ * de qual lado ele está — sem isso a diferença se lê como erro de conta.
+ */
+export const labelTotalVendedores = (linhas = [], selecionados = []) => {
+  const n = linhas.length;
+  const quantos = `${n} vendedor${n === 1 ? '' : 'es'}`;
+  if (!selecionados.length) return `Total (${quantos})`;
+  return `Total (${quantos} · ${selecionados.length} no filtro)`;
+};
+
 export const hoje = () => new Date().toISOString().slice(0, 10);
 
 export function inicioDoMes(iso = hoje()) {

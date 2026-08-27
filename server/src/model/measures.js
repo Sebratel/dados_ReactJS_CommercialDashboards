@@ -55,6 +55,30 @@ function matchDims(f, flt) {
   return true;
 }
 
+/**
+ * Cópia do filtro sem UM campo.
+ *
+ * É a base do cross-highlight: o visual que MOSTRA um campo não pode ser calculado
+ * com o filtro daquele campo aplicado, senão ele colapsa na categoria clicada. O
+ * gráfico de cidades continua mostrando todas as cidades — recortadas por vendedor,
+ * por tecnologia e pelo período, só não por cidade.
+ */
+export const semCampo = (flt, campo) => (flt[campo] ? { ...flt, [campo]: null } : flt);
+
+/**
+ * Linhas de um dataset ignorando um campo do filtro.
+ *
+ * `jaFiltrada` é a lista com o filtro CHEIO, que o painel já calculou. Quando o campo
+ * não está filtrado as duas listas são idênticas, então devolvemos a que já existe: a
+ * varredura extra só acontece quando há clique naquela dimensão. É isso que segura o
+ * custo do cross-highlight em uma varredura por dimensão CLICADA, e não uma por visual
+ * da tela — sem filtro nenhum, a tela custa exatamente o que custava antes.
+ */
+export function rowsExceto(dataset, flt, campo, jaFiltrada) {
+  if (!flt[campo]) return jaFiltrada;
+  return rows(dataset, semCampo(flt, campo));
+}
+
 /** Linhas de um dataset (vendas/ativos/pagantes) já filtradas. */
 export function rows(dataset, flt) {
   const field = DATE_FIELD[dataset];
@@ -96,7 +120,9 @@ export function soma(list, field = 'valor') {
 }
 
 /** Agrupamento genérico por chave, devolvendo [{ key, valor, ... }] ordenado. */
-export function groupCount(list, keyFn, { limit = null, sortBy = 'valor', desc = true } = {}) {
+export function groupCount(list, keyFn, {
+  limit = null, sortBy = 'valor', desc = true, garantir = null,
+} = {}) {
   const map = new Map();
   for (const f of list) {
     const k = keyFn(f);
@@ -105,7 +131,24 @@ export function groupCount(list, keyFn, { limit = null, sortBy = 'valor', desc =
   }
   let out = [...map].map(([key, valor]) => ({ key, valor }));
   out.sort((a, b) => (desc ? b[sortBy] - a[sortBy] : a[sortBy] - b[sortBy]) || String(a.key).localeCompare(String(b.key), 'pt-BR'));
-  if (limit) out = out.slice(0, limit);
+  if (limit) {
+    const cabeca = out.slice(0, limit);
+    /**
+     * `garantir` fixa na lista os valores que estão CLICADOS, mesmo fora do topo N.
+     * Sem isso, clicar numa cidade que ocupa a 18ª posição a tirava de um gráfico de
+     * 15 barras: a tela ficava filtrada por algo que não aparecia em lugar nenhum, e
+     * a única pista era o chip. Valor clicado que existe na lista sempre aparece.
+     */
+    if (garantir && garantir.length) {
+      const dentro = new Set(cabeca.map((o) => String(o.key)));
+      for (const g of garantir) {
+        if (dentro.has(String(g))) continue;
+        const achado = out.find((o) => String(o.key) === String(g));
+        if (achado) cabeca.push(achado);
+      }
+    }
+    out = cabeca;
+  }
   return out;
 }
 
@@ -162,7 +205,7 @@ export function serieDiaria(list, field) {
 }
 
 /** Série diária empilhada por tecnologia (gráfico "TOTAL DE VENDAS / DIA"). */
-export function serieDiariaPorTecnologia(list, field) {
+export function serieDiariaPorTecnologia(list, field, destacar = null) {
   const map = new Map();
   for (const f of list) {
     const d = f[field];
@@ -170,7 +213,8 @@ export function serieDiariaPorTecnologia(list, field) {
     const cur = map.get(d) || { dia: d, FIBRA: 0, 'RÁDIO': 0, TELEFONIA: 0, total: 0 };
     const tec = f.tecnologia in cur ? f.tecnologia : 'FIBRA';
     cur[tec] += 1;
-    cur.total += 1;
+    // mesma regra do `seriePorTecnologia`: o rótulo do topo acompanha a seleção
+    if (!destacar || !destacar.length || destacar.includes(tec)) cur.total += 1;
     map.set(d, cur);
   }
   return [...map.values()].sort((a, b) => a.dia.localeCompare(b.dia));
@@ -184,7 +228,7 @@ export function serieDiariaPorTecnologia(list, field) {
  * Separando as faixas, o total continua completo e a parte de fibra/rádio fica
  * diretamente comparável ao relatório antigo, sem esconder nem inflar nada.
  */
-export function seriePorTecnologia(list, field, granularidade = 'mes') {
+export function seriePorTecnologia(list, field, granularidade = 'mes', destacar = null) {
   const map = new Map();
   for (const f of list) {
     const d = f[field];
@@ -195,7 +239,11 @@ export function seriePorTecnologia(list, field, granularidade = 'mes') {
     };
     const tec = f.tecnologia in cur ? f.tecnologia : 'FIBRA';
     cur[tec] += 1;
-    cur.total += 1;
+    // `total` é o rótulo em cima da coluna, e ele acompanha a SELEÇÃO: com FIBRA
+    // clicada as três faixas continuam desenhadas (as outras esmaecidas), mas o número
+    // no topo é o da fibra. Sem isso o rótulo brigava com o cartão de KPI, que é
+    // filtrado — dois números da mesma coisa discordando na mesma tela.
+    if (!destacar || !destacar.length || destacar.includes(tec)) cur.total += 1;
     cur.valor += Number(f.valor) || 0;
     map.set(periodo, cur);
   }

@@ -12,6 +12,10 @@ import { Icone } from './Icone';
  * cidade filtra por cidade), e a tabela não precisa saber qual é a dimensão.
  * `selecionada(linha)` diz quais estão acesas — a tabela não tem como adivinhar,
  * porque o nome do campo no filtro nem sempre é o nome da coluna.
+ *
+ * Linha marcada `semFiltro` ou `agrupado` pelo servidor não clica: "(sem equipe)" não
+ * é valor de banco e "Outros (N)" não é uma categoria — filtrar por elas esvaziaria a
+ * tela. Mesma regra das barras horizontais.
  */
 export function Tabela({
   colunas, dados, totais = null, ordemInicial, alturaMax,
@@ -70,12 +74,13 @@ export function Tabela({
         <tbody>
           {linhas.map((d, i) => {
             const sel = selecionada ? selecionada(d) : false;
+            const clicavel = onSelect && !d.semFiltro && !d.agrupado;
             return (
             <tr
               key={d.__key || d.vendedor || d.cliente || i}
-              className={`${onSelect ? 'clicavel' : ''}${sel ? ' sel' : ''}`.trim() || undefined}
-              onClick={onSelect ? () => onSelect(d) : undefined}
-              title={onSelect
+              className={`${clicavel ? 'clicavel' : ''}${sel ? ' sel' : ''}`.trim() || undefined}
+              onClick={clicavel ? () => onSelect(d) : undefined}
+              title={clicavel
                 ? (sel ? 'Clique para remover este filtro da tela' : 'Clique para filtrar a tela por esta linha')
                 : undefined}
             >

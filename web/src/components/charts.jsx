@@ -232,7 +232,12 @@ export function ComboChart({
 
 /**
  * Barras horizontais (clusteredBarChart) com gradiente por valor.
+ *
  * `onSelect` reproduz o cross-filter do Power BI: clicar na barra filtra a página.
+ * Duas linhas NÃO clicam: a que o servidor marcou `semFiltro` (rótulo-sentinela do
+ * tipo "(sem canal)", que não é valor de banco) e a `agrupado` (a cauda somada em
+ * "Outros (N)", que não é uma categoria). Filtrar por qualquer das duas devolvia tela
+ * vazia, e o cursor de mão prometia que devolveria algo.
  */
 export function BarrasHorizontais({
   data, keyLabel = 'key', keyValue = 'valor', nome = 'Total', fmt = int,
@@ -242,6 +247,7 @@ export function BarrasHorizontais({
   const min = Math.min(...valores, 0);
   const max = Math.max(...valores, 1);
   const temSelecao = selecionados.length > 0;
+  const clicavel = (d) => !d.semFiltro && !d.agrupado;
   // ocupa a altura disponível do card; só cresce (e rola) se as barras ficarem
   // abaixo do tamanho mínimo legível
   const alturaMinima = Math.max(data.length * 13 + 20, 120);
@@ -278,12 +284,15 @@ export function BarrasHorizontais({
           barSize={barra}
           radius={[0, 4, 4, 0]}
           isAnimationActive={false}
-          onClick={onSelect ? (d) => onSelect(d[keyLabel]) : undefined}
+          onClick={onSelect ? (d) => (clicavel(d) ? onSelect(d[keyLabel]) : null) : undefined}
           cursor={onSelect ? 'pointer' : undefined}
         >
           {data.map((d, i) => (
             <Cell
               key={i}
+              // o cursor do <Bar> vale para a série toda; o estilo em linha ganha dele
+              // e devolve a seta nas linhas que não filtram
+              style={onSelect && !clicavel(d) ? { cursor: 'default' } : undefined}
               // uma barra marcada como `agrupado` é a soma de uma cauda, não uma
               // categoria: sai da escala de cor para não ser lida como par das outras
               fill={d.agrupado ? '#C8C6C4' : escalaGradiente(Number(d[keyValue]) || 0, min, max)}
