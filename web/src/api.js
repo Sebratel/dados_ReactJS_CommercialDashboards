@@ -25,6 +25,7 @@ export function buildQuery(filtros = {}) {
   add('canal', filtros.canal);
   add('cliente', filtros.cliente);
   add('g', filtros.g);
+  add('hg', filtros.hg);
   // condomínios — nomes iguais aos da URL, então o link compartilhado e a
   // chamada de API falam a mesma língua
   add('condominio', filtros.condominio);

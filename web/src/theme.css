@@ -503,6 +503,16 @@ body {
   color: rgba(255, 255, 255, 0.82);
 }
 
+/* --- Matriz grande ---------------------------------------------------------
+   Tentei `content-visibility: auto` nas linhas para o navegador pular o que esta
+   fora da tela, que e a receita padrao de tabela longa. PIOROU: medido, a rolagem
+   horizontal foi de 113ms para 205-728ms, porque a cada rolagem ele reavalia quais
+   linhas estao visiveis e repinta do zero — com coluna fixa e 400 colunas, isso
+   custa mais do que simplesmente manter tudo pintado.
+
+   O que resolveu foi cortar VENDEDORES em vez de dias (ver `Historico.jsx`): o
+   pedido era ver os dias, e vendedor tem filtro proprio na barra. */
+
 /* --- Modo enquadrado (Relatorio Diario) ------------------------------------
    A tela existe para virar print e ser compartilhada, e ela tem 2,4 telas de altura.
    O modo enquadrado reduz o conteudo por transform:scale ate caber inteiro numa

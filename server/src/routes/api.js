@@ -263,8 +263,18 @@ api.get('/primeiro-pagamento', auth('primeiro-pagamento'), (req, res) => {
 api.get('/historico/:dataset', authHistorico, (req, res) => {
   const dataset = req.params.dataset === 'vendas' ? 'vendas' : 'ativos';
   const flt = parseFilters(req.query);
-  const g = granularidadeHistorico(req.query.por, flt);
-  res.json(withMeta(painelHistorico(dataset, flt, g)));
+  /**
+   * `hg` e não `por`: `por` já é usado pela tela de Desempenho ('vendedor'/'cidade'),
+   * e as duas telas compartilham a mesma função que monta a query. Reaproveitar o
+   * nome faria o valor de uma vazar na outra — inofensivo hoje, confuso amanhã.
+   */
+  const g = granularidadeHistorico(req.query.hg, flt);
+  const painel = painelHistorico(dataset, flt, g);
+  res.json(withMeta({
+    ...painel,
+    // o que a tela pediu, para ela saber se o automático foi respeitado
+    pedido: req.query.hg === 'dia' || req.query.hg === 'mes' ? req.query.hg : 'auto',
+  }));
 });
 
 // ---------------------------------------------------------------- RAMPAGEM

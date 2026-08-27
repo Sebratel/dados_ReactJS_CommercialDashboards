@@ -152,9 +152,21 @@ export function painelHistorico(dataset, flt, granularidade) {
   return { granularidade, ...matriz(list, DATE_FIELD[dataset], granularidade) };
 }
 
-/** Granularidade da matriz: acima de ~2 meses vira mensal, senão fica ilegível. */
-export function granularidadeHistorico(query, flt) {
-  if (query === 'dia' || query === 'mes') return query;
+/**
+ * Granularidade da matriz de histórico.
+ *
+ * O AUTOMÁTICO é o padrão e continua sendo: acima de ~2 meses a matriz vira mensal,
+ * senão ela fica com mais colunas do que cabe na tela e ninguém lê.
+ *
+ * Mas quem pede pode FORÇAR o dia, mesmo num período longo — foi pedido de quem usa a
+ * tela, e a razão é boa: às vezes a pergunta é sobre o dia dentro de um trimestre, e
+ * consolidar por mês apaga exatamente o que se quer ver. O controle fica no cabeçalho
+ * do visual, e a tela diz quantas colunas o pedido gerou.
+ *
+ * `pedido` vem da tela: 'dia', 'mes' ou nada (automático).
+ */
+export function granularidadeHistorico(pedido, flt) {
+  if (pedido === 'dia' || pedido === 'mes') return pedido;
   const dias = flt.de && flt.ate
     ? Math.round((new Date(flt.ate) - new Date(flt.de)) / 86400000)
     : 999;

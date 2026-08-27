@@ -99,6 +99,15 @@ export function FiltersProvider({ children }) {
       cliente: params.get('cliente') || '',
       // granularidade dos gráficos de coluna (não conta como filtro)
       g: params.get('g') === 'dia' ? 'dia' : 'mes',
+      /**
+       * Granularidade das matrizes de HISTÓRICO. Vazio = automático, que é o padrão:
+       * a matriz vira mensal acima de ~2 meses. 'dia' e 'mes' forçam.
+       *
+       * Campo próprio, e não o `g` acima: aquele é dos gráficos de coluna e vale
+       * para várias telas; este é da matriz e precisa poder ser 'automático', que
+       * não é um valor válido para o outro.
+       */
+      hg: ['dia', 'mes'].includes(params.get('hg')) ? params.get('hg') : '',
       // condomínios: período sobre a criação do splitter. Sem padrão, porque um
       // splitter instalado em 2019 continua valendo hoje — "este ano" esconderia
       // quase toda a rede.

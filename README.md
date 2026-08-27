@@ -280,6 +280,46 @@ FERNANDO DOS SANTOS`, 2 de 3). Com 3/4 eles caem e continuam passando
 Os dois grupos ficam contados em `GET /api/meta` (`juncaoVendedores`), com nome e sem
 e-mail: os sete recusados são erro de cadastro numa das bases, e alguém precisa olhar.
 
+### Histórico: dia ou mês, e quem decide
+
+As matrizes de **Vendas - Histórico** e **Ativações - Histórico** escolhiam sozinhas:
+acima de ~2 meses viravam mensais, senão ficavam por dia. Isso é o que faz a tela
+caber, e continua sendo o padrão — agora chamado de **Automático** no cabeçalho do
+visual, ao lado de **Dia** e **Mês**.
+
+Forçar o dia num período longo foi pedido de quem usa, e a razão é boa: às vezes a
+pergunta é sobre o dia dentro de um trimestre, e consolidar por mês apaga exatamente o
+que se quer ver. A escolha vai para a URL (`hg=dia`), então o link é compartilhável.
+
+#### O corte é em vendedor, não em dia
+
+A matriz desenha coluna × vendedor, e forçando dia no recorte inteiro dá 519 dias por
+451 vendedores. Medido no navegador:
+
+| | células | rolagem de salto | rolagem de roda |
+|---|---|---|---|
+| 519 dias × 451 vendedores | 234.000 | — | travava |
+| 400 dias × 451 vendedores | 181.704 | 113 ms | — |
+| **519 dias × 77 vendedores** | **40.117** | **62 ms** | **22 ms** |
+
+A primeira tentativa cortou COLUNAS, e estava errada: o pedido era justamente ver os
+dias. Cortar vendedor resolve sem tirar o que se pediu — a matriz já vem ordenada por
+total, vendedor tem filtro próprio na barra, e o CSV sai completo.
+
+O teto é de **células**, não de linhas, e a diferença aparece na prática: com teto de
+linha fixo, a visão mensal (20 colunas, 1.200 células) cortava vendedor sem motivo e
+avisava que 391 tinham ficado de fora de uma matriz que caberia inteira. Com teto de
+40.000 células, a visão mensal mostra os 451 e não avisa nada.
+
+> **O rodapé soma TODOS os vendedores**, não os visíveis — é o total do período. A tela
+> diz isso no aviso, porque rodapé que não fecha com as linhas à vista é o tipo de
+> coisa que gera desconfiança no número.
+
+**Tentei e não paguei:** `content-visibility: auto` nas linhas, que é a receita padrão
+para tabela longa. Piorou — a rolagem horizontal foi de 113 ms para 205–728 ms, porque
+a cada rolagem o navegador reavalia quais linhas estão visíveis e repinta do zero; com
+coluna fixa e centenas de colunas, isso custa mais que manter tudo pintado. Revertido.
+
 ### Memória: onde ela estava indo
 
 O container começou a cair. A causa não era volume de dado, era **cópia**: cada modelo
