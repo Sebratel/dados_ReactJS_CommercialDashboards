@@ -301,6 +301,17 @@ barra com contagem + **Descartar** + **Salvar**. Se a gravação tiver dependên
 ordem (um recurso que ignora escrita quando outro está em certo estado), respeite a
 ordem no `salvar()` e **comente por quê** — é o tipo de coisa que quebra em silêncio.
 
+### Filtro por clique (cross-filter)
+
+Clicar num visual recorta a tela, como no Power BI — e o clique escreve na **URL**,
+não em estado local: o link continua compartilhável, o botão voltar desfaz, e a tela
+não ganha estado novo. O visual clicado **destaca** o item escolhido em vez de
+colapsar para uma barra só, e cada visual ignora o próprio recorte.
+
+Leia **[cross-filter.md](cross-filter.md)** antes de tornar um gráfico clicável: traz
+onde o clique entra em cada tipo de visual, como escrever o filtro na URL, o cuidado
+com clique em rajada e o que fazer quando o recorte precisa ficar visível.
+
 ### Sem emojis
 
 Nenhum emoji, em nenhum lugar — nem herdado do relatório de origem. Use SVG inline
@@ -408,3 +419,10 @@ implementação concreta: `web/src/theme.css` (tokens e layout),
 `web/src/components/charts.jsx` (AutoSizer, combo, barras, gradientes),
 `web/src/components/ui.jsx` (Visual, KPI, estados) e o `README.md`, que registra as
 divergências propositais em relação ao Power BI e o motivo de cada uma.
+
+### Arquivos desta skill
+
+| Arquivo | Quando ler |
+|---|---|
+| `SKILL.md` | sempre — paleta, layout, componentes, gráficos, tabelas |
+| `cross-filter.md` | ao tornar um visual clicável ou fazer o clique filtrar a tela |
