@@ -844,6 +844,8 @@ marcações de eixo espaçadas.
   valem 0, sábado 0,5 e os demais 1. Só entram no cálculo os dias que aparecem nos dados
   (mesmo comportamento de `VALUES()` no DAX). Feriados em `src/model/holidays.js`
   (a tabela do Power BI parava em 2025; 2026 e 2027 foram acrescentados).
+  **O peso multiplica os dois lados da divisão** — ver a seção abaixo, que é a pergunta
+  mais frequente sobre este dashboard.
 * **Cada projeção usa a sua data** — vendas por `DATA CRIAÇÃO CONTRATO`, ativações por
   `DATA ATIVAÇÃO`, primeiro pagamento por `PAGAMENTO CLIENTE` — exatamente como os três
   relacionamentos com a tabela `calendar`.
@@ -851,6 +853,72 @@ marcações de eixo espaçadas.
   selecionada no filtro, replicando o `SELECTEDVALUE(tecnology[TECNOLOGIA])`.
 * **`DATA ATIVAÇÃO`** — telefonia usa `MAX(reports.final_date)`; fibra/rádio usam a saída
   do equipamento, ignorando os casos em que ele retornou no mesmo dia.
+
+### A média por dia útil, e por que ela nunca fecha com o total
+
+A regra que o comercial enuncia é conhecida: *domingo e feriado não contam, sábado vale
+meio dia*. Ela está implementada, e o **denominador está certo**. O que surpreende está
+no numerador.
+
+A fórmula — idêntica no DAX de origem e em `mediaPonderada` — é:
+
+```
+DIVIDE( SUMX(Dias, Qtd × Peso), SUMX(Dias, Peso) )
+```
+
+O peso multiplica os **dois** lados. Agosto/2026, contado direto no Voalle (3.557 vendas
+em 26 dias):
+
+| | conta | resultado |
+|---|---|---|
+| numerador | `3.244 × 1` (seg–sex) + `313 × 0,5` (sáb) + `0 × 0` (dom) | **3.400,5** |
+| denominador | `21 × 1` + `5 × 0,5` + `5 × 0` | **23,5** |
+| **média** | `3.400,5 ÷ 23,5` | **144,70** |
+
+Repare que o numerador **não é 3.557**. Duas coisas acontecem com ele:
+
+* as vendas de sábado entram pela metade — 313 viram 156,5;
+* venda em domingo ou feriado é multiplicada por zero: **desaparece da média**, mas
+  continua no total exibido no card ao lado.
+
+Consequência prática: a média fica sempre *abaixo* de `total ÷ dias úteis ponderados`.
+Medido mês a mês em 2026 — e em todos eles o denominador aplicado bateu com o teórico:
+
+| mês | total | denominador | média atual | `total ÷ dias úteis` | somem da conta |
+|---|---:|---:|---:|---:|---:|
+| jan | 4.027 | 23,5 | 163,55 | 171,36 | 16 |
+| fev | 3.328 | 21,0 | 148,79 | 158,48 | 71 |
+| mar | 4.011 | 24,0 | 160,85 | 167,13 | 0 |
+| abr | 3.839 | 22,0 | 163,32 | 174,50 | **107** |
+| mai | 3.568 | 22,5 | 149,93 | 158,58 | 37 |
+| jun | 3.521 | 23,0 | 145,70 | 153,09 | 48 |
+| jul | 3.432 | 25,0 | 133,14 | 137,28 | 0 |
+| ago | 3.557 | 23,5 | 144,70 | 151,36 | 0 |
+
+A diferença fica entre 3,0% e 6,4%, sempre para baixo — **a fórmula nunca infla o
+número**. Quando ela *parece* alta, a comparação costuma ser com dias corridos:
+`3.557 ÷ 31 = 114,7`. O salto para 144,70 é justamente o efeito de dividir por 23,5 em
+vez de 31, que é o que a regra pede.
+
+Nada disso é divergência da réplica: o DAX original faz exatamente o mesmo, e o React
+reproduz medida por medida. **Trocar a fórmula é decisão de negócio, não correção de
+bug** — e vale para vendas e ativações ao mesmo tempo, porque as duas telas chamam a
+mesma `mediaPonderada`.
+
+### Onde o denominador muda: o recálculo por contexto
+
+A medida é recalculada em cada célula, com **os dias daquela célula** — é o que
+`VALUES()` faz no DAX, e o que o `Map` por dia faz aqui:
+
+| Onde | Dias no denominador |
+|---|---|
+| card da tela | todos os dias com movimento no período |
+| linha da tabela por vendedor | só os dias em que **aquele** vendedor vendeu |
+| rodapé da tabela | todos de novo — **não** é a soma nem a média das linhas |
+
+Por isso um vendedor que fechou 10 contratos num único dia aparece com média `10,0`, e
+não `10 ÷ 23,5`: o denominador dele é um dia. E por isso a coluna de média nunca fecha
+com o rodapé — no Power BI também não fechava.
 
 ---
 
