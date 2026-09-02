@@ -840,12 +840,12 @@ marcações de eixo espaçadas.
 
 ### Medidas que exigiram atenção
 
-* **`MEDIA VENDAS` / `MEDIA ATIVOS`** — média ponderada por dia útil: domingo e feriado
-  valem 0, sábado 0,5 e os demais 1. Só entram no cálculo os dias que aparecem nos dados
-  (mesmo comportamento de `VALUES()` no DAX). Feriados em `src/model/holidays.js`
-  (a tabela do Power BI parava em 2025; 2026 e 2027 foram acrescentados).
-  **O peso multiplica os dois lados da divisão** — ver a seção abaixo, que é a pergunta
-  mais frequente sobre este dashboard.
+* **`MEDIA VENDAS` / `MEDIA ATIVOS`** — registros por dia útil (`mediaPorDiaUtil`). O
+  divisor é a soma dos pesos dos dias: domingo e feriado valem 0, sábado 0,5 e os demais
+  1; entram só os dias que aparecem nos dados (mesmo comportamento de `VALUES()` no DAX).
+  Feriados em `src/model/holidays.js` (a tabela do Power BI parava em 2025; 2026 e 2027
+  foram acrescentados). **O dividendo não é ponderado — e aqui divergimos do Power BI de
+  propósito.** Ver a seção abaixo.
 * **Cada projeção usa a sua data** — vendas por `DATA CRIAÇÃO CONTRATO`, ativações por
   `DATA ATIVAÇÃO`, primeiro pagamento por `PAGAMENTO CLIENTE` — exatamente como os três
   relacionamentos com a tabela `calendar`.
@@ -854,56 +854,64 @@ marcações de eixo espaçadas.
 * **`DATA ATIVAÇÃO`** — telefonia usa `MAX(reports.final_date)`; fibra/rádio usam a saída
   do equipamento, ignorando os casos em que ele retornou no mesmo dia.
 
-### A média por dia útil, e por que ela nunca fecha com o total
+### A média por dia útil, e a divergência deliberada com o Power BI
 
-A regra que o comercial enuncia é conhecida: *domingo e feriado não contam, sábado vale
-meio dia*. Ela está implementada, e o **denominador está certo**. O que surpreende está
-no numerador.
-
-A fórmula — idêntica no DAX de origem e em `mediaPonderada` — é:
+A regra que o comercial enuncia é: *domingo e feriado não contam, sábado vale meio dia*.
+Ela é sobre o **divisor** — quanto expediente teve o período. Foi assim que a medida
+passou a ser calculada em 02/09/2026, a pedido do comercial:
 
 ```
-DIVIDE( SUMX(Dias, Qtd × Peso), SUMX(Dias, Peso) )
+media = total de registros ÷ Σ(peso dos dias com movimento)
 ```
 
-O peso multiplica os **dois** lados. Agosto/2026, contado direto no Voalle (3.557 vendas
-em 26 dias):
+O peso vem de `dayWeight`: domingo e feriado 0, sábado 0,5, segunda a sexta 1.
 
-| | conta | resultado |
-|---|---|---|
-| numerador | `3.244 × 1` (seg–sex) + `313 × 0,5` (sáb) + `0 × 0` (dom) | **3.400,5** |
-| denominador | `21 × 1` + `5 × 0,5` + `5 × 0` | **23,5** |
-| **média** | `3.400,5 ÷ 23,5` | **144,70** |
+**O que mudou.** O DAX de origem multiplicava os *dois* lados da divisão:
 
-Repare que o numerador **não é 3.557**. Duas coisas acontecem com ele:
+```
+DIVIDE( SUMX(Dias, Qtd × Peso), SUMX(Dias, Peso) )   -- Power BI, e a réplica até 01/09/2026
+```
 
-* as vendas de sábado entram pela metade — 313 viram 156,5;
-* venda em domingo ou feriado é multiplicada por zero: **desaparece da média**, mas
-  continua no total exibido no card ao lado.
+Ponderar o dividendo não descontava só o expediente — descontava a **produção**. As
+vendas de sábado entravam pela metade, e uma venda feita em domingo ou feriado era
+multiplicada por zero: sumia da média enquanto continuava contada no total exibido no
+card ao lado. Em abril/2026 foram **107 vendas** assim, 2,8% do mês.
 
-Consequência prática: a média fica sempre *abaixo* de `total ÷ dias úteis ponderados`.
-Medido mês a mês em 2026 — e em todos eles o denominador aplicado bateu com o teórico:
+Medido direto no Voalle, contando contratos por data de criação:
 
-| mês | total | denominador | média atual | `total ÷ dias úteis` | somem da conta |
+| mês | total | divisor | **agora** | antes (Power BI) | sumiam da conta |
 |---|---:|---:|---:|---:|---:|
-| jan | 4.027 | 23,5 | 163,55 | 171,36 | 16 |
-| fev | 3.328 | 21,0 | 148,79 | 158,48 | 71 |
-| mar | 4.011 | 24,0 | 160,85 | 167,13 | 0 |
-| abr | 3.839 | 22,0 | 163,32 | 174,50 | **107** |
-| mai | 3.568 | 22,5 | 149,93 | 158,58 | 37 |
-| jun | 3.521 | 23,0 | 145,70 | 153,09 | 48 |
-| jul | 3.432 | 25,0 | 133,14 | 137,28 | 0 |
-| ago | 3.557 | 23,5 | 144,70 | 151,36 | 0 |
+| jan | 4.027 | 23,5 | **171,36** | 163,55 | 16 |
+| fev | 3.328 | 21,0 | **158,48** | 148,79 | 71 |
+| mar | 4.011 | 24,0 | **167,13** | 160,85 | 0 |
+| abr | 3.839 | 22,0 | **174,50** | 163,32 | **107** |
+| mai | 3.568 | 22,5 | **158,58** | 149,93 | 37 |
+| jun | 3.521 | 23,0 | **153,09** | 145,70 | 48 |
+| jul | 3.432 | 25,0 | **137,28** | 133,14 | 0 |
+| ago | 3.557 | 23,5 | **151,36** | 144,70 | 0 |
 
-A diferença fica entre 3,0% e 6,4%, sempre para baixo — **a fórmula nunca infla o
-número**. Quando ela *parece* alta, a comparação costuma ser com dias corridos:
-`3.557 ÷ 31 = 114,7`. O salto para 144,70 é justamente o efeito de dividir por 23,5 em
-vez de 31, que é o que a regra pede.
+A medida sobe de 3,0% a 6,4% conforme o mês — quanto mais sábado e feriado produtivo,
+maior o ajuste. Em compensação **`média × Σpeso` reproduz o total**, que é a única
+leitura que fecha: antes o card e a média nunca se reconciliavam.
 
-Nada disso é divergência da réplica: o DAX original faz exatamente o mesmo, e o React
-reproduz medida por medida. **Trocar a fórmula é decisão de negócio, não correção de
-bug** — e vale para vendas e ativações ao mesmo tempo, porque as duas telas chamam a
-mesma `mediaPonderada`.
+**Onde a conta continua igual.** O divisor não mudou. Ele segue somando só os dias que
+aparecem nos dados, e o sábado segue valendo meio dia. Quando alguém compara com dias
+corridos — `3.557 ÷ 31 = 114,7` — o número parece alto: o salto para 151,36 é o efeito
+de dividir por 23,5 em vez de 31, que é exatamente o que a regra pede.
+
+**Consequência:** os números desta medida **não batem mais** com o relatório Power BI de
+origem, por decisão do comercial. As demais medidas seguem fiéis. Vale para vendas,
+ativações e primeiro pagamento, porque as três telas chamam a mesma função. Travado em
+`test/medias.test.mjs`.
+
+**De quebra, o sistema deixou de discordar de si mesmo.** A Análise Preditiva sempre
+calculou `realizado ÷ pesoDoPeriodo(...)` — a contagem cheia dividida pelos pesos, sem
+ponderar o dividendo (`src/model/preditivo.js`). Eram duas réguas para a mesma ideia de
+"por dia útil" na mesma aplicação, e o ritmo do preditivo saía acima da média do card
+sem nada que explicasse a diferença. Agora as duas contam igual. A única distinção que
+resta é de propósito: o preditivo varre o calendário e conta **todo** dia útil do
+período, inclusive os sem venda, porque projetar exige saber quanto expediente ainda
+falta.
 
 ### Onde o denominador muda: o recálculo por contexto
 

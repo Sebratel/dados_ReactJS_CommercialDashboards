@@ -141,22 +141,52 @@ export function rows(dataset, flt) {
   return out;
 }
 
-/** MEDIA VENDAS / MEDIA ATIVOS: média ponderada por dia útil. */
-export function mediaPonderada(list, field) {
+/**
+ * MEDIA VENDAS / MEDIA ATIVOS: registros por dia útil.
+ *
+ * DIVISOR — soma dos pesos dos dias (`dayWeight`): domingo e feriado valem 0,
+ * sábado 0,5, segunda a sexta 1. Entram apenas os dias que aparecem nos dados,
+ * como o `VALUES()` do DAX: quem não trabalhou num dia não é dividido por ele —
+ * é o que mantém a média por vendedor comparável entre quem entrou no meio do mês
+ * e quem estava lá desde o dia 1.
+ *
+ * DIVIDENDO — a contagem CHEIA, sem peso nenhum.
+ *
+ * POR QUE O DIVIDENDO NÃO É PONDERADO — e por que aqui divergimos do Power BI.
+ * O DAX de origem multiplicava os DOIS lados:
+ *
+ *     DIVIDE( SUMX(Dias, Qtd × Peso), SUMX(Dias, Peso) )
+ *
+ * O efeito era descontar a produção, não só o expediente: as vendas de sábado
+ * entravam pela metade, e uma venda feita em domingo ou feriado era multiplicada
+ * por zero — sumia da média enquanto continuava contada no total exibido ao lado.
+ * Em abril/2026 foram 107 vendas assim, 2,8% do mês. Total e média nunca fechavam
+ * entre si, e a média saía de 3% a 6% abaixo todo mês.
+ *
+ * A regra do comercial é sobre o DIVISOR: sábado é meio expediente. O que se
+ * vendeu nele é venda inteira, e venda em feriado também é venda. Agora
+ * `media × Σpeso` reproduz o total, que é a única leitura que fecha.
+ *
+ * Divergência deliberada, a pedido do comercial em 02/09/2026 — o README, em
+ * "A média por dia útil", registra os números dos dois lados.
+ *
+ * Recorte sem nenhum dia de peso (alguém filtrou só um domingo) devolve 0, como
+ * já devolvia antes: não existe média por dia útil onde não há dia útil.
+ */
+export function mediaPorDiaUtil(list, field) {
   const porDia = new Map();
   for (const f of list) {
     const d = f[field];
     if (!d) continue;
     porDia.set(d, (porDia.get(d) || 0) + 1);
   }
-  let num = 0;
-  let den = 0;
+  let total = 0;
+  let diasUteis = 0;
   for (const [d, qtd] of porDia) {
-    const w = dayWeight(d);
-    num += qtd * w;
-    den += w;
+    total += qtd;
+    diasUteis += dayWeight(d);
   }
-  return den > 0 ? num / den : 0;
+  return diasUteis > 0 ? total / diasUteis : 0;
 }
 
 export function soma(list, field = 'valor') {
@@ -319,7 +349,7 @@ export function porVendedor(list, field, { sparkBy = 'mes' } = {}) {
       situacao: r.situacao,
       total: r.total,
       valor: r.valor,
-      media: mediaPonderada(r.linhas, field),
+      media: mediaPorDiaUtil(r.linhas, field),
       spark: [...r.spark].sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => ({ k, v })),
     }))
     .sort((a, b) => b.total - a.total || a.vendedor.localeCompare(b.vendedor, 'pt-BR'));
@@ -566,8 +596,8 @@ export function rampagem(flt, granularidade = 'mes') {
       dataApos90: r.dataApos90,
       vendas: r.vendas,
       ativos: r.ativos,
-      mediaVendas: mediaPonderada(r.linhasVendas, 'dtVenda'),
-      mediaAtivos: mediaPonderada(r.linhasAtivos, 'dtAtiv'),
+      mediaVendas: mediaPorDiaUtil(r.linhasVendas, 'dtVenda'),
+      mediaAtivos: mediaPorDiaUtil(r.linhasAtivos, 'dtAtiv'),
       diasContratado,
       diasTrabalhados,
       spark: (() => {

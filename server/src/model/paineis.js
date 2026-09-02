@@ -7,7 +7,7 @@
  * tipo de erro que ninguém percebe. Aqui os dois leem da mesma função.
  */
 import {
-  DATE_FIELD, groupCount, matriz, mediaPonderada, porVendedor, premiacoes, rampagem,
+  DATE_FIELD, groupCount, matriz, mediaPorDiaUtil, porVendedor, premiacoes, rampagem,
   rows, rowsExceto, semCampo, serie, serieDiaria, serieDiariaPorTecnologia,
   seriePorTecnologia, soma,
 } from './measures.js';
@@ -69,10 +69,10 @@ export function painelDiretoria(flt, g) {
   return {
     kpis: {
       totalAtivos: ativos.length,
-      mediaAtivos: mediaPonderada(ativos, 'dtAtiv'),
+      mediaAtivos: mediaPorDiaUtil(ativos, 'dtAtiv'),
       totalVendas: vendas.length,
       valorTicket: soma(vendas),
-      mediaVendas: mediaPonderada(vendas, 'dtVenda'),
+      mediaVendas: mediaPorDiaUtil(vendas, 'dtVenda'),
       totalPagantes: pagantes.length,
       valorPagantes: soma(pagantes),
     },
@@ -123,7 +123,7 @@ export function painelVendas(flt, g) {
     kpis: {
       totalVendas: vendas.length,
       valorTicket: soma(vendas),
-      mediaVendas: mediaPonderada(vendas, 'dtVenda'),
+      mediaVendas: mediaPorDiaUtil(vendas, 'dtVenda'),
       totalAtivos: ativos.length,
     },
     granularidade: g,
@@ -133,7 +133,7 @@ export function painelVendas(flt, g) {
     // Rodapé da tabela por vendedor. Com auto-exclusão ele não é mais o KPI da tela:
     // a tabela mostra todos os vendedores e o cartão mostra o selecionado. Somar as
     // linhas visíveis e chamar isso de "total" é a única leitura que fecha.
-    porVendedorTotais: { total: paraVendedor.length, media: mediaPonderada(paraVendedor, 'dtVenda') },
+    porVendedorTotais: { total: paraVendedor.length, media: mediaPorDiaUtil(paraVendedor, 'dtVenda') },
     mesAtual,
     porDia: serieDiariaPorTecnologia(doMes, 'dtVenda', flt.tecnologia),
   };
@@ -156,7 +156,7 @@ export function painelAtivacoes(flt, g) {
   return {
     kpis: {
       totalAtivos: ativos.length,
-      mediaAtivos: mediaPonderada(ativos, 'dtAtiv'),
+      mediaAtivos: mediaPorDiaUtil(ativos, 'dtAtiv'),
       valor: soma(ativos),
       // o relatório do Power BI não mostra a telefonia; separar aqui deixa o
       // total reconciliável com ele sem precisar refazer a conta na mão
@@ -170,7 +170,7 @@ export function painelAtivacoes(flt, g) {
     porCanal: semSentinela(groupCount(paraCanal, (f) => f.canal || '(sem canal)', { limit: 12, garantir: flt.canal })),
     porCidade: groupCount(paraCidade, (f) => f.cidade, { limit: 15, garantir: flt.cidade }),
     porVendedor: porVendedor(paraVendedor, 'dtAtiv'),
-    porVendedorTotais: { total: paraVendedor.length, media: mediaPonderada(paraVendedor, 'dtAtiv') },
+    porVendedorTotais: { total: paraVendedor.length, media: mediaPorDiaUtil(paraVendedor, 'dtAtiv') },
     // não é clicável (o eixo é o dia), então segue com o filtro cheio
     porDia: serieDiaria(ativos, 'dtAtiv'),
   };
@@ -219,7 +219,7 @@ export function painelPrimeiroPagamento(flt, g, { limit = 1500 } = {}) {
     kpis: {
       totalPagantes: pagantes.length,
       valor: soma(pagantes),
-      media: mediaPonderada(pagantes, 'dtPagto'),
+      media: mediaPorDiaUtil(pagantes, 'dtPagto'),
     },
     granularidade: g,
     /**
