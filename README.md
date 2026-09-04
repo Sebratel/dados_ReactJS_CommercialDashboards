@@ -969,6 +969,46 @@ esses 2-6 contratos significaria replicar uma ordenação arbitrária.
 > essas linhas ficam de fora. Escrever `t.title IS NULL OR ...` parece o conserto de um
 > descuido de lógica ternária, mas muda a medida. A réplica aqui é literal.
 
+### Ativações: quando o equipamento volta no mesmo dia
+
+A data de ativação de fibra e rádio é a data de saída do equipamento. Quando o
+aparelho **volta na mesma data**, a instalação não se concretizou e a data é anulada
+— `src/sql/aloc.sql`. A regra é certa, mas sozinha ela é cega para um caso comum:
+
+> O técnico leva o aparelho, ele não serve, volta no mesmo dia — e um **segundo**
+> equipamento sai por outro atendimento (quase sempre `TEC - Suporte de Retorno
+> Prioritário`) e fica com o cliente. Trocou-se o aparelho. O cliente **está**
+> instalado.
+
+Como esse segundo atendimento não é do tipo "instalação", ele fica fora do `WHERE`
+da consulta, e o contrato sumia da tela inteiro. Por isso a anulação passou a valer
+só quando **nenhum** equipamento do contrato ficou com o cliente, de qualquer tipo de
+atendimento — o que decide é o aparelho na casa, não o motivo da visita.
+
+Medido no Voalle, 2026 inteiro: a regra anula **35** contratos e em **12** deles havia
+equipamento instalado. O efeito nos meses fechados:
+
+| mês | antes | agora | recuperados |
+|---|---:|---:|---:|
+| jun/2026 | 2.593 | **2.593** | — |
+| jul/2026 | 2.529 | **2.532** | 3 |
+| ago/2026 | 2.674 | **2.677** | 3 |
+
+Junho não muda de propósito: lá os dois contratos anulados não tinham aparelho
+nenhum na casa do cliente, e a anulação estava correta.
+
+**O Power BI de origem tem a mesma regra escrita — e ela nunca dispara.** O `CASE`
+que monta a data mistura `plis.out_date` (`date`) com `a.conclusion_date`
+(`timestamp`); o Postgres promove o resultado a `timestamp`, e o
+`if [RETORNO] = [DATA SAÍDA] then null` do Power Query passa a comparar `date` com
+`datetime` — em M isso é **sempre falso**. No relatório antigo nenhuma instalação é
+descartada, nem as 23 que deveriam sair. Agosto/2026 bate em 2.677 nos dois lados
+por motivos opostos: aqui porque a ressalva devolveu os 3 casos legítimos, lá porque
+a regra inteira é código morto.
+
+Travado em `test/aloc.test.mjs` — os testes seguram a estrutura da regra, já que a
+consulta só roda contra o Voalle.
+
 ### Vendas canceladas: uma segunda origem, sem segunda carga
 
 A tela vem do relatório **COM - Vendas Canceladas**, que é um `.pbip` separado com uma única
