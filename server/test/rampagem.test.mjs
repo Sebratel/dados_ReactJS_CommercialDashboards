@@ -139,6 +139,27 @@ test('sem período, a tela é sobre quem está em rampagem hoje', () => {
   assert.equal(linha(r, BRUNO), undefined, 'veterano vendendo hoje não é rampagem');
 });
 
+test('readmitido: a rampagem começa no vínculo novo, não na carreira inteira', () => {
+  // O RH mantém só o vínculo vigente, então quem saiu e voltou tem admissão nova. Sem
+  // piso na janela, as vendas do vínculo anterior — todas anteriores à admissão —
+  // entravam como rampagem. Na base real eram 4 vendedores e 511 vendas.
+  const nome = 'RENATA READMITIDA';
+  const { sellers, senior } = admissoes([[nome, '2026-01-28']]);
+  setSource('base', [
+    venda(nome, '2025-01-24', 9201), // vínculo antigo
+    venda(nome, '2025-06-10', 9202), // vínculo antigo
+    venda(nome, '2026-02-10', 9203), // rampagem de verdade
+  ]);
+  setSource('aloc', []); setSource('phone', []); setSource('pagto', []);
+  setSource('teams', equipe([nome]));
+  setSource('sellers', sellers); setSource('senior', senior);
+  build();
+
+  const r = rampagem(janeiro());
+  assert.equal(r.kpis.vendas, 1, 'venda anterior à admissão não é rampagem do vínculo novo');
+  assert.deepEqual(r.serie.map((m) => m.periodo), ['2026-02']);
+});
+
 test('o clique no gráfico continua recortando por data', () => {
   montarCenario();
   const r = rampagem({ ...janeiro(), zoom: { de: '2026-03-01', ate: '2026-03-31' } });

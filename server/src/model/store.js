@@ -406,9 +406,23 @@ export function build() {
       vendedorAtivo: team?.ativo ?? null,
       admissaoReal: seller?.admissaoReal || null,
       fimRampagem: seller?.fimRampagem || null,
-      // colunas calculadas de rampagem (VENDAS_RAMPAGEM / ATIVOS_RAMPAGEM)
-      venda90: seller?.fimRampagem && dtVenda && dtVenda <= seller.fimRampagem ? 1 : 0,
-      ativo90: seller?.fimRampagem && dtAtivFibra && dtAtivFibra <= seller.fimRampagem ? 1 : 0,
+      /**
+       * Colunas calculadas de rampagem (VENDAS_RAMPAGEM / ATIVOS_RAMPAGEM).
+       *
+       * A janela tem os DOIS lados: da admissão ao 90º dia. Só o teto não basta por
+       * causa da READMISSÃO — o RH mantém o vínculo vigente, então quem saiu e voltou
+       * tem admissão nova e as vendas do vínculo anterior, todas anteriores a ela,
+       * caíam dentro de `<= fimRampagem`. Medido na base: 4 vendedores, 511 vendas —
+       * um deles readmitido em 09/2026 arrastava 328 vendas desde 01/2025.
+       *
+       * Enquanto o período do slicer recortava os fatos pela data da venda isso ficava
+       * escondido: a venda antiga morria no recorte antes de ser somada. Com o período
+       * selecionando pessoas (ver `rampagem` em measures.js), ela aparece na tela.
+       */
+      venda90: seller?.fimRampagem && dtVenda
+        && dtVenda >= seller.admissaoReal && dtVenda <= seller.fimRampagem ? 1 : 0,
+      ativo90: seller?.fimRampagem && dtAtivFibra
+        && dtAtivFibra >= seller.admissaoReal && dtAtivFibra <= seller.fimRampagem ? 1 : 0,
     });
   }
 

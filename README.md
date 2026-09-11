@@ -1046,6 +1046,19 @@ filtro era o único mês que sobrevivia ao recorte.
 O rótulo do slicer nesta tela é **Admissão**, e não "Período", porque a mesma barra passa
 a significar coisas diferentes em telas vizinhas. Travado em `test/rampagem.test.mjs`.
 
+**A readmissão, que só apareceu depois.** `VENDAS_RAMPAGEM` sempre teve teto e nunca teve
+piso: contava toda venda `<= fimRampagem`, inclusive as anteriores à própria admissão. O
+RH (Senior) mantém apenas o vínculo vigente, então quem saiu e voltou tem admissão nova e
+um histórico inteiro antes dela — e esse histórico caía dentro da janela.
+
+Enquanto o período recortava os fatos pela data da venda, o defeito era invisível: a venda
+antiga morria no recorte antes de ser somada. Com o período selecionando pessoas, ela
+apareceu na tela — filtrar janeiro/2026 trazia colunas de jan/25 e fev/25.
+
+Medido na base: **4 vendedores, 511 vendas**. O caso extremo foi um readmitido em 09/2026
+arrastando 328 vendas desde 01/2025. A janela passou a ter os dois lados, e janeiro/2026
+saiu de 40 para 14 vendas — as 14 que são de fato a rampagem de quem entrou no mês.
+
 ### Vendas canceladas: uma segunda origem, sem segunda carga
 
 A tela vem do relatório **COM - Vendas Canceladas**, que é um `.pbip` separado com uma única
