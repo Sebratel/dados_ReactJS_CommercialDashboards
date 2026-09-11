@@ -540,36 +540,83 @@ export function premiacoes(flt) {
 // ---------------------------------------------------------------------------
 // RAMPAGEM — vendedores nos primeiros 90 dias
 // ---------------------------------------------------------------------------
+/**
+ * RAMPAGEM — aqui o período do slicer seleciona PESSOAS, não fatos.
+ *
+ * Nas outras telas o período recorta vendas pela data da venda. Nesta ele recorta
+ * vendedores pela data de ADMISSÃO, e os visuais mostram os 90 dias inteiros de
+ * quem foi selecionado. Filtrar janeiro responde *"quem entrou em janeiro, e como
+ * foi a rampagem deles"* — com as vendas de fevereiro, março e abril junto, que é
+ * onde a curva de fato acontece.
+ *
+ * Recortando os fatos pelo mesmo mês da admissão, como era antes, a tela mostrava
+ * um pedaço arbitrário da curva: o mês inteiro de quem entrou no dia 2 e três dias
+ * de quem entrou no dia 28 — e os dois apareciam lado a lado como se fosse a mesma
+ * medida.
+ *
+ * **Sem período filtrado** o recorte é *quem está em rampagem hoje*, que é a
+ * pergunta padrão da tela. O clique no gráfico (`zoom`) continua recortando por
+ * data: ele é sobre o eixo do tempo, não sobre a admissão.
+ */
 export function rampagem(flt, granularidade = 'mes') {
   const state = getState();
-  const dataRef = flt.ate || today();
+  const hoje = today();
+  const { de, ate } = flt;
+  const temPeriodo = Boolean(de || ate);
 
-  // vendas/ativações dentro dos 90 dias de rampagem do vendedor
-  const vendas = rows('vendas', flt).filter((f) => f.venda90 === 1);
-  const ativos = rows('ativos', flt).filter((f) => f.ativo90 === 1);
+  // fim da janela de cada vendedor: o 90º dia, ou hoje enquanto a rampagem corre
+  const fimDaJanela = (s) => (s?.dataApos90 && s.dataApos90 < hoje ? s.dataApos90 : hoje);
+
+  // quem o período selecionou. O RH traz a admissão da empresa toda, então novato
+  // aqui é quem está no comercial.
+  const selecionados = new Map();
+  for (const s of state.sellersByName.values()) {
+    if (!state.teamsByName.has(s.vendedor) || !s.admissaoReal) continue;
+    if (temPeriodo) {
+      if (de && s.admissaoReal < de) continue;
+      if (ate && s.admissaoReal > ate) continue;
+    } else if (!(s.admissaoReal <= hoje && s.dataApos90 >= hoje)) {
+      continue;
+    }
+    selecionados.set(s.vendedor, s);
+  }
+
+  // vendas/ativações dentro dos 90 dias de rampagem, dos vendedores selecionados —
+  // sem o recorte de período, que já foi gasto para escolher as pessoas
+  const semPeriodo = semCampos(flt, 'de', 'ate');
+  const naRampagem = (flag) => (f) => f[flag] === 1 && selecionados.has(f.vendedor);
+  const vendas = rows('vendas', semPeriodo).filter(naRampagem('venda90'));
+  const ativos = rows('ativos', semPeriodo).filter(naRampagem('ativo90'));
   // o gráfico do topo MOSTRA o período, então ignora o recorte que saiu do clique nele
-  const vendasSemZoom = rowsExceto('vendas', flt, 'zoom', vendas).filter((f) => f.venda90 === 1);
-  const ativosSemZoom = rowsExceto('ativos', flt, 'zoom', ativos).filter((f) => f.ativo90 === 1);
+  const vendasSemZoom = rowsExceto('vendas', semPeriodo, 'zoom', vendas).filter(naRampagem('venda90'));
+  const ativosSemZoom = rowsExceto('ativos', semPeriodo, 'zoom', ativos).filter(naRampagem('ativo90'));
 
   const map = new Map();
+  const linhaVazia = (nome) => {
+    const seller = state.sellersByName.get(nome);
+    const team = state.teamsByName.get(nome);
+    return {
+      vendedor: nome,
+      equipe: team?.equipe || '',
+      situacao: team?.situacao || '',
+      admissaoReal: seller?.admissaoReal || null,
+      dataApos90: seller?.dataApos90 || null,
+      vendas: 0,
+      ativos: 0,
+      linhasVendas: [],
+      linhasAtivos: [],
+    };
+  };
+  // a tabela é a lista de quem entrou, não a de quem vendeu: o novato que não
+  // engatou aparece zerado, que é metade do que se olha numa rampagem
+  for (const nome of selecionados.keys()) map.set(nome, linhaVazia(nome));
+
   const bump = (f, campo) => {
     const nome = f.vendedor;
     if (!nome) return;
     let r = map.get(nome);
     if (!r) {
-      const seller = state.sellersByName.get(nome);
-      const team = state.teamsByName.get(nome);
-      r = {
-        vendedor: nome,
-        equipe: team?.equipe || '',
-        situacao: team?.situacao || '',
-        admissaoReal: seller?.admissaoReal || null,
-        dataApos90: seller?.dataApos90 || null,
-        vendas: 0,
-        ativos: 0,
-        linhasVendas: [],
-        linhasAtivos: [],
-      };
+      r = linhaVazia(nome);
       map.set(nome, r);
     }
     r[campo] += 1;
@@ -579,11 +626,15 @@ export function rampagem(flt, granularidade = 'mes') {
   ativos.forEach((f) => bump(f, 'ativos'));
 
   const tabela = [...map.values()].map((r) => {
-    const diasContratado = r.admissaoReal ? diffDays(r.admissaoReal, dataRef) : null;
+    // a janela de cada um é a própria rampagem — da admissão ao 90º dia, ou até hoje
+    // se ela ainda corre. É o mesmo intervalo das vendas exibidas ao lado, e é o que
+    // torna DIAS TRABALHADOS comparável entre quem entrou em dias diferentes do mês.
+    const fim = fimDaJanela(r);
+    const diasContratado = r.admissaoReal ? diffDays(r.admissaoReal, fim) : null;
     let diasTrabalhados = 0;
     if (r.admissaoReal) {
       let d = r.admissaoReal;
-      while (d <= dataRef) {
+      while (d <= fim) {
         diasTrabalhados += dayWeight(d);
         d = addDays(d, 1);
       }
@@ -618,22 +669,20 @@ export function rampagem(flt, granularidade = 'mes') {
     meses.set(m.periodo, cur);
   }
 
-  // vendedores em rampagem (admitidos há <= 90 dias na data de referência)
-  const novatos = [...state.sellersByName.values()]
-    // o RH traz admissões da empresa toda; novato aqui é quem está no comercial
-    .filter((s) => state.teamsByName.has(s.vendedor))
-    .filter((s) => s.admissaoReal && s.admissaoReal <= dataRef && s.dataApos90 >= dataRef)
+  // a relação da direita é o próprio conjunto selecionado, do mais recente ao mais antigo
+  const novatos = [...selecionados.values()]
     .map((s) => ({
       vendedor: s.vendedor,
       equipe: state.teamsByName.get(s.vendedor)?.equipe || '',
       admissaoReal: s.admissaoReal,
       dataApos90: s.dataApos90,
-      diasContratado: diffDays(s.admissaoReal, dataRef),
+      diasContratado: diffDays(s.admissaoReal, fimDaJanela(s)),
+      emRampagem: s.dataApos90 >= hoje,
     }))
     .sort((a, b) => b.admissaoReal.localeCompare(a.admissaoReal));
 
   return {
-    dataRef,
+    dataRef: hoje,
     granularidade,
     kpis: {
       vendas: vendas.length,

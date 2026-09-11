@@ -31,14 +31,17 @@ export default function Rampagem() {
 
   return (
     <main className="page">
-      <SlicerBar rotuloPeriodo="Período" />
+      {/* nesta tela o período escolhe VENDEDORES pela admissão, não vendas pela data
+          da venda — o rótulo precisa dizer isso, senão a mesma barra significa duas
+          coisas diferentes em telas vizinhas */}
+      <SlicerBar rotuloPeriodo="Admissão" />
       {error && <Erro erro={error} />}
 
       <div className="grid linha-principal">
         <Visual
           title="RAMPAGEM NOVATOS ( < 90 dias )"
           ia="rampagem:serie"
-          sub="vendas e ativações dentro dos 90 primeiros dias do vendedor"
+          sub="os 90 primeiros dias de quem foi admitido no período — inclusive os meses seguintes"
           actions={<Granularidade />}
         >
           {isLoading && !data ? <Loading /> : (
@@ -66,7 +69,7 @@ export default function Rampagem() {
           <KpiStack itens={[
             { label: 'VENDAS EM RAMPAGEM', value: int(data?.kpis?.vendas || 0) },
             { label: 'ATIVOS EM RAMPAGEM', value: int(data?.kpis?.ativos || 0) },
-            { label: 'NOVATOS ATIVOS', value: int(data?.kpis?.novatos || 0) },
+            { label: 'NOVATOS NO PERÍODO', value: int(data?.kpis?.novatos || 0) },
           ]} />
         </div>
 

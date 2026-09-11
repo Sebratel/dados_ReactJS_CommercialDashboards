@@ -288,7 +288,7 @@ export const VISUAIS = {
   'rampagem:serie': {
     tela: 'rampagem',
     titulo: 'Rampagem novatos (menos de 90 dias)',
-    oQueE: 'Vendas e ativações realizadas dentro dos 90 primeiros dias de cada vendedor, por período.',
+    oQueE: 'Vendas e ativações dentro dos 90 primeiros dias de cada vendedor. Atenção ao eixo do filtro: o período desta tela seleciona vendedores pela data de ADMISSÃO, e a série mostra os 90 dias inteiros deles — filtrando janeiro, é normal a curva seguir por fevereiro e março.',
     recorte: (p) => ({ kpis: p.kpis, dataRef: p.dataRef, serie: serieEnxuta(p.serie) }),
   },
   'rampagem:porCidade': {
@@ -300,7 +300,7 @@ export const VISUAIS = {
   'rampagem:tabela': {
     tela: 'rampagem',
     titulo: 'Vendas por vendedor (novatos)',
-    oQueE: 'Cada novato com dias de casa, dias trabalhados, vendas, ativações e média por dia útil. Quem tem menos dias de casa naturalmente produziu menos no total — a média por dia útil é a comparação justa.',
+    oQueE: 'Cada vendedor admitido no período, com dias de casa, dias trabalhados, vendas, ativações e média por dia útil, medidos da admissão ao 90º dia (ou até hoje, se a rampagem ainda corre). Quem entrou há pouco produziu menos no total — a média por dia útil é a comparação justa. Novato sem venda alguma aparece zerado, de propósito.',
     recorte: (p) => ({
       kpis: p.kpis,
       dataRef: p.dataRef,
@@ -311,7 +311,7 @@ export const VISUAIS = {
   'rampagem:novatos': {
     tela: 'rampagem',
     titulo: 'Novatos em rampagem',
-    oQueE: 'Relação dos vendedores dentro dos 90 dias, com data de admissão, equipe e quando saem da rampagem.',
+    oQueE: 'Os vendedores que o período selecionou, com data de admissão, equipe e quando saem da rampagem. Sem período filtrado, são os que estão em rampagem hoje; o campo emRampagem diz quais ainda estão dentro dos 90 dias.',
     recorte: (p) => ({ dataRef: p.dataRef, total: p.kpis?.novatos, novatos: topo(p.novatos, 60) }),
   },
 

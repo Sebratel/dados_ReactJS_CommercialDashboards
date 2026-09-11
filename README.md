@@ -1009,6 +1009,43 @@ a regra inteira é código morto.
 Travado em `test/aloc.test.mjs` — os testes seguram a estrutura da regra, já que a
 consulta só roda contra o Voalle.
 
+### Rampagem: o período seleciona pessoas, não vendas
+
+Em toda tela o período do slicer recorta fatos pela data do fato. Na **Rampagem**, não:
+ele recorta **vendedores pela data de admissão**, e os visuais mostram os 90 dias
+inteiros de quem foi selecionado.
+
+A pergunta da tela é *"quem entrou em janeiro, e como foi a rampagem deles"* — e a
+rampagem de quem entrou em janeiro acontece em fevereiro, março e abril. Recortando os
+fatos pelo mesmo mês, como era antes, a tela mostrava um pedaço arbitrário da curva:
+
+| Vendedor | Admissão | O que aparecia filtrando janeiro | O que a rampagem dele é |
+|---|---|---|---|
+| entrou dia 2 | 02/01 | 29 dias de venda | 90 dias |
+| entrou dia 28 | 28/01 | 3 dias de venda | 90 dias |
+
+Os dois apareciam lado a lado na mesma tabela, ordenados por `VENDAS 90`, como se fosse
+a mesma medida. O gráfico "ao decorrer do tempo" tinha uma coluna só, porque o mês do
+filtro era o único mês que sobrevivia ao recorte.
+
+**O que mudou junto, porque não fazia sentido separado:**
+
+- **A janela de cada linha é a rampagem dela** — da admissão ao 90º dia, ou até hoje se
+  ainda corre. `DIAS CONTRATADO` e `DIAS TRABALHADOS` cobrem o mesmo intervalo das vendas
+  exibidas ao lado; antes paravam no fim do filtro, e um vendedor aparecia com 3 dias
+  contratados e as vendas de 90.
+- **Novato sem venda aparece zerado.** A tabela é a lista de quem entrou, não a de quem
+  vendeu — quem não engatou é metade do que se olha numa rampagem, e antes ele
+  simplesmente não existia na tela.
+- **Sem período filtrado**, o recorte é *quem está em rampagem hoje*, que é a pergunta
+  padrão da tela.
+- **O clique no gráfico (`zoom`) continua recortando por data**: ele é sobre o eixo do
+  tempo, não sobre a admissão. É o que permite abrir janeiro e depois isolar março
+  dentro da curva.
+
+O rótulo do slicer nesta tela é **Admissão**, e não "Período", porque a mesma barra passa
+a significar coisas diferentes em telas vizinhas. Travado em `test/rampagem.test.mjs`.
+
 ### Vendas canceladas: uma segunda origem, sem segunda carga
 
 A tela vem do relatório **COM - Vendas Canceladas**, que é um `.pbip` separado com uma única
