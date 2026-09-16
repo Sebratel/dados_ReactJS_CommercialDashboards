@@ -866,6 +866,11 @@ table.matrix tfoot td {
   color: #5c4a00; border-radius: 6px; padding: 6px 11px; font-size: 12px; line-height: 1.45;
 }
 .banner.error { background: #FDE7E9; border-color: #D64550; color: #7a1620; }
+/* aviso de recorte: mesma forma do banner, cor fria, para não competir com o
+   dourado do texto explicativo que costuma estar logo acima */
+.banner.banner-aviso {
+  background: #EFF6FC; border-color: #CBE0F2; border-left-color: #2A6FA8; color: #1c4a70;
+}
 
 .legend { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; padding: 2px 0 4px; }
 .legend span { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--pbi-ink); }
@@ -1214,7 +1219,16 @@ table.matrix td.rowhead.clicavel:hover { background: #FCF3F4; }
   display: inline-flex; align-items: center; gap: 6px;
 }
 .usermenu-pop a.com-icone { display: flex; }
-.banner { display: flex; align-items: flex-start; gap: 7px; }
+/**
+ * O banner só vira linha flex quando TEM ícone — e é o único caso para o qual a
+ * regra foi escrita (o erro de login).
+ *
+ * Sem o `:has`, todo banner era flex, e num container flex cada `<b>` e cada pedaço
+ * de texto solto vira um ITEM: a frase se quebrava em colunas lado a lado, em vez de
+ * ser um parágrafo. Enquanto os textos eram curtos passava despercebido; a primeira
+ * frase mais longa deixou o aviso ilegível.
+ */
+.banner:has(> svg) { display: flex; align-items: flex-start; gap: 7px; }
 .banner svg { flex: 0 0 auto; margin-top: 1px; }
 table.pbi th .ord { vertical-align: -1px; margin-left: 3px; color: var(--pbi-primary); }
 .filtros .busca svg { color: var(--pbi-muted); }
