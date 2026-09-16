@@ -30,6 +30,10 @@ export function buildQuery(filtros = {}) {
   add('motivo', filtros.motivo);
   add('tipo', filtros.tipo);
   add('plano', filtros.plano);
+  // segundo período de Vendas Canceladas: recorta pela data do CANCELAMENTO,
+  // cruzando com o de/ate, que é a data da venda
+  add('cancDe', filtros.cancDe);
+  add('cancAte', filtros.cancAte);
   // recorte de período vindo do clique na coluna; cruza com de/ate no servidor
   add('zoom', filtros.zoom);
   // condomínios — nomes iguais aos da URL, então o link compartilhado e a

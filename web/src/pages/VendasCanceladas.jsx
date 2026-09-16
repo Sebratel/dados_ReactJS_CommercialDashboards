@@ -8,6 +8,18 @@ import { Tabela } from '../components/tables';
 import { brl, int, labelData, labelPeriodo } from '../format';
 import { baixar, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
+const TITULO_SERIE = {
+  venda: 'DA VENDA',
+  cancelamento: 'DO CANCELAMENTO',
+  cadastro: 'DE CADASTRO DO CLIENTE',
+};
+
+const SUB_SERIE = {
+  venda: 'mesma data do filtro de período. Para comparar com o Power BI, troque para “cadastro”: lá o gráfico agrupa por cadastro do cliente',
+  cancelamento: 'quando o contrato caiu, e não quando foi vendido — a barra de agosto inclui a venda de março cancelada em agosto',
+  cadastro: 'agrupamento do Power BI — é esta opção que reproduz os números do relatório antigo',
+};
+
 /**
  * Réplica da tela única do relatório "COM - Vendas Canceladas": contratos
  * cancelados que nunca chegaram a ser ativados — a venda perdida antes da
@@ -26,11 +38,17 @@ export default function VendasCanceladas() {
   const { filtros, alternar, alternarUnico } = useFilters();
   const { data, error, isLoading } = useDados('/canceladas', filtros);
   // 'venda' é o padrão porque é a data que o filtro de período usa; 'cadastro'
-  // reproduz o agrupamento do relatório de origem, para conferência
+  // reproduz o agrupamento do relatório de origem, para conferência; 'cancelamento'
+  // é a leitura que o segundo período abriu — quando o contrato caiu, não quando
+  // ele tinha sido vendido
   const [porData, setPorData] = useState('venda');
 
-  const bruta = porData === 'cadastro' ? data?.serieCadastro : data?.serie;
-  const serie = (bruta || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
+  const SERIES = {
+    venda: data?.serie,
+    cadastro: data?.serieCadastro,
+    cancelamento: data?.serieCancelamento,
+  };
+  const serie = (SERIES[porData] || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
 
   const motivos = (data?.porMotivo || []).filter((m) => !m.agrupado);
   const total = data?.kpis?.total || 0;
@@ -55,6 +73,11 @@ export default function VendasCanceladas() {
 
   const colunasDetalhe = [
     { key: 'dtVenda', titulo: 'DATA DA VENDA', fmt: labelData },
+    // as duas datas ficam lado a lado, e não nas pontas da tabela: são o par que se
+    // lê junto, e é o que o segundo período recorta. A coluna de motivo é larga o
+    // bastante para empurrar qualquer coisa depois dela para fora da tela.
+    { key: 'dtCancelado', titulo: 'CANCELADO EM', fmt: labelData },
+    { key: 'diasAteCancelar', titulo: 'DIAS ATÉ CANCELAR', fmt: int },
     { key: 'contrato', titulo: 'CONTRATO', align: 'left' },
     { key: 'cliente', titulo: 'CLIENTE', align: 'left' },
     { key: 'cidade', titulo: 'CIDADE', align: 'left' },
@@ -101,17 +124,36 @@ export default function VendasCanceladas() {
   ];
 
   const vazio = isLoading && !data;
+  const cancFiltrado = Boolean(filtros.cancDe || filtros.cancAte);
 
   return (
     <main className="page">
-      <SlicerBar rotuloPeriodo="Data da venda" chipsExtra={['motivo', 'tipo']} />
+      <SlicerBar
+        rotuloPeriodo="Data da venda"
+        chipsExtra={['motivo', 'tipo']}
+        periodoExtra={{ campoDe: 'cancDe', campoAte: 'cancAte', rotulo: 'Cancelamento' }}
+      />
       {error && <Erro erro={error} />}
 
       <div className="banner">
         Só entram contratos <b>cancelados</b> que <b>nunca foram ativados</b> — os dois filtros de
         página do relatório de origem. A ordem dos blocos abaixo é a mesma de lá: detalhamento,
         contagens, motivo e, por último, a evolução mensal.
+        <br />
+        Os <b>dois períodos se cruzam</b>: <i>Data da venda</i> recorta quando o contrato foi
+        vendido, <i>Cancelamento</i> quando ele caiu. Para acompanhar o cancelamento mês a mês,
+        deixe a data da venda em “Tudo”.
       </div>
+
+      {/* recorte que encolhe o total sem explicação é o caminho mais curto para
+          alguém achar que o número está errado */}
+      {cancFiltrado && !!data?.semDataCancelamento && (
+        <div className="banner banner-aviso">
+          {int(data.semDataCancelamento)} contrato{data.semDataCancelamento > 1 ? 's' : ''} cancelado
+          {data.semDataCancelamento > 1 ? 's' : ''} ficaram de fora: não têm data de cancelamento
+          registrada no Voalle. Eles voltam ao limpar o período de <i>Cancelamento</i>.
+        </div>
+      )}
 
       {/* o relatório não tem KPI aqui (os cards de lá são data/hora da carga, que
           no nosso caso vivem no topo da página), mas o total e o valor perdido são
@@ -217,10 +259,8 @@ export default function VendasCanceladas() {
 
       {/* y=1629: por último, como no relatório */}
       <Visual
-        title={`VENDAS CANCELADAS / MÊS ${porData === 'cadastro' ? 'DE CADASTRO DO CLIENTE' : 'DA VENDA'}`}
-        sub={porData === 'cadastro'
-          ? 'agrupamento do Power BI — é esta opção que reproduz os números do relatório antigo'
-          : 'mesma data do filtro de período. Para comparar com o Power BI, troque para “cadastro”: lá o gráfico agrupa por cadastro do cliente'}
+        title={`VENDAS CANCELADAS / MÊS ${TITULO_SERIE[porData]}`}
+        sub={SUB_SERIE[porData]}
         className="v-grafico"
         ia="vendas-canceladas:serie"
         actions={(
@@ -230,6 +270,7 @@ export default function VendasCanceladas() {
             onChange={setPorData}
             opcoes={[
               { id: 'venda', label: 'data da venda' },
+              { id: 'cancelamento', label: 'cancelamento' },
               { id: 'cadastro', label: 'cadastro' },
             ]}
           />
@@ -241,10 +282,11 @@ export default function VendasCanceladas() {
             barKey="canceladas"
             barName="CANCELADAS"
             /**
-             * O clique só recorta no agrupamento por DATA DA VENDA. No de cadastro do
-             * cliente a coluna é um mês de cadastro, mas o recorte de período do
-             * modelo é sobre a venda: clicar ali filtraria um mês diferente do que a
-             * coluna mostra — o tipo de erro que ninguém confere.
+             * O clique só recorta no agrupamento por DATA DA VENDA. Nos outros dois a
+             * coluna é um mês de cadastro ou de cancelamento, mas o `zoom` do modelo é
+             * sobre a venda: clicar ali filtraria um mês diferente do que a coluna
+             * mostra — o tipo de erro que ninguém confere. Para recortar por mês de
+             * cancelamento existe o seletor "Cancelamento" na barra.
              */
             onSelect={porData === 'venda' ? (p) => alternarUnico('zoom', p) : undefined}
             selecionados={porData === 'venda' && filtros.zoom ? [filtros.zoom] : []}

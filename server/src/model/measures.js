@@ -66,6 +66,27 @@ export function parseFilters(q = {}) {
     plano: asArray(q.plano),
 
     /**
+     * Período sobre a DATA DO CANCELAMENTO — o segundo período de Vendas Canceladas.
+     *
+     * Aquela tela tinha um período só, o da data da venda, e ele responde "das vendas
+     * feitas em agosto, quantas se perderam". A pergunta que faltava é a outra metade:
+     * "quantos contratos foram cancelados em agosto" — que inclui a venda de março
+     * cancelada agora, e é a que se usa para acompanhar o cancelamento mês a mês.
+     *
+     * Campo de PÁGINA, e não `de`/`ate` trocados: as duas datas são independentes e se
+     * cruzam. Também não entra no `matchDims` — `dtCancelado` só existe no contrato
+     * cancelado, então aplicá-lo no modelo viraria um filtro escondido de "cancelados"
+     * em Vendas, Ativações e no resto.
+     *
+     * ATENÇÃO à janela de dados: a carga recorta por data de CRIAÇÃO do contrato
+     * (`base.sql`), então o contrato criado antes da janela e cancelado dentro dela não
+     * está em memória para ser encontrado. `painelCanceladas` devolve `janela` para a
+     * tela poder dizer isso.
+     */
+    cancDe: q.cancDe ? String(q.cancDe).trim() : null,
+    cancAte: q.cancAte ? String(q.cancAte).trim() : null,
+
+    /**
      * Recorte de período vindo do CLIQUE numa coluna do gráfico — a chave do período,
      * já virada intervalo.
      *

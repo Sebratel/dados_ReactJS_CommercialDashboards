@@ -319,8 +319,12 @@ export const VISUAIS = {
   'vendas-canceladas:serie': {
     tela: 'vendas-canceladas',
     titulo: 'Vendas canceladas por mês',
-    oQueE: 'Contratos cancelados que nunca foram ativados, agrupados pelo mês de CADASTRO DO CLIENTE (é assim no relatório de origem), enquanto o filtro de período usa a data do contrato.',
-    recorte: (p) => ({ kpis: p.kpis, serie: serieEnxuta(p.serie) }),
+    oQueE: 'Contratos cancelados que nunca foram ativados. A tela tem três agrupamentos: por data da VENDA (padrão), por data do CANCELAMENTO (quando o contrato caiu, não quando foi vendido) e por CADASTRO DO CLIENTE, que é o do relatório de origem. A barra tem dois períodos independentes que se cruzam: data da venda e cancelamento.',
+    recorte: (p) => ({
+      kpis: p.kpis,
+      serie: serieEnxuta(p.serie),
+      serieCancelamento: serieEnxuta(p.serieCancelamento),
+    }),
   },
   'vendas-canceladas:motivo': {
     tela: 'vendas-canceladas',

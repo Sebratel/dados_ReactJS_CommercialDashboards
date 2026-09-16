@@ -156,6 +156,15 @@ export function FiltersProvider({ children }) {
        * não é um valor válido para o outro.
        */
       hg: ['dia', 'mes'].includes(params.get('hg')) ? params.get('hg') : '',
+      /**
+       * VENDAS CANCELADAS: o segundo período, sobre a DATA DO CANCELAMENTO.
+       *
+       * Sem padrão, e de propósito: o período da barra já nasce em "Este ano" pela
+       * data da venda. Um padrão aqui também recortaria pelo cancelamento sem
+       * ninguém ter pedido, e a tela abriria com menos linha do que tem.
+       */
+      cancDe: params.get('cancDe') || '',
+      cancAte: params.get('cancAte') || '',
       // condomínios: período sobre a criação do splitter. Sem padrão, porque um
       // splitter instalado em 2019 continua valendo hoje — "este ano" esconderia
       // quase toda a rede.

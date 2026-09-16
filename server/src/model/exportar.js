@@ -97,9 +97,23 @@ export const CONJUNTOS = {
     colunas: () => contrato([
       { titulo: 'TIPO SOLICITAÇÃO', valor: (f) => f.tipoSolicitacao || '' },
       { titulo: 'HORA DA VENDA', valor: (f) => f.horaVenda || '' },
+      { titulo: 'DATA DO CANCELAMENTO', valor: (f) => dataBR(f.dtCancelado) },
+      {
+        titulo: 'DIAS ATÉ CANCELAR',
+        valor: (f) => (f.dtVenda && f.dtCancelado ? inteiro(diffDays(f.dtVenda, f.dtCancelado)) : ''),
+      },
     ]),
+    // o mesmo recorte da tela, inclusive o segundo período (data do cancelamento):
+    // CSV que traz linha que a tela não mostra é a forma mais rápida de alguém
+    // apresentar um total que ninguém consegue reproduzir
     linhas: (flt) => rows('vendas', flt)
       .filter((f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao)
+      .filter((f) => {
+        if (!flt.cancDe && !flt.cancAte) return true;
+        if (!f.dtCancelado) return false;
+        return (!flt.cancDe || f.dtCancelado >= flt.cancDe)
+          && (!flt.cancAte || f.dtCancelado <= flt.cancAte);
+      })
       .sort((a, b) => (b.dtVenda || '').localeCompare(a.dtVenda || '')),
   },
   'premiacoes-pagantes': {

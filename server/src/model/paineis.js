@@ -11,7 +11,7 @@ import {
   rows, rowsExceto, semCampo, serie, serieDiaria, serieDiariaPorTecnologia,
   seriePorTecnologia, soma,
 } from './measures.js';
-import { monthKey, today } from './dates.js';
+import { diffDays, monthKey, today } from './dates.js';
 
 /**
  * Corta a lista em `limite` mas mantém as linhas ESCOLHIDAS, mesmo fora do topo.
@@ -375,8 +375,31 @@ const DIMS_CANCELADAS = ['cidade', 'tecnologia', 'equipe', 'situacao', 'vendedor
 
 export function painelCanceladas(flt) {
   // os dois filtros de página do relatório de origem, mais a marca de tipo padrão
-  const recorte = (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao;
+  const cancelado = (f) => f.statusContrato === 'Cancelado' && !f.dtAtiv && f.temTipoPadrao;
+
+  /**
+   * O segundo período da tela: a DATA DO CANCELAMENTO.
+   *
+   * Quem não tem data de cancelamento registrada sai quando o filtro está ligado — e
+   * não é detalhe: o contrato cancelado sem `cancellation_date` no Voalle existe, e
+   * some da tela sem dizer por quê. Por isso o painel conta quantos são e devolve o
+   * número; a tela avisa em vez de deixar o total encolher em silêncio.
+   */
+  const noPeriodoDeCancelamento = (f) => {
+    if (!flt.cancDe && !flt.cancAte) return true;
+    if (!f.dtCancelado) return false;
+    if (flt.cancDe && f.dtCancelado < flt.cancDe) return false;
+    if (flt.cancAte && f.dtCancelado > flt.cancAte) return false;
+    return true;
+  };
+
+  const recorte = (f) => cancelado(f) && noPeriodoDeCancelamento(f);
   const daPagina = rows('vendas', flt).filter(recorte);
+
+  // quantos o filtro de cancelamento deixou de fora por não ter a data registrada
+  const semDataCancelamento = (flt.cancDe || flt.cancAte)
+    ? rows('vendas', flt).filter((f) => cancelado(f) && !f.dtCancelado).length
+    : 0;
 
   /**
    * O classificador é montado sobre a base SEM os filtros de motivo e tipo, de
@@ -456,6 +479,10 @@ export function painelCanceladas(flt) {
       situacao: f.situacao,
       statusContrato: f.statusContrato,
       statusCancelamento: f.statusCancelamento,
+      // a data que o segundo período recorta. Sem ela na tabela, o filtro de
+      // cancelamento seria um número mudando sem nada que o justifique na linha.
+      dtCancelado: f.dtCancelado,
+      diasAteCancelar: f.dtVenda && f.dtCancelado ? diffDays(f.dtVenda, f.dtCancelado) : null,
       valor: f.valor,
       tecnologia: f.tecnologia,
     }));
@@ -466,9 +493,12 @@ export function painelCanceladas(flt) {
       valor: soma(canceladas),
       ticketMedio: canceladas.length ? soma(canceladas) / canceladas.length : 0,
     },
-    // as duas séries mostram o período: ignoram o recorte que saiu do clique nelas
+    // as séries mostram o período: ignoram o recorte que saiu do clique nelas
     serie: agrupar('dtVenda', baseDo('zoom')),
     serieCadastro: agrupar('dtCadastroCliente', baseDo('zoom')),
+    // por mês de CANCELAMENTO: é a leitura que o segundo período abriu — quantos
+    // contratos se perderam em cada mês, e não em que mês eles tinham sido vendidos
+    serieCancelamento: agrupar('dtCancelado', baseDo('zoom')),
     porMotivo: dobrarCauda(groupCount(baseDo('motivo'), classificarMotivo, { garantir: flt.motivo }), 8),
     porCidade: groupCount(baseDo('cidade'), (f) => f.cidade, { limit: 20, garantir: flt.cidade }),
     porTecnologia: groupCount(baseDo('tecnologia'), (f) => f.tecnologia, { garantir: flt.tecnologia }),
@@ -479,6 +509,7 @@ export function painelCanceladas(flt) {
     porValor: [...porValor.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 25),
     detalhe,
     detalheTotal: canceladas.length,
+    semDataCancelamento,
   };
 }
 

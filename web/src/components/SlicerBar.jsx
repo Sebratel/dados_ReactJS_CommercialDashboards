@@ -192,7 +192,14 @@ export function FiltroLateral({ titulo, grupos, onChange }) {
  * janeiro vira janeiro–hoje. O atalho deixa de ficar aceso de propósito, e o
  * resumo passa a mostrar as datas reais — o filtro conta a verdade do que somou.
  */
-export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets = PRESETS, min }) {
+/**
+ * `ativo` existe para o período SECUNDÁRIO, que pode estar desligado. O principal
+ * sempre tem valor e por isso sempre foi aceso; um segundo seletor em "Tudo" aceso
+ * do mesmo jeito diria que há um recorte onde não há.
+ */
+export function FiltroPeriodo({
+  de, ate, presetAtivo, onChange, rotulo, presets = PRESETS, min, ativo = true,
+}) {
   const [aberto, setAberto] = useState(false);
   const ref = usarFechamento(aberto, () => setAberto(false));
   const preset = presets.find((p) => p.id === presetAtivo);
@@ -202,7 +209,7 @@ export function FiltroPeriodo({ de, ate, presetAtivo, onChange, rotulo, presets 
     : de && ate ? `${labelData(de)} – ${labelData(ate)}` : 'todo o período';
 
   return (
-    <div className="filtro ativo" ref={ref}>
+    <div className={`filtro${ativo ? ' ativo' : ''}`} ref={ref}>
       <button type="button" onClick={() => setAberto((a) => !a)} title={rotulo}>
         <span className="nome">{rotulo}</span>
         <span className="valor">{resumo}</span>
@@ -325,10 +332,28 @@ export function ChipsAtivos({ campos, rotulos = ROTULOS, formatos = FORMATOS, te
  * nos chips e na contagem do botão de limpar, mas não ganham botão de seletor: elas só
  * existem como clique num visual.
  */
+/**
+ * Presets de um período SECUNDÁRIO. "Tudo" vem primeiro porque é o estado em que
+ * ele nasce: o período principal já recorta a tela, e um segundo recorte ligado por
+ * padrão esconderia linha sem ninguém ter pedido.
+ */
+const PRESETS_SECUNDARIO = ['tudo', 'hoje', 'mes', 'mesPassado', '30d', '12m', 'ano']
+  .map((id) => PRESETS.find((p) => p.id === id))
+  .filter(Boolean);
+
+/**
+ * `periodoExtra` é um SEGUNDO seletor de data para a tela que tem duas datas de
+ * verdade — hoje só Vendas Canceladas, onde a venda e o cancelamento são eventos
+ * diferentes e a pessoa precisa dos dois ("das vendas de agosto, quantas caíram" é
+ * uma pergunta; "quantos contratos caíram em agosto" é outra).
+ *
+ * Fica ao lado do período principal, e não no lugar dele: os dois se cruzam.
+ */
 export function SlicerBar({
   campos = ['cliente', 'periodo', 'vendedor', 'tecnologia', 'equipe', 'situacao'],
   rotuloPeriodo = 'Período',
   chipsExtra = [],
+  periodoExtra = null,
 }) {
   const { filtros, setFiltro, presetAtivo, contar, limpar } = useFilters();
   const { data: dims } = useFiltros();
@@ -361,7 +386,18 @@ export function SlicerBar({
    * menos do que limpava.
    */
   const daBarra = [...CAMPOS_COMERCIAL, ...chipsExtra];
-  const ativos = contar(daBarra);
+  // o período extra conta como UM filtro, e não como dois campos de data: quem o
+  // ligou escolheu um intervalo, não duas coisas para desfazer separadamente
+  const extraLigado = Boolean(periodoExtra
+    && (filtros[periodoExtra.campoDe] || filtros[periodoExtra.campoAte]));
+  const ativos = contar(daBarra) + (extraLigado ? 1 : 0);
+  const presetExtra = periodoExtra
+    ? PRESETS_SECUNDARIO.find((p) => {
+      const c = p.calc();
+      return c.de === (filtros[periodoExtra.campoDe] || '')
+        && c.ate === (filtros[periodoExtra.campoAte] || '');
+    })?.id || null
+    : null;
 
   return (
     <div className="filtros">
@@ -386,6 +422,24 @@ export function SlicerBar({
           onChange={setFiltro}
           rotulo={rotuloPeriodo}
           min={meta?.since}
+        />
+      )}
+
+      {periodoExtra && (
+        <FiltroPeriodo
+          de={filtros[periodoExtra.campoDe]}
+          ate={filtros[periodoExtra.campoAte]}
+          presetAtivo={presetExtra}
+          onChange={(patch) => {
+            const p = {};
+            if ('de' in patch) p[periodoExtra.campoDe] = patch.de;
+            if ('ate' in patch) p[periodoExtra.campoAte] = patch.ate;
+            setFiltro(p);
+          }}
+          rotulo={periodoExtra.rotulo}
+          presets={PRESETS_SECUNDARIO}
+          min={meta?.since}
+          ativo={extraLigado}
         />
       )}
 
