@@ -300,7 +300,7 @@ export const VISUAIS = {
   'rampagem:tabela': {
     tela: 'rampagem',
     titulo: 'Vendas por vendedor (novatos)',
-    oQueE: 'Cada vendedor admitido no período, com dias de casa, dias trabalhados, vendas, ativações e média por dia útil, medidos da admissão ao 90º dia (ou até hoje, se a rampagem ainda corre). Quem entrou há pouco produziu menos no total — a média por dia útil é a comparação justa. Novato sem venda alguma aparece zerado, de propósito.',
+    oQueE: 'Cada vendedor admitido no período, com dias de casa, dias trabalhados, vendas, ativações e média por dia útil, medidos da admissão ao 90º dia (ou até hoje, se a rampagem ainda corre). Quem entrou há pouco produziu menos no total — a média por dia útil é a comparação justa. Novato sem venda alguma aparece zerado, de propósito. Os filtros de vendedor, equipe e Canal (Interno/Externo) tiram a pessoa da lista, e não apenas as vendas dela.',
     recorte: (p) => ({
       kpis: p.kpis,
       dataRef: p.dataRef,

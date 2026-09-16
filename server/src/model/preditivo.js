@@ -10,6 +10,7 @@
  * filtro de período não, porque cada análise precisa da sua própria janela.
  */
 import { getState } from './store.js';
+import { matchVendedor } from './measures.js';
 import { dayWeight } from './holidays.js';
 import { addDays, diffDays, endOfMonth, monthKey, startOfMonth, today } from './dates.js';
 
@@ -283,12 +284,17 @@ function tendencias(fatos, hoje) {
 }
 
 // ------------------------------------------------ 5. previsão dos novatos
-function novatos(fatos, hoje) {
+function novatos(fatos, hoje, flt) {
   const estado = getState();
   // só quem está no time comercial: o RH traz admissões de toda a empresa, e
   // suporte/administrativo entrando na lista distorceria a referência
+  //
+  // `matchVendedor` recorta a lista pelos filtros que são da PESSOA (vendedor,
+  // equipe, situação). Aqui não é só ruído na tela: o novato de outro canal entrava
+  // com zero vendas e projeção zero, e ia direto para a conta de "abaixo do ritmo".
   const emRampagem = [...estado.sellersByName.values()]
     .filter((s) => estado.teamsByName.has(s.vendedor))
+    .filter((s) => matchVendedor(s.vendedor, flt, estado.teamsByName.get(s.vendedor)))
     .filter((s) => s.admissaoReal && s.admissaoReal <= hoje && s.dataApos90 >= hoje);
 
   // referência: quantas vendas os veteranos fizeram nos 90 primeiros dias
@@ -423,7 +429,7 @@ export function analisar(flt) {
     funil: f,
     riscos: riscos(fatos, hoje, prazos),
     tendencias: tendencias(fatos, hoje),
-    novatos: novatos(fatos, hoje),
+    novatos: novatos(fatos, hoje, flt),
     sazonalidade: sazonalidade(fatos, hoje),
     cancelamento: cancelamento(fatos, hoje),
     concentracao: concentracao(fatos, hoje),

@@ -93,6 +93,35 @@ function matchDims(f, flt) {
 }
 
 /**
+ * O mesmo filtro, aplicado à PESSOA em vez de ao fato.
+ *
+ * `vendedor`, `equipe`, `situacao` (o seletor que a tela chama de "Canal") e o
+ * marcador de ativo vêm da Comercial_Teams: descrevem o vendedor, não a venda. As
+ * telas que montam a lista a partir da dimensão de vendedores — Rampagem,
+ * Premiações, a previsão de novatos — precisam aplicá-los à LISTA, e não só aos
+ * fatos.
+ *
+ * Sem isso o filtro mente por omissão: "Canal: Interno" zera as vendas do externo
+ * mas mantém a linha dele na tabela, e a tela mostra, em dez linhas zeradas, gente
+ * que o filtro dizia ter tirado. Com escopo de equipe (Configurações → Acesso) era
+ * pior: a lista trazia o nome de vendedores de equipes que a pessoa não pode ver.
+ *
+ * `tecnologia`, `cidade` e `canal` (Canal Voalle) ficam de fora de propósito — são
+ * atributos da VENDA. Pessoa não tem tecnologia; deduzir uma a partir das vendas
+ * faria o novato que ainda não vendeu sumir justamente da tela que existe para
+ * mostrá-lo.
+ */
+export function matchVendedor(nome, flt, team) {
+  const t = team || getState().teamsByName.get(nome);
+  if (flt.vendedor && !flt.vendedor.includes(nome)) return false;
+  if (flt.equipe && !flt.equipe.includes(t?.equipe || '')) return false;
+  if (flt.situacao && !flt.situacao.includes(t?.situacao || '')) return false;
+  if (flt.vendedorAtivo
+    && String(t?.ativo ?? null).toUpperCase() !== flt.vendedorAtivo.toUpperCase()) return false;
+  return true;
+}
+
+/**
  * Cópia do filtro sem UM campo.
  *
  * É a base do cross-highlight: o visual que MOSTRA um campo não pode ser calculado
@@ -477,9 +506,7 @@ export function premiacoes(flt) {
     // em aberto e reaparecia aqui mesmo estando fora da operação comercial.
     // Premiação é dinheiro a pagar: o desligado não pode concorrer.
     if (!team.ativo) continue;
-    if (flt.vendedor && !flt.vendedor.includes(nome)) continue;
-    if (flt.equipe && !flt.equipe.includes(team.equipe)) continue;
-    if (flt.situacao && !flt.situacao.includes(team.situacao)) continue;
+    if (!matchVendedor(nome, flt, team)) continue;
 
     const grupo = grupoVendedor(seller, dataRef);
     const situacao = team.situacao || 'Externo';
@@ -572,6 +599,9 @@ export function rampagem(flt, granularidade = 'mes') {
   const selecionados = new Map();
   for (const s of state.sellersByName.values()) {
     if (!state.teamsByName.has(s.vendedor) || !s.admissaoReal) continue;
+    // os filtros de PESSOA recortam a lista, não só os fatos: com "Canal: Interno"
+    // o externo sai da tabela em vez de ficar nela zerado (ver `matchVendedor`)
+    if (!matchVendedor(s.vendedor, flt, state.teamsByName.get(s.vendedor))) continue;
     if (temPeriodo) {
       if (de && s.admissaoReal < de) continue;
       if (ate && s.admissaoReal > ate) continue;

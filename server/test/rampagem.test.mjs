@@ -41,9 +41,9 @@ const venda = (vendedor, data, contrato) => ({
   created_key: `K-${contrato}`,
 });
 
-const equipe = (vendedores) => vendedores.map((v) => ({
-  vendedores: v, equipes: 'EQUIPE A', situacao: 'PROPRIO', ativo: 'TRUE',
-}));
+const equipe = (vendedores) => vendedores.map((v) => (Array.isArray(v)
+  ? { vendedores: v[0], equipes: v[1], situacao: v[2], ativo: 'TRUE' }
+  : { vendedores: v, equipes: 'EQUIPE A', situacao: 'PROPRIO', ativo: 'TRUE' }));
 
 /** `sellers` + `senior` precisam casar pelo nome: a admissão só vale se vier do RH. */
 const admissoes = (pares) => ({
@@ -158,6 +158,38 @@ test('readmitido: a rampagem começa no vínculo novo, não na carreira inteira'
   const r = rampagem(janeiro());
   assert.equal(r.kpis.vendas, 1, 'venda anterior à admissão não é rampagem do vínculo novo');
   assert.deepEqual(r.serie.map((m) => m.periodo), ['2026-02']);
+});
+
+/**
+ * O filtro tem de TIRAR a linha, não zerá-la.
+ *
+ * `situacao` é o seletor que a tela chama de "Canal" (Interno/Externo) e é atributo
+ * da pessoa, não da venda. Antes ele só recortava os fatos: o externo perdia as
+ * vendas mas continuava na tabela, zerado, ao lado dos internos — e a tela mostrava
+ * exatamente a gente que o filtro dizia ter tirado.
+ */
+test('filtro de pessoa (Canal/equipe/vendedor) tira a linha da tabela, não a zera', () => {
+  const INT = 'IRIS INTERNA';
+  const EXT = 'EDU EXTERNO';
+  const { sellers, senior } = admissoes([[INT, '2026-01-05'], [EXT, '2026-01-06']]);
+  setSource('base', [
+    venda(INT, '2026-01-20', 9301),
+    venda(EXT, '2026-01-21', 9302),
+  ]);
+  setSource('aloc', []); setSource('phone', []); setSource('pagto', []);
+  setSource('teams', equipe([[INT, 'EQUIPE A', 'Interno'], [EXT, 'EQUIPE B', 'Externo']]));
+  setSource('sellers', sellers); setSource('senior', senior);
+  build();
+
+  const r = rampagem(parseFilters({ de: '2026-01-01', ate: '2026-01-31', situacao: 'Interno' }));
+  assert.ok(linha(r, INT), 'quem o filtro seleciona continua na tabela');
+  assert.equal(linha(r, EXT), undefined, 'o externo sai da tabela em vez de ficar zerado');
+  assert.ok(!r.novatos.some((n) => n.vendedor === EXT), 'e sai também da relação de novatos');
+  assert.equal(r.kpis.novatos, 1, 'o cartão conta o que a tela mostra');
+
+  const porEquipe = rampagem(parseFilters({ de: '2026-01-01', ate: '2026-01-31', equipe: 'EQUIPE B' }));
+  assert.equal(linha(porEquipe, INT), undefined, 'mesmo recorte vale para o filtro de equipe');
+  assert.ok(linha(porEquipe, EXT));
 });
 
 test('o clique no gráfico continua recortando por data', () => {
