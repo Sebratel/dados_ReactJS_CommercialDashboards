@@ -7,7 +7,7 @@ import {
   ColunasEmpilhadas, ComboChart, CORES, corDaCategoria,
 } from '../components/charts';
 import { brl, int, labelMes } from '../format';
-import { baixar, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Aba RESUMO - VENDAS.
@@ -62,7 +62,7 @@ export function PaginaResumoVendas({ filtros }) {
   const exportarSerie = (nome, gr) => () => {
     const colunas = [{ key: 'label', titulo: 'PERÍODO' },
       ...gr.series.map((s) => ({ key: s, titulo: s.toUpperCase() }))];
-    baixar(tabelaParaCSV(colunas, gr.dados), `${nome}.csv`);
+    baixarCSV(nome, tabelaParaCSV(colunas, gr.dados), sufixoPeriodo(filtros, ['resDe', 'resAte']));
   };
 
   if (error) return <Erro erro={error} />;

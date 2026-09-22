@@ -6,7 +6,7 @@ import { BotaoExportar, Erro, Loading, Segmentado, Visual } from '../components/
 import { Tabela } from '../components/tables';
 import { escalaGradiente3 } from '../components/charts';
 import { brl, int, labelData } from '../format';
-import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 // cores do relatório (linearGradient3 das colunas de premiação)
 const CORES_FAIXA = ['#D8A579', '#BACDDF', '#7FCE79'];
@@ -105,9 +105,10 @@ export default function Premiacoes() {
         actions={(
           <>
             <AlternadorEscala porSituacao={porSituacao} onChange={setPorSituacao} />
-            <BotaoExportar onExportar={() => baixar(
-              `premiacoes-mais-60-dias_${sufixoPeriodo(filtros)}.csv`,
+            <BotaoExportar onExportar={() => baixarCSV(
+              'premiacoes-mais-60-dias',
               tabelaParaCSV(colunasPagantes, pagantes),
+              sufixoPeriodo(filtros),
             )} />
           </>
         )}
@@ -137,9 +138,10 @@ export default function Premiacoes() {
         actions={(
           <>
             <AlternadorEscala porSituacao={porSituacao} onChange={setPorSituacao} />
-            <BotaoExportar onExportar={() => baixar(
-              `premiacoes-ate-60-dias_${sufixoPeriodo(filtros)}.csv`,
+            <BotaoExportar onExportar={() => baixarCSV(
+              'premiacoes-ate-60-dias',
               tabelaParaCSV(colunasAtivos, ativos),
+              sufixoPeriodo(filtros),
             )} />
           </>
         )}

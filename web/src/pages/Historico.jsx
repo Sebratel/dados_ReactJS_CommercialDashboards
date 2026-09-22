@@ -6,7 +6,7 @@ import { BotaoExportar, Erro, Loading, Segmentado, Visual } from '../components/
 import { Matriz } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { int, labelDia, labelMes } from '../format';
-import { baixar, matrizParaCSV, sufixoPeriodo } from '../exportar';
+import { baixarCSV, matrizParaCSV, sufixoPeriodo } from '../exportar';
 
 /**
  * Páginas "HISTÓRICO": matriz vendedor × período com mapa de calor.
@@ -116,10 +116,11 @@ export function Historico({ dataset, titulo, rotuloPeriodo }) {
                 + 'para caber na tela; "Dia" força o dia mesmo em período longo.'}
             />
             {data && (
-              <BotaoExportar onExportar={() => baixar(
-                `${dataset === 'vendas' ? 'vendas' : 'ativacoes'}-por-vendedor-matriz_${sufixoPeriodo(filtros)}.csv`,
+              <BotaoExportar onExportar={() => baixarCSV(
+                `${dataset === 'vendas' ? 'vendas' : 'ativacoes'}-por-vendedor-matriz`,
                 // o CSV sai do dado COMPLETO, nunca da visão recortada
                 matrizParaCSV(data, rotulo),
+                sufixoPeriodo(filtros),
               )}
               />
             )}

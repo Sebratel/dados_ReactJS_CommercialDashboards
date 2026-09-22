@@ -3,7 +3,7 @@ import { BotaoExportar, Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../co
 import { COR_STATUS, ColunasEmpilhadas, CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, labelDataHora, labelMes, pct } from '../format';
-import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
+import { baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Sub-página NEGOCIAÇÕES do relatório "COM - Leads & Negociações" (2800x3000,
@@ -237,9 +237,10 @@ export function PaginaNegociacoes({ filtros }) {
       <div className="grid linha-cinco">
         <Visual title="RESPONSÁVEL" flush className="v-meia" ia="negociacoes:responsavel"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              'negociacoes-por-responsavel.csv',
+            <BotaoExportar onExportar={() => baixarCSV(
+              'negociacoes-por-responsavel',
               tabelaParaCSV(dimensao('RESPONSÁVEL'), data?.porResponsavel || []),
+              sufixoPeriodo(filtros, ['negDe', 'negAte']),
             )} />
           )}
         >

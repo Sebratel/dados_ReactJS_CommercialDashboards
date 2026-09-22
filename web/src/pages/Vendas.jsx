@@ -6,7 +6,7 @@ import { BotaoExportar, Erro, KpiStack, Legenda, Loading, Visual } from '../comp
 import { BarrasHorizontais, ColunasPorTecnologia, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, dec1, int, labelDia, labelMesLongo, labelPeriodo, labelTotalVendedores } from '../format';
-import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Vendas() {
   const { filtros, alternar, alternarUnico } = useFilters();
@@ -82,9 +82,10 @@ export default function Vendas() {
           flush
           className="v-tabela"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              `vendas-por-vendedor_${sufixoPeriodo(filtros)}.csv`,
+            <BotaoExportar onExportar={() => baixarCSV(
+              'vendas-por-vendedor',
               tabelaParaCSV(colunasVendedor, data?.porVendedor || []),
+              sufixoPeriodo(filtros),
             )} />
           )}
         >

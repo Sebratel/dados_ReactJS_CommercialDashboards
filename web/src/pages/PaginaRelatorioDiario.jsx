@@ -5,7 +5,7 @@ import { CHUVA, CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { brl, dec1, int, labelData, pct } from '../format';
-import { baixar, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Aba RELATÓRIO DIÁRIO — a tela mais densa do relatório de origem: 34 visuais.
@@ -252,8 +252,10 @@ export function PaginaRelatorioDiario({ filtros }) {
       className={`v-tabela bloco-${tom}`}
       ia={ia}
       actions={!vazio && (
-        <BotaoExportar onExportar={() => baixar(
-          tabelaParaCSV(COLUNAS_META('CIDADE', rotulo), bloco.linhas), `${nome}.csv`,
+        <BotaoExportar onExportar={() => baixarCSV(
+          nome,
+          tabelaParaCSV(COLUNAS_META('CIDADE', rotulo), bloco.linhas),
+          sufixoPeriodo(filtros, ['diaDe', 'diaAte']),
         )}
         />
       )}

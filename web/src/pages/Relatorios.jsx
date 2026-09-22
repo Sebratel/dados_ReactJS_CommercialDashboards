@@ -6,7 +6,7 @@ import { CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { brl, int, labelData, labelDataHora } from '../format';
-import { baixar, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 import { PaginaResumoVendas } from './PaginaResumoVendas';
 import { PaginaQuadroEquipes } from './PaginaQuadroEquipes';
 import { PaginaRelatorioDiario } from './PaginaRelatorioDiario';
@@ -144,8 +144,10 @@ function PaginaGeral({ filtros }) {
     { key: 'vendedor', titulo: 'VENDEDOR', align: 'left' },
   ];
 
-  const exportar = (colunas, dados, nome) => () => baixar(
-    tabelaParaCSV(colunas, dados), `${nome}.csv`,
+  // o período desta sub-página é a criação do contrato (`relDe`/`relAte`), e não o
+  // comercial da barra principal
+  const exportar = (colunas, dados, nome) => () => baixarCSV(
+    nome, tabelaParaCSV(colunas, dados), sufixoPeriodo(filtros, ['relDe', 'relAte']),
   );
 
   if (error) return <Erro erro={error} />;

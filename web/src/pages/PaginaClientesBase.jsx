@@ -5,7 +5,7 @@ import { BotaoExportar, Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../co
 import { ColunasEmpilhadas, CORES, corDaCategoria } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, labelData, labelMes } from '../format';
-import { baixar, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Aba CLIENTES BASE — o tamanho da base de clientes conectados.
@@ -163,10 +163,14 @@ export function PaginaClientesBase({ filtros }) {
           className="v-grafico"
           ia="relatorios:base-cidade"
           actions={!vazio && (
-            <BotaoExportar onExportar={() => baixar(tabelaParaCSV(
-              [{ key: 'label', titulo: 'MÊS' }, ...porCidade.series.map((s) => ({ key: s, titulo: s.toUpperCase() }))],
-              porCidade.dados,
-            ), 'base-por-cidade.csv')}
+            <BotaoExportar onExportar={() => baixarCSV(
+              'base-por-cidade',
+              tabelaParaCSV(
+                [{ key: 'label', titulo: 'MÊS' }, ...porCidade.series.map((s) => ({ key: s, titulo: s.toUpperCase() }))],
+                porCidade.dados,
+              ),
+              sufixoPeriodo(filtros, ['baseDe', 'baseAte']),
+            )}
             />
           )}
         >
@@ -209,7 +213,11 @@ export function PaginaClientesBase({ filtros }) {
           sub={vazio ? null : legendaTecnologia(data)}
           className="v-meia"
           actions={!vazio && (
-            <BotaoExportar onExportar={() => baixar(tabelaParaCSV(colunasTec, dadosTec), 'base-por-tecnologia.csv')} />
+            <BotaoExportar onExportar={() => baixarCSV(
+              'base-por-tecnologia',
+              tabelaParaCSV(colunasTec, dadosTec),
+              sufixoPeriodo(filtros, ['baseDe', 'baseAte']),
+            )} />
           )}
         >
           {vazio ? <Loading /> : dadosTec.length

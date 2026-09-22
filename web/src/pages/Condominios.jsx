@@ -5,7 +5,7 @@ import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/
 import { ComboChart, CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { int, labelData, labelMes, pct, pct2 } from '../format';
-import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
+import { baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Réplica da página "CONDOMÍNIOS" do relatório Power BI "COM - Condomínios":
@@ -283,9 +283,10 @@ export default function Condominios() {
           actions={(
             <BotaoExportar
               titulo={`Baixar as ${int((data?.porCondominio || []).length)} linhas desta tabela. Para todos os ${int(data?.porCondominioTotal || 0)} condomínios do filtro, use o CSV completo de ocupação por splitter, no primeiro visual.`}
-              onExportar={() => baixar(
-                'condominios-por-condominio.csv',
+              onExportar={() => baixarCSV(
+                'condominios-por-condominio',
                 tabelaParaCSV(colunasCondominio, data?.porCondominio || []),
+                sufixoPeriodo(filtros, ['criadoDe', 'criadoAte']),
               )}
             />
           )}
@@ -300,9 +301,10 @@ export default function Condominios() {
           flush
           className="v-meia"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              'condominios-por-cidade.csv',
+            <BotaoExportar onExportar={() => baixarCSV(
+              'condominios-por-cidade',
               tabelaParaCSV(colunasCidade, data?.porCidade || []),
+              sufixoPeriodo(filtros, ['criadoDe', 'criadoAte']),
             )} />
           )}
         >
@@ -324,9 +326,10 @@ export default function Condominios() {
           flush
           className="v-meia"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              'condominios-aprovacoes-por-cidade.csv',
+            <BotaoExportar onExportar={() => baixarCSV(
+              'condominios-aprovacoes-por-cidade',
               tabelaParaCSV(colunasMatriz, data?.matriz?.linhas || []),
+              sufixoPeriodo(filtros, ['criadoDe', 'criadoAte']),
             )} />
           )}
         >

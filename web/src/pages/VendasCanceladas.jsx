@@ -6,7 +6,7 @@ import { BotaoExportar, Erro, Kpi, Loading, Segmentado, Visual } from '../compon
 import { BarrasHorizontais, ComboChart, CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, labelData, labelPeriodo } from '../format';
-import { baixar, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 const TITULO_SERIE = {
   venda: 'DA VENDA',
@@ -239,9 +239,10 @@ export default function VendasCanceladas() {
           className="v-meia"
           ia="vendas-canceladas:motivo"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              `canceladas-por-motivo_${sufixoPeriodo(filtros)}.csv`,
+            <BotaoExportar onExportar={() => baixarCSV(
+              'canceladas-por-motivo',
               tabelaParaCSV(contagem('MOTIVO'), data?.porMotivo || []),
+              sufixoPeriodo(filtros),
             )} />
           )}
         >

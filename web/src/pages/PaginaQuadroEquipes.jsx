@@ -3,7 +3,7 @@ import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/
 import { CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, pct } from '../format';
-import { baixar, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Aba QUADRO EQUIPES — uma tabela só, e a mais direta do relatório.
@@ -83,7 +83,11 @@ export function PaginaQuadroEquipes({ filtros }) {
           className="v-matriz"
           ia="relatorios:equipes"
           actions={!vazio && (
-            <BotaoExportar onExportar={() => baixar(tabelaParaCSV(colunas, data.linhas), 'quadro-de-equipes.csv')} />
+            <BotaoExportar onExportar={() => baixarCSV(
+              'quadro-de-equipes',
+              tabelaParaCSV(colunas, data.linhas),
+              sufixoPeriodo(filtros, ['eqpDe', 'eqpAte']),
+            )} />
           )}
         >
           {vazio ? <Loading /> : data.linhas.length

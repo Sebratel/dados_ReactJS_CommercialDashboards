@@ -12,7 +12,7 @@ import {
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { int, labelData, labelDataHora, labelMes, pct } from '../format';
-import { baixar, baixarDoServidor, tabelaParaCSV } from '../exportar';
+import { baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
  * Réplica do relatório Power BI "COM - Leads & Negociações".
@@ -297,9 +297,10 @@ function PaginaLeads({ filtros }) {
           flush
           className="v-meia"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              'leads-por-motivo.csv',
+            <BotaoExportar onExportar={() => baixarCSV(
+              'leads-por-motivo',
               tabelaParaCSV(contagem('MOTIVO'), data?.porMotivo || []),
+              sufixoPeriodo(filtros, ['leadDe', 'leadAte']),
             )} />
           )}
         >
@@ -336,9 +337,10 @@ function PaginaLeads({ filtros }) {
         flush
         className="v-tabela-alta"
         actions={(
-          <BotaoExportar onExportar={() => baixar(
-            'leads-status-por-vendedor.csv',
+          <BotaoExportar onExportar={() => baixarCSV(
+            'leads-status-por-vendedor',
             tabelaParaCSV(colunasMatriz, data?.matrizVendedor?.linhas || []),
+            sufixoPeriodo(filtros, ['leadDe', 'leadAte']),
           )} />
         )}
       >

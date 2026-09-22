@@ -6,7 +6,7 @@ import { BotaoExportar, Erro, KpiStack, Legenda, Loading, Visual } from '../comp
 import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { dec1, int, labelData, labelPeriodo } from '../format';
-import { baixar, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 export default function Rampagem() {
   const { filtros, alternar, alternarUnico } = useFilters();
@@ -92,9 +92,10 @@ export default function Rampagem() {
           flush
           className="v-tabela"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              `rampagem-vendas-por-vendedor_${sufixoPeriodo(filtros)}.csv`,
+            <BotaoExportar onExportar={() => baixarCSV(
+              'rampagem-vendas-por-vendedor',
               tabelaParaCSV(colunasTabela, data?.tabela || []),
+              sufixoPeriodo(filtros),
             )} />
           )}
         >
@@ -115,9 +116,10 @@ export default function Rampagem() {
           flush
           className="v-tabela"
           actions={(
-            <BotaoExportar onExportar={() => baixar(
-              `rampagem-novatos_${sufixoPeriodo(filtros)}.csv`,
+            <BotaoExportar onExportar={() => baixarCSV(
+              'rampagem-novatos',
               tabelaParaCSV(colunasNovatos, data?.novatos || []),
+              sufixoPeriodo(filtros),
             )} />
           )}
         >
