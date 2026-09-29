@@ -22,6 +22,12 @@ import {
   painelCondominios, parseFiltrosCondominios,
 } from '../model/condominios.js';
 import {
+  campanhasPronto, filtrosCampanhas, getEstadoCampanhas, parseFiltrosCampanhas,
+} from '../model/campanhas.js';
+import {
+  painelCampanhasAtendimentos, painelCampanhasPlataforma, painelCampanhasVisaoGeral,
+} from '../model/paineis-campanhas.js';
+import {
   filtrosBase, filtrosClima, filtrosDiario, filtrosEquipes, filtrosGeral,
   filtrosPesquisa, filtrosResumo,
   getEstadoRelatorios, painelBase, painelClima, painelDiario, painelEquipes,
@@ -66,12 +72,28 @@ api.use((req, res, next) => {
   if (req.path.startsWith('/negociacoes')) return next();
   if (req.path.startsWith('/desempenho')) return next();
   if (req.path.startsWith('/relatorios')) return next();
+  if (req.path.startsWith('/campanhas')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
     return res.status(503).json({ error: 'Carregando dados do Voalle/MariaDB…', carregando: true });
   }
   return next();
 });
+
+/**
+ * 503 olhando o modelo de campanhas.
+ *
+ * As tabelas de anúncio são de CARGA, não de esteira: podem estar vazias sem que
+ * nada esteja errado. Por isso o guarda aceita ter só os atendimentos — a tela
+ * abre e diz que o lado do investimento não veio, em vez de ficar em "carregando"
+ * para sempre.
+ */
+const exigirCampanhas = (req, res, next) => {
+  if (!campanhasPronto()) {
+    return res.status(503).json({ error: 'Carregando as campanhas de marketing…', carregando: true });
+  }
+  return next();
+};
 
 /** 503 com a mesma cara do global, mas olhando o modelo de condomínios. */
 const exigirCondominios = (req, res, next) => {
@@ -123,6 +145,7 @@ function meta() {
   const c = getEstadoCondominios();
   const r = getEstadoRelatorios();
   const l = getEstadoLeads();
+  const mkt = getEstadoCampanhas();
   return {
     version: s.version,
     builtAt: s.builtAt,
@@ -130,7 +153,7 @@ function meta() {
     contratos: s.facts.length,
     // as fontes dos dois modelos no mesmo lugar: o indicador do topo já acende
     // quando qualquer uma falha, e condomínios não fica com falha invisível
-    sources: { ...s.sources, ...c.fontes, ...l.fontes },
+    sources: { ...s.sources, ...c.fontes, ...l.fontes, ...mkt.fontes },
     leads: {
       version: l.versao,
       builtAt: l.geradoEm,
@@ -146,6 +169,14 @@ function meta() {
       portas: c.fatos.length,
       splitters: c.splitters.length,
       ready: condominiosPronto(),
+    },
+    campanhas: {
+      version: mkt.versao,
+      builtAt: mkt.geradoEm,
+      buildMs: mkt.buildMs ?? null,
+      campanhas: mkt.campanhas.length,
+      atendimentos: mkt.atendimentos.length,
+      ready: campanhasPronto(),
     },
     relatorios: {
       version: r.versao,
@@ -324,6 +355,28 @@ api.get('/condominios/filtros', auth('condominios'), exigirCondominios, (req, re
 
 api.get('/condominios', auth('condominios'), exigirCondominios, (req, res) => {
   res.json(withMeta(painelCondominios(parseFiltrosCondominios(req.query))));
+});
+
+// ------------------------------------------------------- CAMPANHAS DE MARKETING
+/** Opções dos seletores da tela de campanhas (dimensões próprias). */
+api.get('/campanhas/filtros', auth('campanhas'), exigirCampanhas, (req, res) => {
+  res.json(withMeta(filtrosCampanhas()));
+});
+
+api.get('/campanhas/google', auth('campanhas'), exigirCampanhas, (req, res) => {
+  res.json(withMeta(painelCampanhasPlataforma('google', parseFiltrosCampanhas(req.query))));
+});
+
+api.get('/campanhas/meta', auth('campanhas'), exigirCampanhas, (req, res) => {
+  res.json(withMeta(painelCampanhasPlataforma('meta', parseFiltrosCampanhas(req.query))));
+});
+
+api.get('/campanhas/atendimentos', auth('campanhas'), exigirCampanhas, (req, res) => {
+  res.json(withMeta(painelCampanhasAtendimentos(parseFiltrosCampanhas(req.query))));
+});
+
+api.get('/campanhas', auth('campanhas'), exigirCampanhas, (req, res) => {
+  res.json(withMeta(painelCampanhasVisaoGeral(parseFiltrosCampanhas(req.query))));
 });
 
 // --------------------------------------------------------- LEADS E NEGOCIAÇÕES

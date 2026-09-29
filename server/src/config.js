@@ -103,6 +103,10 @@ export const config = {
     // medido no banco de produção. A 15 minutos isso é 2% do tempo com o Voalle
     // ocupado por esta tela, e nenhum dos quatro números muda de minuto a minuto.
     rel: num(process.env.REFRESH_REL_MS, 900000), // 15 min
+    // campanhas de marketing: Google e Meta são tabelas de carga (762 e 2.177
+    // linhas, alimentadas por importação, não por esteira), e o recorte do Matrix
+    // já sai filtrado por tag no banco. Nada aqui muda de minuto a minuto.
+    mkt: num(process.env.REFRESH_MKT_MS, 900000), // 15 min
     // clima: a verificação é de hora em hora, mas a BUSCA acontece uma vez por dia —
     // `atualizarClima` só vai à rede se o cache não for de hoje. O intervalo curto
     // existe para o dia virar sem esperar reinício, não para pedir de novo.

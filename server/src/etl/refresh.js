@@ -10,6 +10,10 @@ import { construirLeads, setFonteErroLeads, setFonteLeads } from '../model/leads
 import {
   construirRelatorios, setFonteErroRelatorios, setFonteRelatorios,
 } from '../model/relatorios.js';
+import {
+  construirCampanhas, setFonteCampanhas, setFonteErroCampanhas,
+} from '../model/campanhas.js';
+import { GOOGLE_ADS_SQL, MATRIX_CAMPANHAS_SQL, META_ADS_SQL } from '../sql/marketing.js';
 import { atualizarClima } from '../clima.js';
 
 /**
@@ -71,6 +75,21 @@ const SOURCES = {
   fila: { grupo: 'rel', destino: 'relatorios', alvo: 'backlog', run: () => queryFile('backlog', []) },
   // A ponte histórica do MariaDB, que só este modelo usa.
   ponte: { grupo: 'rel', destino: 'relatorios', alvo: 'ponte', run: () => maria.query(GENERAL_COMMERCIAL_SQL, [config.relSince]) },
+
+  /**
+   * --- Campanhas de Marketing (modelo próprio) ---
+   *
+   * As três no MariaDB. Google e Meta vêm inteiras: são 762 e 2.177 linhas, e
+   * recortá-las por data economizaria nada e esconderia o histórico de campanha
+   * que rodou antes da janela.
+   *
+   * O Matrix é o oposto — 605 mil linhas, das quais ~14 mil têm tag de marketing.
+   * O recorte por tag está no WHERE (ver sql/marketing.js) e o de data usa
+   * `relSince`, a mesma janela do outro conjunto pesado.
+   */
+  googleAds: { grupo: 'mkt', destino: 'campanhas', alvo: 'google', run: () => maria.query(GOOGLE_ADS_SQL) },
+  metaAds: { grupo: 'mkt', destino: 'campanhas', alvo: 'meta', run: () => maria.query(META_ADS_SQL) },
+  matrixCampanhas: { grupo: 'mkt', destino: 'campanhas', alvo: 'matrix', run: () => maria.query(MATRIX_CAMPANHAS_SQL, [config.relSince]) },
 };
 
 const rodando = new Map();
@@ -141,6 +160,12 @@ const DESTINOS = {
     erro: setFonteErroLeads,
     construir: construirLeads,
     resumo: (s) => `${s.leads.length} leads · ${s.negociacoes.length} negociações · ${s.vendedores.length} vendedores`,
+  },
+  campanhas: {
+    set: setFonteCampanhas,
+    erro: setFonteErroCampanhas,
+    construir: construirCampanhas,
+    resumo: (s) => `${s.campanhas.length} campanhas · ${s.anuncios.length} dias de veiculação · ${s.atendimentos.length} atendimentos tagueados`,
   },
   relatorios: {
     set: setFonteRelatorios,
@@ -265,7 +290,7 @@ export async function refreshAll() {
   await refreshGroup('dims');
   await Promise.all([
     refreshGroup('full'), refreshSource('phone'), refreshGroup('cond'), refreshGroup('crm'),
-    refreshGroup('rel'), atualizarClima(),
+    refreshGroup('rel'), refreshGroup('mkt'), atualizarClima(),
   ]);
 }
 
@@ -277,6 +302,7 @@ export function startScheduler() {
     cond: config.refresh.cond,
     crm: config.refresh.crm,
     rel: config.refresh.rel,
+    mkt: config.refresh.mkt,
   };
   // O clima não é banco nosso: uma busca por dia, e só. Ver src/clima.js.
   if (config.refresh.clima > 0) {

@@ -12,6 +12,8 @@ import {
   duracaoTexto, linhasLeads, linhasNegociacoes, parseFiltrosLeads,
   parseFiltrosNegociacoes,
 } from './leads.js';
+import { parseFiltrosCampanhas } from './campanhas.js';
+import { linhasAtendimentosCampanhas, linhasCampanhasAnuncio } from './paineis-campanhas.js';
 
 const BOM = '﻿';
 
@@ -384,6 +386,57 @@ export const CONJUNTOS = {
       .slice()
       .sort((a, b) => b.negociacaoId - a.negociacaoId),
   },
+
+  // ------------------------------------------------------------- campanhas
+  // `escopo: 'campanhas'` pelo mesmo motivo dos de condomínio: esta tela tem o
+  // próprio par de datas (`cde`/`cate`) e as próprias dimensões.
+  'campanhas-atendimentos': {
+    titulo: 'Campanhas — atendimentos tagueados',
+    descricao: 'Um atendimento do Matrix por linha, com a campanha que a tag atribuiu e a classificação do desfecho.',
+    tela: 'campanhas',
+    arquivo: 'campanhas-atendimentos',
+    escopo: 'campanhas',
+    colunas: () => [
+      { titulo: 'PROTOCOLO', valor: (a) => a.protocolo },
+      { titulo: 'ENTRADA', valor: (a) => dataBR(a.entrada) },
+      { titulo: 'ATENDIMENTO', valor: (a) => dataBR(a.atendimento) },
+      { titulo: 'FINALIZAÇÃO', valor: (a) => dataBR(a.finalizacao) },
+      { titulo: 'CONTATO', valor: (a) => a.contato },
+      { titulo: 'TELEFONE', valor: (a) => a.telefone },
+      { titulo: 'CANAL', valor: (a) => a.canal },
+      { titulo: 'ATIVO/RECEPTIVO', valor: (a) => a.ativoReceptivo },
+      { titulo: 'ATENDENTE', valor: (a) => a.atendente },
+      { titulo: 'CLASSIFICAÇÃO', valor: (a) => a.classificacao },
+      { titulo: 'VENDA CONCLUÍDA', valor: (a) => (a.venda ? 'Sim' : 'Não') },
+      // a identidade resolvida, e a tag crua ao lado: quem for conferir a
+      // heurística precisa ver as duas na mesma linha
+      { titulo: 'CAMPANHA(S)', valor: (a) => a.identidades.map((i) => `${i.plataforma}|${i.familia}|${i.cidade || 'todas'}`).join(' | ') },
+      { titulo: 'TAG DE ORIGEM', valor: (a) => a.identidades.map((i) => i.bruto).join(' | ') },
+    ],
+    linhas: (flt) => linhasAtendimentosCampanhas(flt),
+  },
+  'campanhas-anuncios': {
+    titulo: 'Campanhas — investimento em anúncio',
+    descricao: 'Uma campanha de Google ou Meta por linha, com investimento, entrega e custo unitário no período.',
+    tela: 'campanhas',
+    arquivo: 'campanhas-anuncios',
+    escopo: 'campanhas',
+    colunas: () => [
+      { titulo: 'PLATAFORMA', valor: (c) => c.plataforma },
+      { titulo: 'CAMPANHA', valor: (c) => c.campanha },
+      { titulo: 'TIPO', valor: (c) => c.familia },
+      { titulo: 'CIDADE', valor: (c) => c.cidade },
+      { titulo: 'DE', valor: (c) => dataBR(c.de) },
+      { titulo: 'ATÉ', valor: (c) => dataBR(c.ate) },
+      { titulo: 'INVESTIMENTO', valor: (c) => numBR(c.investimento) },
+      { titulo: 'IMPRESSÕES', valor: (c) => inteiro(c.impressoes) },
+      { titulo: 'CLIQUES', valor: (c) => inteiro(c.cliques) },
+      { titulo: 'ALCANCE', valor: (c) => inteiro(c.alcance) },
+      { titulo: 'RESULTADOS', valor: (c) => inteiro(c.resultados) },
+      { titulo: 'CPM', valor: (c) => numBR(c.custoPorMil) },
+    ],
+    linhas: (flt) => linhasCampanhasAnuncio(flt),
+  },
 };
 
 /**
@@ -396,6 +449,7 @@ export function filtrosDoConjunto(conjunto, query = {}) {
   if (conjunto?.escopo === 'condominios') return parseFiltrosCondominios(query);
   if (conjunto?.escopo === 'leads') return parseFiltrosLeads(query);
   if (conjunto?.escopo === 'negociacoes') return parseFiltrosNegociacoes(query);
+  if (conjunto?.escopo === 'campanhas') return parseFiltrosCampanhas(query);
   return parseFilters(query);
 }
 
