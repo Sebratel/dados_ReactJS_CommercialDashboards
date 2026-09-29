@@ -40,22 +40,34 @@ export function usarFechamento(aberto, fechar) {
  * e cadastrá-los num mapa global só para dar nome a eles espalharia o rótulo
  * longe de quem o mostra.
  */
-export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, alinhar }) {
+/**
+ * `rotulos` separa o que a pessoa LÊ do que o servidor FILTRA.
+ *
+ * Existe para a tela de campanhas, onde o valor é um código interno ('meta',
+ * 'site_organico') e o rótulo é o nome de gente ('Meta Ads', 'Site (orgânico)').
+ * Sem isso a lista mostraria o código, e a busca dentro dela também — ninguém
+ * procura campanha digitando 'site_organico'.
+ */
+export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, alinhar, rotulos = null }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const ref = usarFechamento(aberto, () => setAberto(false));
+  const nomeDe = (op) => rotulos?.[op] ?? op;
 
   const filtradas = useMemo(() => {
     const b = busca.trim().toLowerCase();
-    return (b ? opcoes.filter((o) => String(o).toLowerCase().includes(b)) : opcoes).slice(0, 400);
-  }, [opcoes, busca]);
+    // a busca casa pelo rótulo E pelo código: quem conhece o código também acha
+    return (b
+      ? opcoes.filter((o) => `${o} ${nomeDe(o)}`.toLowerCase().includes(b))
+      : opcoes).slice(0, 400);
+  }, [opcoes, busca, rotulos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const alterna = (op) => onChange(valor.includes(op) ? valor.filter((v) => v !== op) : [...valor, op]);
-  const resumo = valor.length === 1 ? valor[0] : valor.length ? `${valor.length} selecionados` : 'todos';
+  const resumo = valor.length === 1 ? nomeDe(valor[0]) : valor.length ? `${valor.length} selecionados` : 'todos';
 
   return (
     <div className={`filtro${valor.length ? ' ativo' : ''}`} ref={ref}>
-      <button type="button" onClick={() => setAberto((a) => !a)} title={valor.join(', ') || 'todos'}>
+      <button type="button" onClick={() => setAberto((a) => !a)} title={valor.map(nomeDe).join(', ') || 'todos'}>
         <span className="nome">{titulo || TITULOS[campo]}</span>
         <span className="valor">{resumo}</span>
         {valor.length > 1 && <span className="contador">{valor.length}</span>}
@@ -75,7 +87,7 @@ export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, 
             {filtradas.map((op) => (
               <label key={op}>
                 <input type="checkbox" checked={valor.includes(op)} onChange={() => alterna(op)} />
-                <span>{op}</span>
+                <span>{nomeDe(op)}</span>
               </label>
             ))}
             {!filtradas.length && <div style={{ padding: 8, fontSize: 12, color: '#605E5C' }}>Nada encontrado</div>}

@@ -866,6 +866,40 @@ table.matrix tfoot td {
   color: #5c4a00; border-radius: 6px; padding: 6px 11px; font-size: 12px; line-height: 1.45;
 }
 .banner.error { background: #FDE7E9; border-color: #D64550; color: #7a1620; }
+
+/**
+ * Selo de confianca da ligacao campanha<->atendimento (tela de Campanhas).
+ *
+ * Tres cores porque sao tres degraus de heuristica, e a diferenca entre eles muda
+ * o quanto se pode confiar na linha. Verde = plataforma, tipo e cidade batem.
+ * Ambar = a campanha cobre todas as cidades e o gasto foi rateado. Vermelho = a
+ * tag antiga nao diz a plataforma e a ligacao e so pela cidade.
+ */
+.selo {
+  display: inline-block; padding: 1px 7px; border-radius: 10px;
+  font-size: 10.5px; letter-spacing: 0.2px; white-space: nowrap; cursor: help;
+  border: 1px solid transparent;
+}
+.selo-exata   { background: #E8F3E6; border-color: #BBD9B5; color: #1F601A; }
+.selo-familia { background: #FDF3DC; border-color: #E7D3A0; color: #7a5a00; }
+.selo-cidade  { background: #FDE7E9; border-color: #E9B8BD; color: #8a2430; }
+.selo-neutro  { background: #F1F0EE; border-color: #DEDCD8; color: #605E5C; }
+
+/**
+ * Interruptor escrito na barra de filtros. Existe para a opcao que muda um total
+ * por omissao (hoje, incluir campanha de recrutamento no investimento): ela nao
+ * pode ficar escondida num menu, senao o numero muda sem nada na tela dizer.
+ */
+.filtro-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--pbi-grid); background: #fff;
+  font-size: 11.5px; color: var(--pbi-muted); white-space: nowrap;
+}
+.filtro-toggle:hover { border-color: var(--pbi-primary); color: var(--pbi-ink); }
+.filtro-toggle.on {
+  border-color: var(--pbi-primary); background: #FDF2F3; color: var(--pbi-primary); font-weight: 600;
+}
 /* aviso de recorte: mesma forma do banner, cor fria, para não competir com o
    dourado do texto explicativo que costuma estar logo acima */
 .banner.banner-aviso {

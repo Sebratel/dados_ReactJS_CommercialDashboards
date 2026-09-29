@@ -104,10 +104,17 @@ export const LISTAS_REL_BASE = ['bcidade', 'bbairro', 'btec'];
 export const LISTAS_REL_PESQUISA = ['pcidade', 'petiq', 'pstatus', 'pperg', 'presp'];
 export const LISTAS_REL_CLIMA = ['ccidade'];
 
+/**
+ * Seletores da tela de Campanhas de Marketing. Prefixo `c` pelo mesmo motivo dos
+ * outros: `cidade` e `canal` existem no lado comercial com outra lista de valores
+ * — lá a cidade é a do contrato, aqui é a que o nome da campanha nomeia.
+ */
+export const LISTAS_CAMPANHAS = ['cplat', 'cfam', 'ccid', 'ccanal', 'cclass', 'catend'];
+
 const TODAS_AS_LISTAS = [
   ...LISTAS, ...LISTAS_PAGINA, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO, ...LISTAS_DESEMPENHO,
   ...LISTAS_REL_GERAL, ...LISTAS_REL_RESUMO, ...LISTAS_REL_EQUIPES, ...LISTAS_REL_DIARIO,
-  ...LISTAS_REL_BASE, ...LISTAS_REL_PESQUISA, ...LISTAS_REL_CLIMA,
+  ...LISTAS_REL_BASE, ...LISTAS_REL_PESQUISA, ...LISTAS_REL_CLIMA, ...LISTAS_CAMPANHAS,
 ];
 
 /** período padrão ao abrir o dashboard (equivale ao slicer Ano do Power BI) */
@@ -219,6 +226,24 @@ export function FiltersProvider({ children }) {
       buscaPesq: params.get('buscaPesq') || '',
       // sub-página da tela de Relatórios (o relatório tem sete de dados)
       rpag: params.get('rpag') || '',
+
+      // --- Campanhas de Marketing -------------------------------------------
+      // Sem período padrão, de propósito: o dado de anúncio termina em 01/07/2026
+      // (as tabelas são de carga, não de esteira) e o de atendimento segue até
+      // ontem. Um recorte automático mostraria atendimento com investimento zero
+      // e pareceria defeito da tela.
+      cde: params.get('cde') || '',
+      cate: params.get('cate') || '',
+      cbusca: params.get('cbusca') || '',
+      /**
+       * Inclui as campanhas de vaga de emprego no investimento. DESLIGADO por
+       * padrão: são R$ 202.517,74, 43,5% do gasto do Meta, e recrutamento dentro
+       * do custo por lead comercial quase dobra o número. O relatório de origem
+       * somava tudo junto sem dizer.
+       */
+      crec: params.get('crec') === '1' ? '1' : '',
+      // sub-página da tela de Campanhas
+      cpag: params.get('cpag') || '',
     };
     for (const k of TODAS_AS_LISTAS) {
       const v = params.get(k);

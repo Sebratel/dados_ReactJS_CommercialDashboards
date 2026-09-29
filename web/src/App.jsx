@@ -20,6 +20,7 @@ import Configuracoes from './pages/Configuracoes';
 import Exportacoes from './pages/Exportacoes';
 import Preditivo from './pages/Preditivo';
 import Relatorios from './pages/Relatorios';
+import Campanhas from './pages/Campanhas';
 import VendasCanceladas from './pages/VendasCanceladas';
 import Condominios from './pages/Condominios';
 import LeadsNegociacoes from './pages/LeadsNegociacoes';
@@ -39,6 +40,7 @@ const PAGINAS = [
   { id: 'condominios', path: '/condominios', label: 'Condomínios', el: <Condominios /> },
   { id: 'leads', path: '/leads', label: 'Leads e Negociações', el: <LeadsNegociacoes /> },
   { id: 'relatorios', path: '/relatorios', label: 'Relatórios Comercial', el: <Relatorios /> },
+  { id: 'campanhas', path: '/campanhas', label: 'Campanhas de Marketing', el: <Campanhas /> },
   { id: 'preditivo', path: '/preditivo', label: 'Análise Preditiva', el: <Preditivo /> },
 ];
 

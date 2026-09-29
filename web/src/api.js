@@ -34,6 +34,17 @@ export function buildQuery(filtros = {}) {
   // cruzando com o de/ate, que é a data da venda
   add('cancDe', filtros.cancDe);
   add('cancAte', filtros.cancAte);
+  // campanhas de marketing — dimensões próprias, prefixo `c`
+  add('cde', filtros.cde);
+  add('cate', filtros.cate);
+  add('cbusca', filtros.cbusca);
+  add('crec', filtros.crec);
+  add('cplat', filtros.cplat);
+  add('cfam', filtros.cfam);
+  add('ccid', filtros.ccid);
+  add('ccanal', filtros.ccanal);
+  add('cclass', filtros.cclass);
+  add('catend', filtros.catend);
   // recorte de período vindo do clique na coluna; cruza com de/ate no servidor
   add('zoom', filtros.zoom);
   // condomínios — nomes iguais aos da URL, então o link compartilhado e a
@@ -260,6 +271,17 @@ export function useFiltrosCondominios() {
   return useQuery({
     queryKey: ['/condominios/filtros'],
     queryFn: () => apiGet('/condominios/filtros'),
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Opções dos seletores da tela de campanhas (endpoint próprio). */
+export function useFiltrosCampanhas() {
+  return useQuery({
+    queryKey: ['/campanhas/filtros'],
+    queryFn: () => apiGet('/campanhas/filtros'),
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
     retry: 1,
