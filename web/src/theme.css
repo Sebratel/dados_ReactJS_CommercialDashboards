@@ -870,20 +870,25 @@ table.matrix tfoot td {
 /**
  * Selo de confianca da ligacao campanha<->atendimento (tela de Campanhas).
  *
+ * O nome e `selo-ligacao`, e nao `selo`, porque a Capa ja usa `className="selo"`
+ * no bloco de estatisticas do cabecalho. Uma regra de `.selo` solta vazava para
+ * la o `cursor: help`, o `white-space: nowrap` e o padding -- a tela de outra
+ * pessoa mudando por causa desta.
+ *
  * Tres cores porque sao tres degraus de heuristica, e a diferenca entre eles muda
  * o quanto se pode confiar na linha. Verde = plataforma, tipo e cidade batem.
  * Ambar = a campanha cobre todas as cidades e o gasto foi rateado. Vermelho = a
  * tag antiga nao diz a plataforma e a ligacao e so pela cidade.
  */
-.selo {
+.selo-ligacao {
   display: inline-block; padding: 1px 7px; border-radius: 10px;
   font-size: 10.5px; letter-spacing: 0.2px; white-space: nowrap; cursor: help;
   border: 1px solid transparent;
 }
-.selo-exata   { background: #E8F3E6; border-color: #BBD9B5; color: #1F601A; }
-.selo-familia { background: #FDF3DC; border-color: #E7D3A0; color: #7a5a00; }
-.selo-cidade  { background: #FDE7E9; border-color: #E9B8BD; color: #8a2430; }
-.selo-neutro  { background: #F1F0EE; border-color: #DEDCD8; color: #605E5C; }
+.selo-ligacao.exata   { background: #E8F3E6; border-color: #BBD9B5; color: #1F601A; }
+.selo-ligacao.familia { background: #FDF3DC; border-color: #E7D3A0; color: #7a5a00; }
+.selo-ligacao.cidade  { background: #FDE7E9; border-color: #E9B8BD; color: #8a2430; }
+.selo-ligacao.neutro  { background: #F1F0EE; border-color: #DEDCD8; color: #605E5C; }
 
 /**
  * Interruptor escrito na barra de filtros. Existe para a opcao que muda um total

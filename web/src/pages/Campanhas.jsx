@@ -60,14 +60,14 @@ function AvisoFrescor({ frescor }) {
 
 /** Um selo curto dizendo por que degrau a ligação campanha↔atendimento foi feita. */
 function SeloConfianca({ valor }) {
-  if (!valor) return <span className="selo selo-neutro" title="Nenhuma campanha de anúncio corresponde a esta tag — é tráfego orgânico ou campanha sem verba.">sem anúncio</span>;
+  if (!valor) return <span className="selo-ligacao neutro" title="Nenhuma campanha de anúncio corresponde a esta tag — é tráfego orgânico ou campanha sem verba.">sem anúncio</span>;
   const texto = { exata: 'exata', familia: 'por família', cidade: 'por cidade' }[valor] || valor;
   const dica = {
     exata: 'Plataforma, tipo de campanha e cidade batem entre a tag do atendimento e o nome da campanha.',
     familia: 'A tag diz a cidade, mas a campanha cobre todas — o investimento é rateado entre as cidades que ela atendeu.',
     cidade: 'A tag antiga (macro) não diz a plataforma, então a ligação é só pela cidade: junta Google e Meta daquela cidade.',
   }[valor];
-  return <span className={`selo selo-${valor}`} title={dica}>{texto}</span>;
+  return <span className={`selo-ligacao ${valor}`} title={dica}>{texto}</span>;
 }
 
 export default function Campanhas() {

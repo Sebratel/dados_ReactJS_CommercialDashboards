@@ -56,9 +56,14 @@ export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, 
 
   const filtradas = useMemo(() => {
     const b = busca.trim().toLowerCase();
-    // a busca casa pelo rótulo E pelo código: quem conhece o código também acha
+    // com rótulo, a busca casa pelos DOIS: quem conhece o código também acha.
+    // Sem rótulo, casa só pelo valor — é o comportamento que as outras telas
+    // sempre tiveram, e concatenar o valor consigo mesmo criaria casamento novo
+    // para um termo que cruzasse a emenda.
     return (b
-      ? opcoes.filter((o) => `${o} ${nomeDe(o)}`.toLowerCase().includes(b))
+      ? opcoes.filter((o) => (rotulos
+        ? `${o} ${nomeDe(o)}`.toLowerCase().includes(b)
+        : String(o).toLowerCase().includes(b)))
       : opcoes).slice(0, 400);
   }, [opcoes, busca, rotulos]); // eslint-disable-line react-hooks/exhaustive-deps
 
