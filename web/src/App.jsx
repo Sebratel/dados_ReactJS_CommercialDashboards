@@ -24,6 +24,7 @@ import Campanhas from './pages/Campanhas';
 import VendasCanceladas from './pages/VendasCanceladas';
 import Condominios from './pages/Condominios';
 import LeadsNegociacoes from './pages/LeadsNegociacoes';
+import SlaBko from './pages/SlaBko';
 import { Icone } from './components/Icone';
 
 const PAGINAS = [
@@ -37,6 +38,7 @@ const PAGINAS = [
   { id: 'rampagem', path: '/rampagem', label: 'Rampagem', el: <Rampagem /> },
   { id: 'premiacoes', path: '/premiacoes', label: 'Premiações', el: <Premiacoes /> },
   { id: 'vendas-canceladas', path: '/vendas-canceladas', label: 'Vendas Canceladas', el: <VendasCanceladas /> },
+  { id: 'sla-bko', path: '/sla-bko', label: 'SLAs Backoffice', el: <SlaBko /> },
   { id: 'condominios', path: '/condominios', label: 'Condomínios', el: <Condominios /> },
   { id: 'leads', path: '/leads', label: 'Leads e Negociações', el: <LeadsNegociacoes /> },
   { id: 'relatorios', path: '/relatorios', label: 'Relatórios Comercial', el: <Relatorios /> },

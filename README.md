@@ -729,6 +729,47 @@ recusa o popup de login.
 Para desenvolver sem Google, use `AUTH_ENABLED=false` — o servidor libera tudo como admin.
 **Nunca** use isso em produção.
 
+## SLA do BKO: o sexto relatório, e o primeiro que não vem só do Voalle
+
+Tela `/sla-bko`, modelo próprio em `src/model/slaBko.js`, grupo de carga `bko` (30 min,
+`REFRESH_BKO_MS`). Três fontes:
+
+| Fonte | Onde | Grão |
+|---|---|---|
+| `umuvme-sls-bko` | Data Hub (`src/datahub.js`) | um envio no uMov.me |
+| `umovme-ciclos-bko` | Data Hub | um ciclo de envio / devolução / reenvio |
+| `sla_bko.sql` | Voalle | um contrato, com os marcos do Elleven |
+
+**Horas úteis** (`src/sla/horasUteis.js`): seg a sex 8h–21h, sábado 8h–17h, feriado 8h–17h
+(plantão, não pausa), domingo não conta — inclusive domingo que cai em feriado. Feriado vem
+de `feriados.js`. As datas trafegam como texto local e viram minutos de um relógio fictício,
+então o fuso da máquina não entra na conta.
+
+**Marcos e metas.** A2/B1 = criação do contrato; A3/B2 = primeiro relato do atendimento, qualquer texto
+(regra da área, 25/09/2026); A4/B3 = relato
+de agendamento; A1 = `primeiro_input` do ciclo do uMov. Metas (área, 25/09/2026): A2−A1 (cadastro − input) = 1 h; A4−A2 = B3−B1 = 12 h; os demais sem meta.
+Cancelada antes de agendar e encerrada sem relato de agendamento saem da média e do % no prazo.
+
+**Cruzamento uMov ↔ Elleven** por CPF (só dígitos, zeros à esquerda recuperados), ciclo de
+`primeiro_input` mais recente que não passa do cadastro — a regra do Power BI, com duas travas:
+só para `Vendedor Externo` e CPF vazio nunca casa. A tela mostra o % casado e o intervalo entre a
+análise e o cadastro, que é o número para decidir uma janela máxima.
+
+**A tela nasce restrita** (`padrao: 'lista'` em `TELAS`): mostra nome de cliente, e uma tela sem
+ACL gravada ficaria aberta para o domínio. O admin libera em Configurações → Acesso por tela.
+
+**Detalhamento:** `GET /api/sla-bko/detalhe` devolve uma linha por protocolo com as datas e os
+SLAs individuais (busca, situação e "só fora da meta"); `formato=csv` exporta todas as linhas.
+
+**Fuso do uMov:** até 28/09/2026 ~16h40 o uMov gravava o ENVIO em UTC (a análise sempre veio no
+horário de Brasília); a partir do registro de history `hty_id 954180336` passou a gravar em horário
+local. Em 29/09 o admin do Data Hub acertou o fuso da conexão com o uMov e fez uma recarga geral:
+todas as datas (inclusive o histórico) passaram a chegar no horário de Brasília. O `UMOVME SLA BKO`
+não aplica mais −3 h, e `UMOV_AJUSTE_HORAS` tem padrão 0. O `UMOVME CICLOS BKO` herda do SLA BKO e
+precisa ser re-materializado depois dele.
+
+**Desenvolvimento local:** `ETL_GRUPOS=dims,bko` carrega só o que esta tela usa.
+
 ## 3. Rodando local
 
 ```bash
