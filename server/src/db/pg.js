@@ -42,3 +42,28 @@ export async function queryFile(name, params = []) {
   const res = await pool.query(loadSql(name), params);
   return { rows: res.rows, ms: Date.now() - started };
 }
+
+/**
+ * Consulta com statement_timeout próprio, maior que o do pool.
+ *
+ * Existe para a base do SLA do BKO: ela casa relatos (`reports`) por texto com
+ * ILIKE e leva ~3 min no Voalle — o mesmo tamanho do timeout padrão do pool. O
+ * `SET LOCAL` vale só dentro da transação, então a conexão volta ao pool com o
+ * limite normal e nenhuma outra consulta herda o valor maior.
+ */
+export async function queryFileLonga(name, params = [], timeoutMs = 600000) {
+  const started = Date.now();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN READ ONLY');
+    await client.query(`SET LOCAL statement_timeout = ${Math.max(1000, Math.round(Number(timeoutMs) || 600000))}`);
+    const res = await client.query(loadSql(name), params);
+    await client.query('COMMIT');
+    return { rows: res.rows, ms: Date.now() - started };
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* conexão já caiu */ }
+    throw err;
+  } finally {
+    client.release();
+  }
+}

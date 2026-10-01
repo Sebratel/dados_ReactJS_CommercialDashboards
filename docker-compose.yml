@@ -45,6 +45,13 @@ services:
       REFRESH_FULL_MS: ${REFRESH_FULL_MS:-1800000}
       REFRESH_DIMS_MS: ${REFRESH_DIMS_MS:-900000}
       INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-60}
+      REFRESH_BKO_MS: ${REFRESH_BKO_MS:-1800000}
+
+      # ---- SLA do BKO (Data Hub) ----
+      DATAHUB_URL: ${DATAHUB_URL:-https://data-hub.sebratel.net.br/api/public/v1/datasets}
+      DATAHUB_TOKEN: ${DATAHUB_TOKEN}
+      SLA_SINCE: ${SLA_SINCE:-2026-01-01}
+      UMOV_AJUSTE_HORAS: ${UMOV_AJUSTE_HORAS:-0}
     volumes:
       # papéis e permissões por tela sobrevivem ao recriar o container
       - comercial-dashboard-data:/app/data

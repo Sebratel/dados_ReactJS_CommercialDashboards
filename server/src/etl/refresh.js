@@ -1,5 +1,7 @@
 import { config } from '../config.js';
-import { queryFile } from '../db/pg.js';
+import { queryFile, queryFileLonga } from '../db/pg.js';
+import { lerConjunto } from '../datahub.js';
+import { construirSla, setFonteErroSla, setFonteSla } from '../model/slaBko.js';
 import * as maria from '../db/maria.js';
 import { GENERAL_COMMERCIAL_SQL, SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
 import { build, mergeSource, setSource, setSourceError } from '../model/store.js';
@@ -75,6 +77,14 @@ const SOURCES = {
   fila: { grupo: 'rel', destino: 'relatorios', alvo: 'backlog', run: () => queryFile('backlog', []) },
   // A ponte histórica do MariaDB, que só este modelo usa.
   ponte: { grupo: 'rel', destino: 'relatorios', alvo: 'ponte', run: () => maria.query(GENERAL_COMMERCIAL_SQL, [config.relSince]) },
+
+  // --- SLA do BKO (modelo próprio) ---
+  // Os dois conjuntos do Data Hub não tocam o Voalle, então não entram na fila de
+  // vagas (`semVaga`): esperar por uma conexão que eles não usam só atrasaria a tela.
+  slaTarefas: { grupo: 'bko', destino: 'slaBko', alvo: 'tarefas', semVaga: true, run: () => lerConjunto('umuvme-sls-bko') },
+  slaCiclos: { grupo: 'bko', destino: 'slaBko', alvo: 'ciclos', semVaga: true, run: () => lerConjunto('umovme-ciclos-bko') },
+  // A base do Elleven casa relatos por texto e leva ~3 min: timeout próprio de 10 min.
+  slaVendas: { grupo: 'bko', destino: 'slaBko', alvo: 'vendas', run: () => queryFileLonga('sla_bko', [config.slaSince], 600000) },
 
   /**
    * --- Campanhas de Marketing (modelo próprio) ---
@@ -161,6 +171,12 @@ const DESTINOS = {
     construir: construirLeads,
     resumo: (s) => `${s.leads.length} leads · ${s.negociacoes.length} negociações · ${s.vendedores.length} vendedores`,
   },
+  slaBko: {
+    set: setFonteSla,
+    erro: setFonteErroSla,
+    construir: construirSla,
+    resumo: (s) => `${s.vendas.length} vendas · ${s.tarefas.length} tarefas uMov · ${s.ciclos.length} ciclos`,
+  },
   campanhas: {
     set: setFonteCampanhas,
     erro: setFonteErroCampanhas,
@@ -220,7 +236,7 @@ async function executar(nome, src) {
   const chave = src.destino || 'comercial';
   const destino = destinoDe(src);
   const janela = assinaturaJanela();
-  const soltar = await vaga();
+  const soltar = src.semVaga ? () => {} : await vaga();
   try {
     const { rows, ms } = await src.run();
     if (SENSIVEL_A_JANELA.has(chave) && assinaturaJanela() !== janela) {
@@ -287,11 +303,25 @@ export async function refreshGroup(grupo) {
  * seguinte — quinze minutos de tela com o filtro de equipe vazio.
  */
 export async function refreshAll() {
-  await refreshGroup('dims');
+  if (config.etlGrupos.length) {
+    console.log(`[etl] ETL_GRUPOS=${config.etlGrupos.join(',')} — os demais grupos não carregam neste processo`);
+  }
+  if (grupoAtivo('dims')) await refreshGroup('dims');
   await Promise.all([
-    refreshGroup('full'), refreshSource('phone'), refreshGroup('cond'), refreshGroup('crm'),
-    refreshGroup('rel'), refreshGroup('mkt'), atualizarClima(),
+    grupoAtivo('full') ? refreshGroup('full') : null,
+    grupoAtivo('hot') ? refreshSource('phone') : null,
+    grupoAtivo('cond') ? refreshGroup('cond') : null,
+    grupoAtivo('crm') ? refreshGroup('crm') : null,
+    grupoAtivo('rel') ? refreshGroup('rel') : null,
+    grupoAtivo('mkt') ? refreshGroup('mkt') : null,
+    grupoAtivo('clima') ? atualizarClima() : null,
+    grupoAtivo('bko') ? refreshGroup('bko') : null,
   ]);
+}
+
+/** Grupo liberado por ETL_GRUPOS? Sem a variável, todos estão (produção). */
+export function grupoAtivo(grupo) {
+  return !config.etlGrupos.length || config.etlGrupos.includes(grupo);
 }
 
 export function startScheduler() {
@@ -302,10 +332,11 @@ export function startScheduler() {
     cond: config.refresh.cond,
     crm: config.refresh.crm,
     rel: config.refresh.rel,
+    bko: config.refresh.bko,
     mkt: config.refresh.mkt,
   };
   // O clima não é banco nosso: uma busca por dia, e só. Ver src/clima.js.
-  if (config.refresh.clima > 0) {
+  if (config.refresh.clima > 0 && grupoAtivo('clima')) {
     const tc = setInterval(() => {
       atualizarClima().catch((err) => console.error(`[clima] ${err.message}`));
     }, config.refresh.clima);
@@ -314,7 +345,7 @@ export function startScheduler() {
   }
 
   for (const [grupo, intervalo] of Object.entries(grupos)) {
-    if (!intervalo || intervalo <= 0) continue;
+    if (!intervalo || intervalo <= 0 || !grupoAtivo(grupo)) continue;
     const t = setInterval(() => {
       refreshGroup(grupo).catch((err) => console.error(`[etl] grupo ${grupo}:`, err.message));
     }, intervalo);

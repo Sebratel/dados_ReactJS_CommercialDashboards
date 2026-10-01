@@ -42,6 +42,9 @@ import {
   painelNegociacoes, parseFiltrosDesempenho, parseFiltrosLeads,
   parseFiltrosNegociacoes,
 } from '../model/leads.js';
+import {
+  detalheParaCsv, detalheSlaBko, getEstadoSla, painelSlaBko, parseFiltrosDetalhe, parseFiltrosSla, slaPronto,
+} from '../model/slaBko.js';
 
 export const api = Router();
 
@@ -72,6 +75,7 @@ api.use((req, res, next) => {
   if (req.path.startsWith('/negociacoes')) return next();
   if (req.path.startsWith('/desempenho')) return next();
   if (req.path.startsWith('/relatorios')) return next();
+  if (req.path.startsWith('/sla-bko')) return next();
   if (req.path.startsWith('/campanhas')) return next();
   if (!isReady()) {
     // sem detalhes das fontes: quem ainda não autenticou não precisa saber
@@ -472,6 +476,48 @@ api.get('/relatorios/clima', auth('relatorios'), (req, res) => {
 });
 
 // -------------------------------------------------------------- PREMIAÇÕES
+/**
+ * SLA do BKO — modelo próprio, que não espera a carga comercial. O 503 só sai se
+ * NENHUMA das três fontes chegou: com parte delas a tela abre e cada seção diz o
+ * que falta (o Data Hub costuma chegar em segundos; a base do Elleven leva minutos).
+ */
+const exigirSla = (req, res, next) => {
+  if (!slaPronto()) {
+    const erros = Object.entries(getEstadoSla().fontes).filter(([, f]) => f?.error)
+      .map(([n, f]) => `${n}: ${f.error}`);
+    return res.status(503).json({
+      error: erros.length ? `As fontes do SLA falharam — ${erros.join(' · ')}` : 'Carregando o SLA do BKO (Data Hub e Voalle)…',
+      carregando: !erros.length,
+    });
+  }
+  return next();
+};
+
+/**
+ * Detalhamento por protocolo. `formato=csv` devolve TODAS as linhas do filtro;
+ * sem ele, no máximo `limite` (a tabela não precisa de 30 mil linhas no navegador).
+ */
+api.get('/sla-bko/detalhe', auth('sla-bko'), exigirSla, (req, res) => {
+  const flt = parseFiltrosDetalhe(req.query);
+  const d = detalheSlaBko(flt);
+  if (req.query.formato === 'csv') {
+    const periodo = [flt.de, flt.ate].filter(Boolean).join('_a_') || 'completo';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="sla-bko-detalhamento_${periodo}.csv"`);
+    return res.send(detalheParaCsv(d.todas));
+  }
+  const { todas, ...resto } = d;
+  return res.json(resto);
+});
+
+api.get('/sla-bko', auth('sla-bko'), exigirSla, (req, res) => {
+  const painel = comCache(
+    { nome: 'sla-bko', versao: getEstadoSla().versao, query: req.query },
+    () => painelSlaBko(parseFiltrosSla(req.query)),
+  );
+  res.json(painel);
+});
+
 api.get('/premiacoes', auth('premiacoes'), (req, res) => {
   res.json(withMeta(premiacoes(parseFilters(req.query))));
 });

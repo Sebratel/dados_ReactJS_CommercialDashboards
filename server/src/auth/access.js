@@ -44,6 +44,9 @@ export const TELAS = [
   { id: 'rampagem', curto: 'Rampagem', label: 'Rampagem', rota: '/rampagem', descricao: 'Vendedores nos primeiros 90 dias' },
   { id: 'premiacoes', curto: 'Premiações', label: 'Premiações', rota: '/premiacoes', descricao: 'Faixas e valores de premiação (dado sensível)' },
   { id: 'vendas-canceladas', curto: 'Canceladas', label: 'Vendas Canceladas', rota: '/vendas-canceladas', descricao: 'Contratos cancelados que nunca chegaram a ser ativados' },
+  // nasce RESTRITA (`padrao: 'lista'`): a tela mostra nome de cliente, e uma tela nova
+  // sem ACL gravada ficaria aberta para o domínio inteiro até alguém lembrar de fechar
+  { id: 'sla-bko', curto: 'SLAs BKO', label: 'SLAs Backoffice', rota: '/sla-bko', padrao: 'lista', descricao: 'Tempos do Backoffice: triagem no uMov, 1º contato e agendamento, com metas em horas úteis' },
   { id: 'condominios', curto: 'Condomínios', label: 'Condomínios', rota: '/condominios', descricao: 'Ocupação das portas dos splitters instalados em condomínios' },
   { id: 'leads', curto: 'Leads', label: 'Leads e Negociações', rota: '/leads', descricao: 'Funil de CRM: leads cadastrados, negociações e desempenho por vendedor e cidade' },
   { id: 'relatorios', curto: 'Relatórios', label: 'Relatórios Comercial', rota: '/relatorios', descricao: 'Sete consultas operacionais: detalhe de contrato, cesta de produtos, fila de instalação, meta diária por cidade, base de clientes, pesquisa de cancelamento e clima' },
@@ -181,7 +184,7 @@ export function listarTelas() {
   const { telas } = ler();
   return TELAS.map((t) => {
     const cfg = telas[t.id] || {};
-    const modo = cfg.modo === 'lista' ? 'lista' : 'todos';
+    const modo = (cfg.modo || t.padrao) === 'lista' ? 'lista' : 'todos';
     return {
       ...t,
       modo,
@@ -309,7 +312,7 @@ export function definirTelasDoEmail(email, telaIds, porQuem) {
   const dados = ler();
   const agora = new Date().toISOString();
   for (const t of TELAS) {
-    const cfg = dados.telas[t.id] || { modo: 'todos', emails: [] };
+    const cfg = dados.telas[t.id] || { modo: t.padrao || 'todos', emails: [] };
     if (cfg.modo !== 'lista') continue;            // tela aberta: nada a fazer
     const lista = new Set((cfg.emails || []).map(normEmail));
     const tinha = lista.has(e);

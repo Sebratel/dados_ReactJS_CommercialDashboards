@@ -175,14 +175,15 @@ export function ComboChart({
   data, xKey = 'label', barKey, barName, lineKey, lineName,
   barFmt = int, lineFmt = int, escalaSecundaria = false,
   corLinha = CORES.orange, rotuloBarra = 'centro',
-  onSelect = null, selecionados = [], keyPeriodo = 'periodo',
+  onSelect = null, selecionados = [], keyPeriodo = 'periodo', semRotulos = false,
 }) {
   const valores = data.map((d) => Number(d[barKey]) || 0);
   const min = Math.min(...valores, 0);
   const max = Math.max(...valores, 1);
   // com muitos pontos (visão diária) os rótulos viram ruído: escondemos e
-  // deixamos a leitura pelo tooltip
-  const denso = data.length > 24;
+  // deixamos a leitura pelo tooltip. `semRotulos` força isso quando o rótulo é
+  // largo ("1h 09min") e colide antes dos 24 pontos.
+  const denso = semRotulos || data.length > 24;
   const muitoDenso = data.length > 70;
   const temSelecao = selecionados.length > 0;
   return (

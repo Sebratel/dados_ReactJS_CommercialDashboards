@@ -65,6 +65,9 @@ export const config = {
   // Recorte de Relatórios Comercial (cesta, pesquisa e base de clientes) — o
   // conjunto mais pesado do dashboard. Getter pelo mesmo motivo dos outros três.
   get relSince() { return janela().relSince; },
+  // Recorte da base do SLA do BKO (contratos criados a partir de). Fixo por .env:
+  // a origem no Power BI também começa em 2026-01-01.
+  slaSince: process.env.SLA_SINCE || '2026-01-01',
 
   // Autenticação (Google) e controle de acesso
   auth: {
@@ -80,6 +83,23 @@ export const config = {
 
   // Janela (em dias) das cargas incrementais
   incrementalDays: num(process.env.INCREMENTAL_DAYS, 60),
+
+  /**
+   * Quais grupos de carga rodam neste processo. Vazio = todos (produção).
+   *
+   * Existe para o desenvolvimento local: sem isso, cada reinício do servidor relê
+   * as 13 consultas no Voalle de produção. Ex.: ETL_GRUPOS=dims,bko sobe só o que
+   * a tela do SLA BKO usa. Grupos: hot, full, dims, cond, crm, rel, mkt, clima, bko.
+   */
+  etlGrupos: String(process.env.ETL_GRUPOS || '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+
+  // Data Hub (SLA BKO). O token vai na query string, então a URL completa nunca
+  // é registrada em log.
+  datahub: {
+    url: (process.env.DATAHUB_URL || 'https://data-hub.sebratel.net.br/api/public/v1/datasets').replace(/\/+$/, ''),
+    token: (process.env.DATAHUB_TOKEN || '').trim(),
+  },
 
   // Frequência de atualização (ms)
   refresh: {
@@ -111,6 +131,9 @@ export const config = {
     // `atualizarClima` só vai à rede se o cache não for de hoje. O intervalo curto
     // existe para o dia virar sem esperar reinício, não para pedir de novo.
     clima: num(process.env.REFRESH_CLIMA_MS, 3600000), // 1 h
+    // SLA do BKO: o Data Hub recalcula o conjunto a cada 60 min e a base do Elleven
+    // leva ~3 min no Voalle. A 30 min isso é 10% do tempo com uma conexão ocupada.
+    bko: num(process.env.REFRESH_BKO_MS, 1800000), // 30 min
   },
 };
 
