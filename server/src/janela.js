@@ -12,15 +12,7 @@
  * liam `config.since` de forma preguiçosa — então a próxima carga usa o valor novo
  * sem precisar reiniciar nada.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const arquivo = () => (process.env.JANELA_PATH
-  ? path.resolve(process.env.JANELA_PATH)
-  : path.resolve(__dirname, '../data/janela.json'));
+import * as cofre from './cofre.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const hoje = () => new Date().toISOString().slice(0, 10);
@@ -66,21 +58,11 @@ function semente() {
 }
 
 function ler() {
-  try {
-    const p = arquivo();
-    if (!fs.existsSync(p)) return {};
-    const raw = fs.readFileSync(p, 'utf8').trim();
-    return raw ? JSON.parse(raw) : {};
-  } catch (err) {
-    console.warn(`[janela] não foi possível ler o recorte salvo: ${err.message} — usando o .env`);
-    return {};
-  }
+  return cofre.ler('janela', {});
 }
 
-function gravar(dados) {
-  const p = arquivo();
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, `${JSON.stringify(dados, null, 2)}\n`, 'utf8');
+function gravar(dados, porQuem = null) {
+  cofre.gravar('janela', dados, porQuem);
 }
 
 /** Estado da recarga disparada pela última alteração — o front mostra o progresso. */
@@ -152,7 +134,6 @@ export function definirJanela({ since, phoneSince, crmSince, relSince }, porQuem
 
 /** Volta a obedecer o .env. */
 export function restaurarJanela() {
-  const p = arquivo();
-  if (fs.existsSync(p)) fs.rmSync(p);
+  cofre.apagar('janela');
   return janela();
 }

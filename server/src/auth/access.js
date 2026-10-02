@@ -22,9 +22,7 @@
  *   'todos' → qualquer usuário autenticado do domínio
  *   'lista' → apenas os e-mails informados (admin sempre passa)
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { config } from '../config.js';
+import * as cofre from '../cofre.js';
 
 export const PAPEIS = ['viewer', 'dev', 'admin'];
 const RANK = { viewer: 0, dev: 1, admin: 2 };
@@ -66,10 +64,8 @@ const vazio = () => ({ papeis: {}, telas: {}, powerUsers: [], escopos: {} });
 
 function ler() {
   try {
-    if (!fs.existsSync(config.accessPath)) return vazio();
-    const raw = fs.readFileSync(config.accessPath, 'utf8').trim();
-    if (!raw) return vazio();
-    const d = JSON.parse(raw);
+    const d = cofre.ler('access', null);
+    if (!d) return vazio();
     return {
       papeis: d && typeof d.papeis === 'object' ? d.papeis : {},
       telas: d && typeof d.telas === 'object' ? d.telas : {},
@@ -77,14 +73,13 @@ function ler() {
       escopos: d && typeof d.escopos === 'object' ? d.escopos : {},
     };
   } catch (err) {
-    console.warn(`[acesso] não foi possível ler ${config.accessPath}: ${err.message} — usando só o .env`);
+    console.warn(`[acesso] configuração ilegível: ${err.message} — usando só o .env`);
     return vazio();
   }
 }
 
-function gravar(dados) {
-  fs.mkdirSync(path.dirname(config.accessPath), { recursive: true });
-  fs.writeFileSync(config.accessPath, `${JSON.stringify(dados, null, 2)}\n`, 'utf8');
+function gravar(dados, porQuem = null) {
+  cofre.gravar('access', dados, porQuem);
 }
 
 function papelDoEnv(email) {

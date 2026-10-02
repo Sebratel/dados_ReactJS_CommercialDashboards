@@ -36,7 +36,15 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       ADMIN_EMAILS: ${ADMIN_EMAILS}
       DEV_EMAILS: ${DEV_EMAILS}
+      # Espelho local da configuração. A fonte da verdade é a tabela
+      # DB_ComercialDashboard.config no MariaDB — este caminho é só a rede de
+      # segurança para o dashboard subir com o banco fora.
       ACCESS_PATH: /app/data/access.json
+      # OBRIGATÓRIA EM PRODUÇÃO. Cifra os segredos em repouso (chave do provedor
+      # de IA). Sem ela a chave é gerada em disco e morre com a stack — foi assim
+      # que a chave do Gemini se perdeu em 02/10/2026. Gere com:
+      #   openssl rand -base64 48
+      SECRET_KEY: ${SECRET_KEY}
 
       # ---- recorte e frequência de atualização ----
       DATA_SINCE: ${DATA_SINCE:-2024-01-01}

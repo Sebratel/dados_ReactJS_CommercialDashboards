@@ -3,28 +3,17 @@
  * cifrada. A chave nunca sai numa resposta da API — só uma dica com os quatro
  * últimos caracteres, para o admin reconhecer qual cadastrou.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { config } from '../config.js';
+import * as cofre from '../cofre.js';
 import { cifrar, decifrar } from './cripto.js';
 import { TIPOS, construir, provedorDoEnv } from './provedor.js';
 
-const arquivo = () => path.join(path.dirname(config.accessPath), 'ia.json');
 
 function ler() {
-  try {
-    if (!fs.existsSync(arquivo())) return null;
-    const raw = fs.readFileSync(arquivo(), 'utf8').trim();
-    return raw ? JSON.parse(raw) : null;
-  } catch (err) {
-    console.warn('[ia] não foi possível ler a configuração:', err.message);
-    return null;
-  }
+  return cofre.ler('ia', null);
 }
 
-function gravar(dados) {
-  fs.mkdirSync(path.dirname(arquivo()), { recursive: true });
-  fs.writeFileSync(arquivo(), `${JSON.stringify(dados, null, 2)}\n`, 'utf8');
+function gravar(dados, porQuem = null) {
+  cofre.gravar('ia', dados, porQuem);
 }
 
 const dica = (chave) => (chave && chave.length > 4 ? `••••${chave.slice(-4)}` : null);
@@ -110,7 +99,7 @@ export function salvar(entrada, porQuem) {
   const chave = trocaChave ? String(entrada.chave).trim() : null;
 
   if (trocaChave && !chave) {
-    if (fs.existsSync(arquivo())) fs.unlinkSync(arquivo());
+    cofre.apagar('ia');
     return estado();
   }
   if (!atual?.chaveCifrada && !chave) {
@@ -132,7 +121,7 @@ export function salvar(entrada, porQuem) {
 }
 
 export function remover() {
-  if (fs.existsSync(arquivo())) fs.unlinkSync(arquivo());
+  cofre.apagar('ia');
   return estado();
 }
 

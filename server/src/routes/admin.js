@@ -13,6 +13,7 @@ import { refreshAll } from '../etl/refresh.js';
 import { getState } from '../model/store.js';
 import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
 import { ROTULO_TIPO, TIPOS } from '../ia/provedor.js';
+import { exportar as exportarCofre, importar as importarCofre, saude as saudeCofre } from '../cofre.js';
 
 export const admin = Router();
 
@@ -279,6 +280,43 @@ admin.post('/ia/modelos', exigirAuth({ minPapel: 'admin' }), async (req, res) =>
 admin.post('/ia/testar', exigirAuth({ minPapel: 'admin' }), async (req, res) => {
   try {
     res.json(await testarIA());
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------ cofre
+/**
+ * Saúde da configuração e backup manual.
+ *
+ * Existe porque em 02/10/2026 a stack foi recriada do zero, o volume foi junto
+ * e a configuração inteira se perdeu — sem aviso e sem cópia. O banco resolve a
+ * causa; estas três rotas resolvem o resto: dizer se a gravação está mesmo
+ * chegando lá, e permitir uma cópia que não depende de nenhuma infraestrutura.
+ */
+admin.get('/cofre', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  res.json(saudeCofre());
+});
+
+/** Baixa tudo num JSON. É a cópia que cabe num e-mail. */
+admin.get('/cofre/exportar', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  const pacote = exportarCofre();
+  const nome = `comercial-dashboard-config_${new Date().toISOString().slice(0, 10)}.json`;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
+  res.send(JSON.stringify(pacote, null, 2));
+});
+
+/**
+ * Recarrega a partir de um export. SOBRESCREVE as chaves que vierem no pacote.
+ *
+ * Note que o `ia` restaurado só volta a funcionar se a `SECRET_KEY` for a mesma
+ * de quando foi exportado — a chave do provedor viaja cifrada, de propósito.
+ */
+admin.post('/cofre/importar', exigirAuth({ minPapel: 'admin' }), (req, res) => {
+  try {
+    const aplicadas = importarCofre(req.body, req.usuario.email);
+    res.json({ aplicadas, cofre: saudeCofre() });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

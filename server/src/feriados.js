@@ -17,15 +17,7 @@
  *    religioso local mudam por município e por ano, e chutar uma data seria pior que
  *    não ter: o número sairia errado com cara de certo. O admin cadastra na tela.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const arquivo = () => (process.env.FERIADOS_PATH
-  ? path.resolve(process.env.FERIADOS_PATH)
-  : path.resolve(__dirname, '../data/feriados.json'));
+import * as cofre from './cofre.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -92,21 +84,11 @@ export function feriadosDoAno(ano) {
 }
 
 function ler() {
-  try {
-    const p = arquivo();
-    if (!fs.existsSync(p)) return {};
-    const raw = fs.readFileSync(p, 'utf8').trim();
-    return raw ? JSON.parse(raw) : {};
-  } catch (err) {
-    console.warn(`[feriados] não foi possível ler o cadastro: ${err.message} — usando só os calculados`);
-    return {};
-  }
+  return cofre.ler('feriados', {});
 }
 
-function gravar(dados) {
-  const p = arquivo();
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, `${JSON.stringify(dados, null, 2)}\n`, 'utf8');
+function gravar(dados, porQuem = null) {
+  cofre.gravar('feriados', dados, porQuem);
 }
 
 /**
@@ -183,8 +165,7 @@ export function definirFeriados({ extras, removidos }, porQuem) {
 }
 
 export function restaurarFeriados() {
-  const p = arquivo();
-  if (fs.existsSync(p)) fs.rmSync(p);
+  cofre.apagar('feriados');
   return estadoFeriados();
 }
 

@@ -21,15 +21,7 @@
  * SELECTEDVALUE e devolve 0 com duas cidades marcadas. A semente aqui é o `##`, e a
  * tela de administração mostra o conjunto alternativo para quem precisar comparar.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const arquivo = () => (process.env.METAS_PATH
-  ? path.resolve(process.env.METAS_PATH)
-  : path.resolve(__dirname, '../data/metas.json'));
+import * as cofre from './cofre.js';
 
 /** Semente: o conjunto `##`, que é o que as tabelas do relatório realmente usam. */
 export const SEMENTE = {
@@ -67,15 +59,7 @@ export const CONJUNTO_ALTERNATIVO = {
 };
 
 function ler() {
-  try {
-    const p = arquivo();
-    if (!fs.existsSync(p)) return null;
-    const raw = fs.readFileSync(p, 'utf8').trim();
-    return raw ? JSON.parse(raw) : null;
-  } catch (err) {
-    console.warn(`[metas] não foi possível ler o cadastro: ${err.message} — usando a semente`);
-    return null;
-  }
+  return cofre.ler('metas', null);
 }
 
 const numero = (v) => {
@@ -142,14 +126,11 @@ export function definirMetas({ vendas, ativos, vendasRadio, ativosRadio }, porQu
     atualizadoEm: new Date().toISOString(),
     atualizadoPor: String(porQuem || '').toLowerCase(),
   };
-  const p = arquivo();
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, `${JSON.stringify(novo, null, 2)}\n`, 'utf8');
+  cofre.gravar('metas', novo, novo.atualizadoPor || null);
   return estadoMetas();
 }
 
 export function restaurarMetas() {
-  const p = arquivo();
-  if (fs.existsSync(p)) fs.rmSync(p);
+  cofre.apagar('metas');
   return estadoMetas();
 }
