@@ -3,7 +3,12 @@ import { queryFile, queryFileLonga } from '../db/pg.js';
 import { lerConjunto } from '../datahub.js';
 import { construirSla, setFonteErroSla, setFonteSla } from '../model/slaBko.js';
 import * as maria from '../db/maria.js';
-import { GENERAL_COMMERCIAL_SQL, SENIOR_SQL, TEAMS_SQL } from '../sql/maria.js';
+import {
+  COMERCIAL_METAS_SQL, GENERAL_COMMERCIAL_SQL, SENIOR_SQL, TEAMS_SQL,
+} from '../sql/maria.js';
+import {
+  estadoMetasDeCidade, setMetasDeCidade, setMetasDeCidadeErro,
+} from '../metas.js';
 import { build, mergeSource, setSource, setSourceError } from '../model/store.js';
 import {
   construirCondominios, setFonteCondominios, setFonteErroCondominios,
@@ -77,6 +82,11 @@ const SOURCES = {
   fila: { grupo: 'rel', destino: 'relatorios', alvo: 'backlog', run: () => queryFile('backlog', []) },
   // A ponte histórica do MariaDB, que só este modelo usa.
   ponte: { grupo: 'rel', destino: 'relatorios', alvo: 'ponte', run: () => maria.query(GENERAL_COMMERCIAL_SQL, [config.relSince]) },
+  /**
+   * A meta de ativacao por cidade e mes. Vive no grupo `rel` porque so o
+   * Relatorio Diario a usa, e muda uma vez por mes -- nao ha pressa nenhuma.
+   */
+  metasCidade: { grupo: 'rel', destino: 'metas', alvo: 'metas', run: () => maria.query(COMERCIAL_METAS_SQL) },
 
   // --- SLA do BKO (modelo próprio) ---
   // Os dois conjuntos do Data Hub não tocam o Voalle, então não entram na fila de
@@ -176,6 +186,16 @@ const DESTINOS = {
     erro: setFonteErroSla,
     construir: construirSla,
     resumo: (s) => `${s.vendas.length} vendas · ${s.tarefas.length} tarefas uMov · ${s.ciclos.length} ciclos`,
+  },
+  /**
+   * As metas nao formam um modelo: sao uma tabela de apoio que o Relatorio
+   * Diario consulta. Por isso `construir` nao faz nada -- `set` ja indexa.
+   */
+  metas: {
+    set: (_alvo, rows) => setMetasDeCidade(rows),
+    erro: (_alvo, err) => setMetasDeCidadeErro(err),
+    construir: () => estadoMetasDeCidade(),
+    resumo: (s) => `metas de ativação: ${s.cidades} cidades em ${s.meses} mês(es)`,
   },
   campanhas: {
     set: setFonteCampanhas,

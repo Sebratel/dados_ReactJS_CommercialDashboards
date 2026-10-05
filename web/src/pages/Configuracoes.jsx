@@ -1184,6 +1184,27 @@ function AbaMetas() {
         conferência. Se a série alta for a correta, é aqui que se corrige.
       </p>
 
+      {/* a coluna de ativação deixou de ser editável aqui: quem manda é a tabela.
+          Sem dizer isso, o admin digita, salva, e o número não muda na tela. */}
+      {estado?.origemAtivos === 'tabela' && (
+        <div className="banner banner-aviso">
+          A <b>meta de ativações</b> vem de <code>DB_Applicattion.Comercial_Metas</code>, que a área
+          mantém <b>mês a mês</b> — por isso ela aparece aqui travada. O relatório diário usa o mês
+          do período que estiver na tela
+          {estado.mesesDaMeta?.length ? <> (agora: <b>{estado.mesesDaMeta.join(', ')}</b>)</> : null}.
+          {' '}A tabela cobre {estado.tabela?.meses?.length || 0} mês(es):
+          {' '}{(estado.tabela?.meses || []).join(', ') || '—'}. Mês sem linha lá cai para os valores
+          desta tela. <b>Meta de vendas e de rádio continuam sendo editadas aqui</b>, porque a tabela
+          não as tem.
+        </div>
+      )}
+      {estado && estado.origemAtivos !== 'tabela' && estado.tabela?.erro && (
+        <div className="banner error">
+          Não consegui ler <code>Comercial_Metas</code> ({estado.tabela.erro}) — as ativações abaixo
+          são as desta tela, não as da área.
+        </div>
+      )}
+
       {erro && <div className="banner error">{erro.message}</div>}
 
       <table className="pbi cfg-metas">
@@ -1207,10 +1228,16 @@ function AbaMetas() {
                 />
               </td>
               <td>
+                {/* travado quando a tabela manda: campo que aceita digitação e
+                    depois ignora o valor é pior do que campo desabilitado */}
                 <input
                   type="number"
                   min="0"
                   value={form.ativos[cidade] ?? ''}
+                  disabled={estado?.origemAtivos === 'tabela'}
+                  title={estado?.origemAtivos === 'tabela'
+                    ? 'Vem de DB_Applicattion.Comercial_Metas, mês a mês. Edite na tabela.'
+                    : undefined}
                   onChange={(e) => trocar('ativos', cidade, e.target.value)}
                 />
               </td>
@@ -1250,8 +1277,20 @@ function AbaMetas() {
       </div>
 
       <ul className="cfg-legenda">
+        {/* a origem é por COLUNA desde que a ativação passou a vir da tabela:
+            uma frase só para as duas estaria errada em metade dela */}
         <li>
-          Em vigor: <b>{estado?.origem === 'tela' ? 'definidas nesta tela' : 'as do relatório de origem'}</b>
+          Ativações: <b>
+            {estado?.origemAtivos === 'tabela' ? 'da tabela Comercial_Metas'
+              : estado?.origemAtivos === 'tela' ? 'definidas nesta tela'
+                : 'as do relatório de origem'}
+          </b>
+          {estado?.origemAtivos === 'tabela' && estado?.tabela?.carregadoEm
+            ? `, lidas em ${labelDataHora(estado.tabela.carregadoEm)}`
+            : ''}.
+        </li>
+        <li>
+          Vendas e rádio: <b>{estado?.origem === 'tela' ? 'definidas nesta tela' : 'as do relatório de origem'}</b>
           {estado?.atualizadoPor ? ` por ${estado.atualizadoPor}` : ''}
           {estado?.atualizadoEm ? ` em ${labelDataHora(estado.atualizadoEm)}` : ''}.
         </li>

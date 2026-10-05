@@ -54,3 +54,27 @@ export const SENIOR_SQL = `
   FROM API_WebDeveloper.db_senior_collaborators AS dsc
   WHERE dsc.termination_date IS NULL
 `;
+
+/**
+ * tabela "Comercial_Metas" -> a meta de ATIVAÇÃO por cidade, mês a mês.
+ *
+ * É a fonte viva das metas de instalação: alguém da área a mantém, e ela mudou
+ * em agosto, setembro e outubro de 2026. O dashboard nasceu com esses números
+ * COPIADOS para dentro do código (`SEMENTE`, em `metas.js`), do conjunto `##` do
+ * Power BI — e a cópia é exatamente julho/2026. Quer dizer: a tela vinha
+ * mostrando a meta de julho desde julho, enquanto a área já tinha revisado três
+ * vezes.
+ *
+ * Uma linha por cidade por mês. `Data` é o primeiro dia do mês (date), e vem como
+ * texto porque o pool está com `dateStrings` ligado para DATE/DATETIME.
+ *
+ * A tabela NÃO tem meta de venda nem de rádio — só ativação. Essas duas
+ * continuam vindo da tela de administração (ver `metas.js`).
+ */
+export const COMERCIAL_METAS_SQL = `
+  SELECT cm.\`Data\`   AS mes,
+         cm.\`Cidade\` AS cidade,
+         cm.\`Meta\`   AS meta
+  FROM DB_Applicattion.Comercial_Metas AS cm
+  WHERE cm.\`Cidade\` IS NOT NULL AND cm.\`Meta\` IS NOT NULL
+`;

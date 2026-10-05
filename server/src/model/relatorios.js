@@ -861,7 +861,8 @@ export function painelDiario(flt) {
   const de = flt.de || padrao.de;
   const ate = flt.ate || padrao.ate;
   const dias = contarDias(de, ate);
-  const alvos = metas();
+  // a meta de ativacao e MENSAL e vem da tabela: depende do periodo da tela
+  const alvos = metas({ de, ate });
 
   const base = estado.fatos.filter((f) => (
     combinaLista(f.cidade, flt.cidades)
