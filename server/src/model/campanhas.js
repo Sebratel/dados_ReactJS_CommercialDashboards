@@ -127,7 +127,7 @@ export function construirCampanhas() {
       campanha: nome,
       campanhaId: texto(r.campanha_id),
       dia: dia(r.dia),
-      identidade: identidadeDaCampanha(nome, 'google'),
+      identidade: identidadeDaCampanha(nome, 'google', texto(r.campanha_id)),
       // as colunas de dinheiro do Google são varchar em português — ver numeroBR
       investimento: numeroBR(r.custo_txt),
       impressoes: Number(r.impressoes) || 0,
@@ -147,7 +147,7 @@ export function construirCampanhas() {
       campanha: nome,
       campanhaId: texto(r.campanha_id),
       dia: dia(r.dia),
-      identidade: identidadeDaCampanha(nome, 'meta'),
+      identidade: identidadeDaCampanha(nome, 'meta', texto(r.campanha_id)),
       investimento: Number(r.gasto) || 0,
       impressoes: Number(r.impressoes) || 0,
       cliques: 0,             // o Meta desta base não traz clique

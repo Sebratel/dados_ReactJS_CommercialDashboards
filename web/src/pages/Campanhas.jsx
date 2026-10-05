@@ -16,6 +16,22 @@ import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
  * Power BI cada fonte mora numa aba, e comparar exige trocar de página e guardar
  * o número de cabeça.
  */
+/**
+ * Colunas do visual de anúncio identificado.
+ *
+ * `anuncioId` vem como TEXTO do servidor e precisa continuar texto até a tela:
+ * são 18 dígitos, e qualquer conversão para número arredonda — dois anúncios
+ * diferentes viram o mesmo.
+ */
+const COLUNAS_ANUNCIO = [
+  { key: 'anuncioId', titulo: 'ID DO ANÚNCIO', align: 'left' },
+  { key: 'rotulo', titulo: 'CAMPANHA (pela tag)', align: 'left' },
+  { key: 'atendimentos', titulo: 'ATENDIMENTOS', fmt: int, databar: { cor: CORES.gold } },
+  { key: 'vendas', titulo: 'VENDAS', fmt: int },
+  { key: 'conversao', titulo: 'CONVERSÃO', fmt: pct },
+  { key: 'abandonos', titulo: 'ABANDONOS', fmt: int },
+];
+
 const SUBPAGINAS = [
   { id: 'geral', label: 'Visão geral' },
   { id: 'google', label: 'Google Ads' },
@@ -332,6 +348,8 @@ function PaginaAtendimentos({ filtros }) {
     { key: 'atendente', titulo: 'ATENDENTE', align: 'left' },
     { key: 'classificacao', titulo: 'CLASSIFICAÇÃO', align: 'left' },
     { key: 'campanhas', titulo: 'CAMPANHA(S)', align: 'left' },
+    // a atribuição EXATA, quando a tag traz o identificador do anúncio
+    { key: 'anuncioId', titulo: 'ID DO ANÚNCIO', align: 'left', fmt: (v) => v || '—' },
   ];
   const contagem = (titulo, cor = CORES.primary) => [
     { key: 'key', titulo, align: 'left' },
@@ -377,6 +395,26 @@ function PaginaAtendimentos({ filtros }) {
           {vazio ? <Loading /> : <Tabela colunas={contagem('CAMPANHA', CORES.gold)} dados={data?.porCampanha || []} />}
         </Visual>
       </div>
+
+      {/* o único lugar da tela em que a atribuição não é heurística: aqui o
+          atendimento DECLAROU de qual anúncio veio */}
+      {!!(data?.porAnuncio || []).length && (
+        <Visual
+          title="POR ANÚNCIO IDENTIFICADO"
+          sub="atribuição exata — o identificador veio na própria tag do atendimento, sem cruzamento por nome"
+          flush
+          className="v-tabela"
+          actions={(
+            <BotaoExportar onExportar={() => baixarCSV(
+              'campanhas-por-anuncio',
+              tabelaParaCSV(COLUNAS_ANUNCIO, data?.porAnuncio || []),
+              sufixoPeriodo(filtros, ['cde', 'cate']),
+            )} />
+          )}
+        >
+          <Tabela colunas={COLUNAS_ANUNCIO} dados={data.porAnuncio} ordemInicial={{ key: 'atendimentos', dir: 'desc' }} />
+        </Visual>
+      )}
 
       <div className="grid linha-dupla">
         <Visual title="POR CANAL" flush className="v-meia">

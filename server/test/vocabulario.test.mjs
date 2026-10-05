@@ -9,8 +9,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const {
-  chaveDe, cidadeDe, identidadeDaCampanha, identidadeDaTag,
-  identidadesDoAtendimento, numeroBR, tagsDe, FAMILIAS_RECRUTAMENTO,
+  chaveDe, cidadeDe, cruzar, identidadeDaCampanha, identidadeDaTag,
+  identidadesDoAtendimento, indexarCampanhas, numeroBR, tagsDe, FAMILIAS_RECRUTAMENTO,
 } = await import('../src/model/vocabulario.js');
 
 // ---------------------------------------------------------------- as tags
@@ -18,7 +18,7 @@ const {
 test('a tag nova diz plataforma, família e cidade sozinha', () => {
   assert.deepEqual(identidadeDaTag('marketing_comercial_meta_canoas'), {
     plataforma: 'meta', familia: 'comercial', cidade: 'CANOAS', origem: 'tag',
-    bruto: 'marketing_comercial_meta_canoas',
+    anuncioId: null, bruto: 'marketing_comercial_meta_canoas',
   });
   const alcance = identidadeDaTag('marketing_alcance_meta_cachoeirinha');
   assert.equal(alcance.familia, 'alcance');
@@ -168,4 +168,70 @@ test('o texto em português do Google vira número, e não NaN nem valor truncad
   assert.equal(numeroBR(''), 0);
   assert.equal(numeroBR(null), 0);
   assert.equal(numeroBR(42.5), 42.5);
+});
+
+// ------------------------------------------- o ID do anúncio dentro da tag
+
+/**
+ * Em outubro/2026 a área passou a escrever o identificador do anúncio na tag.
+ * Os casos abaixo são as dez formas que existem na base em 05/10/2026 — note o
+ * espaçamento inconsistente entre as duas famílias, que é o motivo de o corte
+ * ser "os dígitos do começo" e não uma divisão por `_`.
+ */
+test('a tag com ID entrega o número e continua dizendo família e cidade', () => {
+  const id = identidadeDaTag('120248421965260047_Comercial_Meta_SAO LEOPOLDO');
+  assert.equal(id.anuncioId, '120248421965260047');
+  assert.equal(id.plataforma, 'meta');
+  assert.equal(id.familia, 'comercial');
+  assert.equal(id.cidade, 'SÃO LEOPOLDO');
+});
+
+test('o espaçamento irregular da família Alcance também é lido', () => {
+  const id = identidadeDaTag('120249119020270047_ Alcance_Meta _CANOAS');
+  assert.equal(id.anuncioId, '120249119020270047');
+  assert.equal(id.familia, 'alcance');
+  assert.equal(id.cidade, 'CANOAS');
+});
+
+test('o ID fica como TEXTO — 18 dígitos não cabem em double sem arredondar', () => {
+  const id = identidadeDaTag('120248421965250047_Comercial_Meta_CANOAS');
+  assert.strictEqual(typeof id.anuncioId, 'string');
+  assert.notEqual(
+    String(Number(id.anuncioId)), id.anuncioId,
+    'é justamente por arredondar que este ID não pode virar número em lugar nenhum',
+  );
+});
+
+test('a tag com ID não precisa do prefixo marketing — ele fica na tag irmã', () => {
+  // na base a linha inteira é:
+  //   MARKETING_COMERCIAL_META || 1202…_Comercial_Meta_SAO LEOPOLDO || ATENDIMENTO_…
+  const ids = identidadesDoAtendimento(
+    'MARKETING_COMERCIAL_META || 120248421965260047_Comercial_Meta_SAO LEOPOLDO || ATENDIMENTO_HUMANO_VENDAS_RECEPTIVAS',
+  );
+  assert.equal(ids.length, 2, 'o rótulo e o ID descrevem a mesma campanha por dois caminhos');
+  assert.ok(ids.some((i) => i.anuncioId === '120248421965260047'));
+  assert.ok(ids.every((i) => i.plataforma === 'meta' && i.familia === 'comercial'));
+});
+
+test('o ID casa com a campanha quando os dois lados o têm, e isso vence a heurística', () => {
+  const campanhas = [{
+    plataforma: 'meta',
+    campanhaId: '120248421964960047',
+    identidade: identidadeDaCampanha('[W] [CP-27] [ENG] [WHATSAPP] [COMERCIAL]', 'meta', '120248421964960047'),
+  }];
+  const indice = indexarCampanhas(campanhas);
+  const achou = cruzar(identidadeDaTag('120248421964960047_Comercial_Meta_CANOAS'), indice);
+  assert.equal(achou.confianca, 'id', 'com ID dos dois lados não há mais suposição');
+  assert.equal(achou.campanhas[0].campanhaId, '120248421964960047');
+});
+
+test('"Reconhecimento" é alcance, e não comercial', () => {
+  // o Meta trocou a nomenclatura: hoje a campanha de awareness se chama assim, e
+  // o `[WPP]` no mesmo nome fazia ela cair como campanha de conversa
+  const id = identidadeDaCampanha('[Vendas][Reconhecimento][WPP][Todas Cidades]', 'meta');
+  assert.equal(id.familia, 'alcance');
+  assert.equal(
+    identidadeDaCampanha('[Vendas][Engajamento][WPP][Todas Cidades]', 'meta').familia, 'comercial',
+    'engajamento por WhatsApp continua sendo campanha de conversa',
+  );
 });

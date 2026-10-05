@@ -412,6 +412,8 @@ export const CONJUNTOS = {
       // heurística precisa ver as duas na mesma linha
       { titulo: 'CAMPANHA(S)', valor: (a) => a.identidades.map((i) => `${i.plataforma}|${i.familia}|${i.cidade || 'todas'}`).join(' | ') },
       { titulo: 'TAG DE ORIGEM', valor: (a) => a.identidades.map((i) => i.bruto).join(' | ') },
+      // o ID do anuncio que a tag declarou: a atribuicao exata, sem heuristica
+      { titulo: 'ID DO ANÚNCIO', valor: (a) => a.identidades.map((i) => i.anuncioId).filter(Boolean).join(' | ') },
     ],
     linhas: (flt) => linhasAtendimentosCampanhas(flt),
   },

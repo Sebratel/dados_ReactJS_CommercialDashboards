@@ -85,7 +85,7 @@ const FAMILIAS = [
   { id: 'condominios', rotulo: 'Condomínios', termos: ['condominio', 'condominios'] },
   { id: 'lancamento', rotulo: 'Lançamento', termos: ['lancamento'] },
   { id: 'trafego', rotulo: 'Tráfego / captura', termos: ['traf', 'lp captura', 'wpp captura', 'trafego para lp', 'link a', 'link b'] },
-  { id: 'alcance', rotulo: 'Alcance', termos: ['alcance', 'rec'] },
+  { id: 'alcance', rotulo: 'Alcance', termos: ['alcance', 'rec', 'reconhecimento'] },
   /**
    * COMERCIAL é a campanha de CONVERSA: a que abre um atendimento.
    *
@@ -140,9 +140,41 @@ export const PLATAFORMAS = {
  * Por isso a plataforma dele fica '?' em vez de chutar: atribuir a macro ao Meta
  * daria ao Meta um funil que é dos dois.
  */
+/**
+ * O ID do anúncio dentro da tag — a ponte que a área montou em outubro/2026.
+ *
+ * A partir daí o atendimento passou a carregar, além do rótulo, o identificador
+ * numérico do anúncio no Meta:
+ *
+ *     120248421965260047_Comercial_Meta_SAO LEOPOLDO
+ *     120249119020270047_ Alcance_Meta _CANOAS
+ *
+ * Note o espaçamento inconsistente entre os dois exemplos — por isso o corte é
+ * "os dígitos do começo", e não uma divisão por `_`.
+ *
+ * ATENÇÃO AO QUE ESSE NÚMERO É. Conferido contra `marketing_meta_ads` em
+ * 05/10/2026: nenhum dos dez IDs em uso é um ID de CAMPANHA. Eles são vizinhos
+ * imediatos de campanhas reais (o de CACHOEIRINHA difere do
+ * `[Vendas][Reconhecimento][WPP][Todas Cidades]` em +10 no 14º dígito, e os cinco
+ * `Comercial_Meta_*` compartilham 11 dígitos com o `[CP-27] [COMERCIAL]`), o que
+ * os identifica como CONJUNTOS DE ANÚNCIOS — um por cidade, dentro da campanha.
+ * A exportação do Meta que temos é de nível `campaign` apenas, então hoje esse
+ * ID não encontra par. Guardamos ele mesmo assim: identifica o atendimento com
+ * exatidão, agrupa sozinho, e casa automaticamente no dia em que a exportação
+ * trouxer o nível de conjunto.
+ */
+const ID_NA_TAG = /^\s*(\d{10,})[\s_-]+(.*)$/;
+
 export function identidadeDaTag(tag) {
-  const s = simples(tag);
-  if (!s.startsWith('marketing')) return null;
+  const bruto = String(tag ?? '');
+  const comId = bruto.match(ID_NA_TAG);
+  const anuncioId = comId ? comId[1] : null;
+  // com ID, o que descreve a campanha é o resto; sem ID, a tag inteira
+  const descritor = comId ? comId[2] : bruto;
+  const s = simples(descritor);
+
+  // a tag com ID não começa com "marketing" — o prefixo ficou na tag irmã
+  if (!anuncioId && !s.startsWith('marketing')) return null;
 
   let plataforma = '?';
   if (/\bmeta\b/.test(s)) plataforma = 'meta';
@@ -154,8 +186,9 @@ export function identidadeDaTag(tag) {
     plataforma,
     familia: familiaDe(s) || 'outras',
     cidade: cidadeDe(s),
+    anuncioId,
     origem: 'tag',
-    bruto: String(tag),
+    bruto,
   };
 }
 
@@ -168,7 +201,7 @@ export function identidadeDaTag(tag) {
  * `[CIDADES]` no nome do Meta significa "todas", não uma cidade — vira `null`, que é
  * como a campanha sem recorte de cidade é tratada no cruzamento.
  */
-export function identidadeDaCampanha(nome, plataforma) {
+export function identidadeDaCampanha(nome, plataforma, id = null) {
   const s = simples(nome);
   const cp = String(nome ?? '').match(/\[\s*(CP-\d+)\s*\]/i)?.[1]?.toUpperCase() || null;
   return {
@@ -176,6 +209,7 @@ export function identidadeDaCampanha(nome, plataforma) {
     familia: familiaDe(s) || 'outras',
     cidade: / cidades /.test(` ${s} `) ? null : cidadeDe(s),
     cp,
+    anuncioId: id ? String(id) : null,
     origem: 'campanha',
     bruto: String(nome ?? ''),
   };
@@ -220,13 +254,16 @@ export const chaveSemCidade = (id) => (id ? `${id.plataforma}|${id.familia}` : n
  * `confianca` sai junto no resultado, e a tela mostra. Número cruzado por
  * heurística sem dizer qual heurística é como chegou a virar conclusão errada.
  */
-export const CONFIANCA = { exata: 'exata', familia: 'família', cidade: 'cidade' };
+export const CONFIANCA = {
+  id: 'ID', exata: 'exata', familia: 'família', cidade: 'cidade',
+};
 
-/** Índice das campanhas de anúncio, nos três recortes que o cruzamento consulta. */
+/** Índice das campanhas de anúncio, nos recortes que o cruzamento consulta. */
 export function indexarCampanhas(campanhas) {
   const porChave = new Map();
   const porFamilia = new Map();
   const porCidade = new Map();
+  const porId = new Map();
   const empurrar = (mapa, k, v) => {
     if (!k) return;
     const l = mapa.get(k);
@@ -236,8 +273,11 @@ export function indexarCampanhas(campanhas) {
     empurrar(porChave, chaveDe(c.identidade), c);
     empurrar(porFamilia, chaveSemCidade(c.identidade), c);
     empurrar(porCidade, c.identidade.cidade, c);
+    // o ID vai como TEXTO: estes numeros tem 18 digitos e nao cabem em double.
+    // Comparar como numero arredonda e faz IDs diferentes virarem o mesmo.
+    if (c.campanhaId) empurrar(porId, String(c.campanhaId), c);
   }
-  return { porChave, porFamilia, porCidade };
+  return { porChave, porFamilia, porCidade, porId };
 }
 
 /**
@@ -246,6 +286,19 @@ export function indexarCampanhas(campanhas) {
  */
 export function cruzar(idTag, indice) {
   if (!idTag) return null;
+
+  /**
+   * DEGRAU 0 — o ID. Quando existe dos dois lados, acabou a heuristica.
+   *
+   * Hoje ele quase nunca casa, e a razao esta documentada em `identidadeDaTag`:
+   * a tag carrega o ID do CONJUNTO de anuncios e a exportacao do Meta so traz o
+   * nivel de campanha. O degrau fica aqui pronto, e passa a valer sozinho no dia
+   * em que a exportacao trouxer o conjunto -- sem mexer em codigo.
+   */
+  if (idTag.anuncioId) {
+    const porId = indice.porId?.get(String(idTag.anuncioId));
+    if (porId?.length) return { campanhas: porId, confianca: 'id' };
+  }
 
   const exata = indice.porChave.get(chaveDe(idTag));
   if (exata?.length) return { campanhas: exata, confianca: 'exata' };

@@ -193,7 +193,7 @@ export function funil(flt) {
   return { linhas, semAtendimento, atendimentosTotal: atendimentos.length };
 }
 
-const ORDEM = { exata: 0, familia: 1, cidade: 2 };
+const ORDEM = { id: 0, exata: 1, familia: 2, cidade: 3 };
 const ordemConfianca = (c) => ORDEM[c] ?? 9;
 const piorConfianca = (lista) => (lista.length
   ? lista.reduce((pior, c) => (ordemConfianca(c) > ordemConfianca(pior) ? c : pior))
@@ -424,6 +424,38 @@ export function painelCampanhasAtendimentos(flt) {
     porCanal: contar(atendimentos, (a) => a.canal),
     porAtendente: contar(atendimentos, (a) => a.atendente, { limit: 25 }),
     porAtivoReceptivo: contar(atendimentos, (a) => a.ativoReceptivo),
+    /**
+     * POR ANUNCIO IDENTIFICADO — o agrupamento que so existe por causa do ID.
+     *
+     * Enquanto a exportacao do Meta nao trouxer o nivel de conjunto, este e o
+     * unico lugar da tela em que a atribuicao e EXATA: nao e "campanha parecida
+     * com a tag", e o anuncio que o atendimento declarou. Por isso ele fica
+     * separado dos demais, e nao misturado no funil.
+     */
+    porAnuncio: (() => {
+      const m = new Map();
+      for (const a of atendimentos) {
+        for (const id of a.identidades) {
+          if (!id.anuncioId) continue;
+          let r = m.get(id.anuncioId);
+          if (!r) {
+            r = {
+              anuncioId: id.anuncioId,
+              rotulo: `${PLATAFORMAS[id.plataforma] || id.plataforma} · ${FAMILIA_ROTULO[id.familia] || id.familia}${id.cidade ? ` · ${id.cidade}` : ''}`,
+              cidade: id.cidade || 'todas',
+              atendimentos: 0, vendas: 0, abandonos: 0,
+            };
+            m.set(id.anuncioId, r);
+          }
+          r.atendimentos += 1;
+          if (a.venda) r.vendas += 1;
+          if (a.abandono) r.abandonos += 1;
+        }
+      }
+      return [...m.values()]
+        .map((r) => ({ ...r, conversao: r.atendimentos ? r.vendas / r.atendimentos : 0 }))
+        .sort((x, y) => y.atendimentos - x.atendimentos);
+    })(),
     porCampanha: contar(
       atendimentos.flatMap((a) => {
         const vistas = new Set();
@@ -456,6 +488,12 @@ export function painelCampanhasAtendimentos(flt) {
         campanhas: a.identidades
           .map((id) => `${PLATAFORMAS[id.plataforma] || id.plataforma} · ${FAMILIA_ROTULO[id.familia] || id.familia}${id.cidade ? ` · ${id.cidade}` : ''}`)
           .join(' | '),
+        /**
+         * O identificador do anuncio que a tag trouxe. E a resposta exata para
+         * "de qual campanha veio este atendimento" -- sem heuristica nenhuma.
+         * Texto, nunca numero: 18 digitos nao cabem em double.
+         */
+        anuncioId: a.identidades.map((id) => id.anuncioId).filter(Boolean).join(' | ') || null,
       })),
   };
 }
