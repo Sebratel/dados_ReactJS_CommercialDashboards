@@ -183,7 +183,7 @@ function PaginaGeral({ filtros }) {
           value={vazio ? '—' : int(c.naFila)}
           label="NA FILA"
           desc="instalações em aberto"
-          title="Protocolos de instalação de fibra ou rádio sem equipamento entregue. Não respeita o período: fila em aberto é retrato do agora."
+          title="Protocolos de instalação de fibra ou rádio sem equipamento entregue. Não respeita o período (fila em aberto é retrato do agora), mas segue os demais filtros."
         />
       </div>
 
@@ -277,7 +277,7 @@ function legendaAmostra(tabela, origem) {
  * mesma página enxergam. Então a tela diz o número.
  */
 function legendaFila(data) {
-  const base = `${int(data.fila.total)} instalações em aberto · sem recorte de data`;
+  const base = `${int(data.fila.total)} instalações em aberto · sem recorte de data, segue os demais filtros`;
   if (!data.filaOculta) return base;
   return `${base} · ${int(data.filaOculta)} da equipe Field Service ficam fora desta tabela, como no relatório de origem`;
 }
