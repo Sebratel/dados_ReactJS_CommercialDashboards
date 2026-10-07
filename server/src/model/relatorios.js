@@ -592,6 +592,42 @@ function indicePorProtocolo() {
   return idx;
 }
 
+/**
+ * Fila de instalação da aba GERAL, com os filtros de contrato aplicados.
+ *
+ * A fila é retrato do agora, então o período (criação do contrato) NÃO vale para
+ * ela — como no relatório de origem. Os demais filtros de contrato (cidade, bairro,
+ * vendedor, equipe, situação, status, tecnologia e a busca) valem: até 07/10/2026
+ * a tabela ignorava todos, e o time filtrava sem ver nada mudar.
+ *
+ * A fila traz protocolo, não contrato: o encontro é pelo protocolo do fato. Com
+ * algum filtro de contrato ativo, a linha sem fato correspondente sai — não há
+ * como saber se ela combina.
+ */
+export function filaFiltrada(fila, porProtocolo, flt) {
+  const semPeriodo = { ...flt, de: '', ate: '' };
+  const filtrando = Boolean(
+    (flt.cidades || []).length || (flt.bairros || []).length || (flt.vendedores || []).length
+    || (flt.equipes || []).length || (flt.situacoes || []).length || (flt.status || []).length
+    || (flt.tecnologias || []).length || flt.busca,
+  );
+  const linhas = [];
+  for (const f of fila) {
+    const fato = porProtocolo.get(String(f.protocolo));
+    if (filtrando && (!fato || !fatoCombina(fato, semPeriodo))) continue;
+    linhas.push({
+      ...f,
+      contrato: fato?.contrato || '',
+      statusContrato: fato?.statusContrato || '',
+      cliente: fato?.cliente || '',
+      bairro: fato?.bairro || '',
+      canal: fato?.canal || '',
+      vendedor: fato?.vendedor || '',
+    });
+  }
+  return linhas;
+}
+
 // ------------------------------------------------------------ aba GERAL
 /**
  * Três tabelas de consulta: contrato, cesta de produtos e fila de instalação.
@@ -617,20 +653,7 @@ export function painelGeral(flt) {
     && (!filtrandoContrato || contratos.has(c.contrato))
   ));
 
-  const porProtocolo = indicePorProtocolo();
-  const fila = estado.fila.filter((f) => f.noDetalhe).map((f) => {
-    // a fila traz protocolo, não contrato: o encontro é pelo protocolo do fato
-    const fato = porProtocolo.get(f.protocolo);
-    return {
-      ...f,
-      contrato: fato?.contrato || '',
-      statusContrato: fato?.statusContrato || '',
-      cliente: fato?.cliente || '',
-      bairro: fato?.bairro || '',
-      canal: fato?.canal || '',
-      vendedor: fato?.vendedor || '',
-    };
-  });
+  const fila = filaFiltrada(estado.fila.filter((f) => f.noDetalhe), indicePorProtocolo(), flt);
 
   return {
     cartoes: {
