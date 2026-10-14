@@ -9,7 +9,12 @@
  *  3. senão, procura palavras-chave no texto inteiro (recupera parte do histórico);
  *  4. se seguiu o modelo "<algo> - (...)" mas <algo> não é categoria conhecida, usa <algo>
  *     como categoria própria (o BKO pode ter criado outra);
- *  5. o resto vira "Outros (texto livre)"; motivo vazio/"-" vira "Sem motivo informado".
+ *  5. o resto vira "Outros" (a mesma categoria que o BKO usa no modelo);
+ *     motivo vazio/"-" vira "Sem motivo informado".
+ *
+ * Lista revisada pelo BKO em 14/10/2026: sai "Encerrado por falta de contato 3/ Desistência" e
+ * entram "Protocolo já encerrado" e "Outros". Textos antigos de desistência/falta de contato
+ * passam a contar como "Protocolo já encerrado".
  */
 const sem = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -32,16 +37,17 @@ export const CATEGORIAS_MOTIVO = [
   'Cliente tem que entrar em contato para reabrir a venda',
   'Ajuste de CTO',
   'Necessário localização fixa',
-  'Encerrado por falta de contato 3/ Desistência',
+  'Protocolo já encerrado',
+  'Outros',
 ];
 export const SEM_MOTIVO = 'Sem motivo informado';
-export const OUTROS = 'Outros (texto livre)';
+export const OUTROS = 'Outros';
 
 // prefixos aceitos para cada categoria (sem acento, minúsculas) — o 1º é o próprio nome
 const PREFIXOS = new Map(CATEGORIAS_MOTIVO.map((c) => [c, [sem(c)]]));
 PREFIXOS.get('Sem viabilidade/Área restrita').push('sem viabilidade', 'area restrita');
 PREFIXOS.get('Venda já está sendo tratada por outro vendedor').push('venda ja esta sendo tratada');
-PREFIXOS.get('Encerrado por falta de contato 3/ Desistência').push('encerrado por falta de contato', 'desistencia');
+PREFIXOS.get('Protocolo já encerrado').push('protocolo encerrado', 'encerrado por falta de contato', 'desistencia');
 PREFIXOS.get('Cliente com pendência no CPF junto a Sebratel').push('cliente com pendencia no cpf');
 PREFIXOS.get('Cliente tem que entrar em contato para reabrir a venda').push('cliente tem que entrar em contato');
 PREFIXOS.get('Sem comprovante/documento anexado').push('sem comprovante', 'sem documento');
@@ -50,7 +56,7 @@ PREFIXOS.get('Cliente ativo').push('possui cliente ativo');
 
 // palavras-chave, na ORDEM de prioridade (a primeira que casar vence)
 const CHAVES = [
-  ['Encerrado por falta de contato 3/ Desistência', [/falta de contato/, /desist/]],
+  ['Protocolo já encerrado', [/protocolo.{0,15}encerrad/, /falta de contato/, /desist/]],
   ['Cliente tem que entrar em contato para reabrir a venda', [/reabrir/]],
   ['Venda já está sendo tratada por outro vendedor', [/outro vendedor/, /sendo tratad/]],
   ['Multiplas Contratações', [/multiplas contrata/]],
