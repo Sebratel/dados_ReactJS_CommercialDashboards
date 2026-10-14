@@ -11,7 +11,10 @@ test('modelo novo do BKO: a categoria é o que vem antes do " - ("', () => {
   assert.equal(categoriaMotivo('Multiplas Contratações - (Endereço com contrato ativo)'), 'Multiplas Contratações');
   assert.equal(categoriaMotivo('Múltiplas Contratações - (x)'), 'Multiplas Contratações');
   assert.equal(categoriaMotivo('Sem viabilidade/Área restrita - (rua sem rede)'), 'Sem viabilidade/Área restrita');
-  assert.equal(categoriaMotivo('Encerrado por falta de contato 3/ Desistencia - (x)'), 'Encerrado por falta de contato 3/ Desistência');
+  assert.equal(categoriaMotivo('Protocolo ja encerrado - (cliente desistiu)'), 'Protocolo já encerrado');
+  assert.equal(categoriaMotivo('Outros - (cliente pediu para aguardar)'), 'Outros');
+  // lista revisada em 14/10/2026: o antigo "Encerrado por falta de contato/Desistência" vira Protocolo já encerrado
+  assert.equal(categoriaMotivo('Encerrado por falta de contato 3/ Desistencia - (x)'), 'Protocolo já encerrado');
   // "Cliente ativo - … contrato ativo no endereço" é Cliente ativo, não Endereço com pendência
   assert.equal(categoriaMotivo('Cliente ativo - ( 263247 - Contrato ativo no endereço)'), 'Cliente ativo');
 });
