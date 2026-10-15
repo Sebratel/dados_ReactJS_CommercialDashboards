@@ -61,6 +61,8 @@ export default function SlaBko() {
   // padrão = últimos 30 dias (01/10/2026): "Este mês" ficava quase vazio nos primeiros dias
   const inicial = PRESETS.find((p) => p.id === '30d').calc();
   const [filtros, setFiltros] = useState({ de: inicial.de, ate: inicial.ate, preset: '30d', canal: '', g: 'mes', medida: 'media' });
+  // vendedor clicado na tabela de envios: o gráfico de motivos ao lado passa a mostrar só ele
+  const [vendedorSel, setVendedorSel] = useState(null);
   const consulta = {
     de: filtros.de, ate: filtros.ate, g: filtros.g, canal: filtros.canal ? [filtros.canal] : [],
   };
@@ -168,10 +170,15 @@ export default function SlaBko() {
 
           {!somenteInterno && (
             <div className="grid linha-dupla">
-              <RankingVendedores data={data} filtros={filtros} medida={filtros.medida} />
-              <Retrabalho data={data} />
+              <RankingVendedores
+                data={data} filtros={filtros} medida={filtros.medida}
+                selecionado={vendedorSel} onSelecionar={setVendedorSel}
+              />
+              <MotivosDevolucao data={data} vendedor={vendedorSel} onLimpar={() => setVendedorSel(null)} />
             </div>
           )}
+
+          {!somenteInterno && <AguardandoCadastro data={data} metas={metas} />}
 
           <div className="grid linha-dupla">
             {!somenteInterno && <FilaUmov data={data} />}
@@ -220,11 +227,20 @@ function Cartoes({ data, metas, somenteInterno, medida }) {
     ...(!somenteInterno ? [
       { label: `Cadastro − input · ${NOME_MEDIDA[medida]}`, value: fmtHoras(c[medida]), desc: `${NOME_MEDIDA[outra]} ${fmtHoras(c[outra])}` },
       { label: `Cadastro no prazo (${metas.cadastro} h)`, value: fmtPct(c.pctNoPrazo), desc: `A2 − A1 · ${int(c.noPrazo || 0)} de ${int(c.n)} externas` },
+      // 14/10/2026: aprovados no uMov que ainda não viraram venda no Elleven, já fora da meta
+      {
+        label: `Abertos fora SLA cadastro agora (de ${int(c.abertos?.aguardando || 0)})`,
+        value: int(c.abertos?.foraSla || 0),
+        desc: `aprovados no uMov, sem cadastro no Elleven há mais de ${metas.cadastro} h`
+          + `${c.abertos?.mais24h ? ` · ${int(c.abertos.mais24h)} há mais de 24 h` : ''} · não segue o período`,
+      },
     ] : []),
     { label: `Agendamento · ${NOME_MEDIDA[medida]}`, value: fmtHoras(a[medida]), desc: `${NOME_MEDIDA[outra]} ${fmtHoras(a[outra])}` },
     { label: `Agendamento no prazo (${metas.agendamento} h)`, value: fmtPct(a.pctNoPrazo), desc: `${int(a.noPrazo || 0)} de ${int(a.n)} agendadas` },
     ...(!somenteInterno ? [
-      { label: 'Retrabalho nos ciclos', value: fmtPct(data.ciclos.pctRetrabalho), desc: `${int(data.ciclos.comRetrabalho)} de ${int(data.ciclos.ciclos)} ciclos` },
+      // 13/10/2026: troca do "Retrabalho nos ciclos" (que contava visita/lead sem CPF no total)
+      // pela conta simples: envios analisados pelo BKO que voltaram para o vendedor
+      { label: 'Devoluções do BKO', value: fmtPct(data.triagem.pctDevolucao), desc: `${int(data.triagem.devolucoes || 0)} de ${int(data.triagem.analisadas || 0)} análises` },
     ] : []),
     // destaque = o que está hoje na fila do BKO; o total fica entre parênteses
     // backlog de AGORA (não segue o período): na virada do mês o que ficou aberto continua aqui
@@ -378,7 +394,7 @@ function RankingAtendentes({ data, filtros, metas }) {
   );
 }
 
-function RankingVendedores({ data, filtros, medida }) {
+function RankingVendedores({ data, filtros, medida, selecionado, onSelecionar }) {
   const colunas = [
     { key: 'nome', titulo: 'VENDEDOR', align: 'left' },
     { key: 'n', titulo: 'ENVIOS', fmt: int, databar: { cor: CORES.gold } },
@@ -390,25 +406,64 @@ function RankingVendedores({ data, filtros, medida }) {
   return (
     <Visual
       title="VENDEDORES EXTERNOS — ENVIOS NO UMOV"
+      sub="clique no vendedor para ver os motivos de devolução dele ao lado · clique de novo para voltar a todos"
       flush className="v-tabela"
       actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-vendedores', tabelaParaCSV(colunas, dados), sufixoPeriodo(filtros))} />}
     >
-      {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'n', dir: 'desc' }} /> : <Vazio />}
+      {dados.length ? (
+        <Tabela
+          colunas={colunas} dados={dados} ordemInicial={{ key: 'n', dir: 'desc' }}
+          onSelect={(l) => onSelecionar(selecionado === l.nome ? null : l.nome)}
+          selecionada={(l) => l.nome === selecionado}
+        />
+      ) : <Vazio />}
     </Visual>
   );
 }
 
-function Retrabalho({ data }) {
+function MotivosDevolucao({ data, vendedor, onLimpar }) {
+  const t = data.triagem;
   const c = data.ciclos;
+  const motivos = vendedor ? (t.motivosPorVendedor?.[vendedor] || []) : (t.motivosDevolucao || []);
+  const totalSel = motivos.reduce((s2, m) => s2 + m.valor, 0);
+  const geral = `${int(t.devolucoes || 0)} devoluções em ${int(t.analisadas || 0)} análises (${fmtPct(t.pctDevolucao)})`
+    + (c.pedidos ? ` · pedidos com reenvio: ${int(c.pedidosComRetrabalho)} de ${int(c.pedidos)} (${fmtPct(c.pctRetrabalhoPedidos)})` : '');
   return (
     <Visual
-      title="RETRABALHO — MOTIVOS DE DEVOLUÇÃO"
-      sub={`${int(c.ciclos)} ciclos · ${fmtPct(c.pctRetrabalho)} com retrabalho · ${String(c.mediaRodadas ?? '—').replace('.', ',')} envios por ciclo · ciclo concluído em ${fmtHoras(c.horasCiclo.mediana)} (mediana)`}
+      title={vendedor ? `DEVOLUÇÕES — MOTIVOS · ${vendedor.toUpperCase()}` : 'DEVOLUÇÕES — MOTIVOS'}
+      sub={vendedor ? `${int(totalSel)} devoluções deste vendedor no período` : `${geral} · motivos padronizados pelo modelo do BKO`}
+      actions={vendedor ? <button type="button" className="btn-exportar" onClick={onLimpar} title="Voltar a todos os vendedores">× todos</button> : null}
       className="v-tabela"
     >
-      {c.motivos.length
-        ? <BarrasHorizontais data={c.motivos} nome="Devoluções" larguraCategoria={260} />
-        : <Vazio texto="Nenhum motivo de devolução no período" />}
+      {motivos.length
+        ? <BarrasHorizontais data={motivos} nome="Devoluções" larguraCategoria={260} />
+        : <Vazio texto={vendedor ? 'Este vendedor não teve devolução no período' : 'Nenhuma devolução no período'} />}
+    </Visual>
+  );
+}
+
+function AguardandoCadastro({ data, metas }) {
+  const a = data.cadastro.abertos || { lista: [] };
+  const colunas = [
+    { key: 'idTarefa', titulo: 'TAREFA', align: 'left', fmt: (v) => (v ? String(v) : '—') },
+    { key: 'esperaHoras', titulo: 'ESPERANDO (H ÚTEIS)', fmt: fmtHoras },
+    { key: 'envio', titulo: 'ÚLTIMO ENVIO (A1)', align: 'left', fmt: fmtData },
+    { key: 'aprovadoEm', titulo: 'APROVADO EM', align: 'left', fmt: fmtData },
+    { key: 'envios', titulo: 'ENVIOS', fmt: int },
+    { key: 'vendedor', titulo: 'VENDEDOR', align: 'left' },
+    { key: 'analista', titulo: 'ANALISTA', align: 'left' },
+    { key: 'cliente', titulo: 'CLIENTE', align: 'left' },
+  ];
+  const dados = a.lista.map((l) => ({ ...l, __key: l.idTarefa }));
+  return (
+    <Visual
+      title="APROVADOS NO UMOV — AGUARDANDO CADASTRO NO ELLEVEN"
+      sub={`agora, não segue o período · ${int(a.aguardando)} aguardando · ${int(a.foraSla)} fora da meta de ${metas.cadastro} h · aprovação nos últimos 30 dias · `
+        + 'base do Elleven só com instalação de fibra: venda de outro tipo ou com CPF diferente aparece aqui'}
+      flush className="v-tabela"
+      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-aguardando-cadastro', tabelaParaCSV(colunas, dados))} />}
+    >
+      {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'esperaHoras', dir: 'desc' }} /> : <Vazio texto="Nenhum pedido aprovado aguardando cadastro" />}
     </Visual>
   );
 }

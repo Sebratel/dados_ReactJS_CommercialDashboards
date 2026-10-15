@@ -28,6 +28,7 @@
 import {
   agoraLocal, deMinutos, esquecerFeriados, horasCorridas, horasUteis, normalizarData, paraMinutos,
 } from '../sla/horasUteis.js';
+import { categoriaMotivo } from './motivosBko.js';
 
 export const METAS = { cadastro: 1, agendamento: 12 };
 export const CANAL_EXTERNO = 'vendedor externo';
@@ -184,6 +185,8 @@ function construirTarefas(brutos) {
       cliente: txt(r.nome_cliente) || null,
       situacao: !analise ? 'Pendente' : (motivo ? 'Reprovado' : 'Aprovado'),
       motivo,
+      // motivo padronizado ("Endereço com pendência", "Erro no cadastro"…) — ver motivosBko.js
+      categoria: motivo ? categoriaMotivo(motivo) : null,
       horas,
       analiseAntesDoEnvio: Boolean(analise) && horas === null,
     });
@@ -212,6 +215,7 @@ function construirCiclos(brutos) {
       reenvios: Number(r.reenvios) || 0,
       devolucoes: Number(r.devolucoes) || 0,
       motivo: txt(r.motivo_ultima_devolucao) || null,
+      categoria: txt(r.motivo_ultima_devolucao) ? categoriaMotivo(r.motivo_ultima_devolucao) : null,
       vendedor: txt(r.vendedor_primeiro_envio) || '(sem vendedor)',
       analista: txt(r.analista_ultimo_envio) || null,
       horasCiclo: ultimaAnalise ? horasUteis(primeiroInput, ultimaAnalise) : null,
@@ -575,6 +579,14 @@ function contarTextos(textos, limite = 12) {
     .slice(0, limite);
 }
 
+/** Contagem por motivo PADRONIZADO (categoria), do maior para o menor, sem corte. */
+export function contarCategorias(categorias) {
+  const m = new Map();
+  for (const c of categorias) if (c) m.set(c, (m.get(c) || 0) + 1);
+  return [...m.entries()].map(([key, valor]) => ({ key, valor }))
+    .sort((a, b) => b.valor - a.valor || a.key.localeCompare(b.key, 'pt-BR'));
+}
+
 /** Abertos sem agendamento neste momento, de qualquer mês de cadastro. */
 function backlogAgora(todas, flt, agora) {
   const abertas = todas.filter((v) => v.situacao === 'Em aberto' && entraNoCalculo(v, flt))
@@ -585,6 +597,49 @@ function backlogAgora(todas, flt, agora) {
     backlogBko: bko.length,
     backlogBkoEstouradas: bko.filter((v) => v.esperaHoras > METAS.agendamento).length,
     backlogBkoMaisDe7Dias: bko.filter((v) => v.criadoEm < diasAtras(agora, 7)).length,
+  };
+}
+
+/**
+ * Pedidos APROVADOS no uMov que ainda não viraram venda no Elleven — o "em aberto" do SLA de
+ * cadastro (A2 − A1, meta 1 h). Pedido do BKO de 14/10/2026. Retrato de agora, não segue o período.
+ *
+ * Regras: ciclo com CPF/CNPJ cuja ÚLTIMA tarefa foi aprovada nos últimos 30 dias (mesma janela
+ * que vale para o cruzamento — depois disso o ciclo é tratado como de outra venda) e sem nenhuma
+ * venda do mesmo CPF cadastrada depois do 1º envio do ciclo. O tempo conta do último envio (A1),
+ * igual ao SLA de cadastro.
+ *
+ * Limite conhecido: a base do Elleven aqui só tem instalação de FIBRA. Um pedido aprovado que
+ * virou venda de rádio/telefonia, ou cadastrado com CPF diferente, aparece como "aguardando".
+ */
+export function aguardandoCadastro(s, agora) {
+  const porId = new Map(s.tarefas.filter((t) => t.idTarefa).map((t) => [t.idTarefa, t]));
+  const vendasPorCpf = new Map();
+  for (const v of s.vendas) {
+    if (!v.cpf || !v.criadoEm) continue;
+    if (!vendasPorCpf.has(v.cpf)) vendasPorCpf.set(v.cpf, []);
+    vendasPorCpf.get(v.cpf).push(v.criadoEm);
+  }
+  const limite = diasAtras(agora, DIAS_CICLO_VALIDO);
+  const lista = [];
+  for (const c of s.ciclos) {
+    if (!c.cpf || !c.tarefaUltimo || !c.primeiroInput) continue;
+    const t = porId.get(c.tarefaUltimo);
+    if (!t || t.situacao !== 'Aprovado' || !t.analise || t.analise < limite) continue;
+    if ((vendasPorCpf.get(c.cpf) || []).some((d) => d >= c.primeiroInput)) continue;
+    const a1 = c.ultimoInput || c.primeiroInput;
+    lista.push({
+      idTarefa: t.idTarefa, envio: a1, aprovadoEm: t.analise, vendedor: t.vendedor, cliente: t.cliente,
+      analista: t.analista, envios: c.rodadas || 1,
+      esperaHoras: horasUteis(a1, agora), corridas: horasCorridas(a1, agora),
+    });
+  }
+  lista.sort((a, b) => (b.aprovadoEm || '').localeCompare(a.aprovadoEm || ''));
+  return {
+    aguardando: lista.length,
+    foraSla: lista.filter((x) => x.esperaHoras > METAS.cadastro).length,
+    mais24h: lista.filter((x) => x.corridas > 24).length,
+    lista: lista.slice(0, 300).map(({ corridas, ...x }) => ({ ...x, estourado: x.esperaHoras > METAS.cadastro })),
   };
 }
 
@@ -641,6 +696,8 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
   const totalInterna = estatistica(internas.filter((v) => v.situacao === 'Agendado').map((v) => v.slaAgendamento));
   const cadastro = {
     ...estatistica(externas.map((v) => v.slaCadastro), METAS.cadastro),
+    // aprovados no uMov ainda sem venda no Elleven (agora, não segue o período)
+    abertos: querExterno ? aguardandoCadastro(s, agora) : { aguardando: 0, foraSla: 0, mais24h: 0, lista: [] },
     serie: serie(externas.filter((v) => v.slaCadastro !== null), (v) => v.criadoEm, (v) => v.slaCadastro, flt.g, METAS.cadastro),
   };
 
@@ -664,6 +721,15 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
         / Math.max(1, l.filter((t) => t.analise).length), 4),
     })).slice(0, 60),
     motivosReprovacao: contarTextos(tarefas.map((t) => t.motivo)),
+    // DEVOLUÇÕES DO BKO (13/10/2026): conta simples, sem vincular cliente — cada reenvio é
+    // uma tarefa nova no uMov, então devolução = envio analisado e reprovado.
+    devolucoes: tarefas.filter((t) => t.situacao === 'Reprovado').length,
+    pctDevolucao: analisadas.length
+      ? redondo(tarefas.filter((t) => t.situacao === 'Reprovado').length / analisadas.length, 4) : null,
+    motivosDevolucao: contarCategorias(tarefas.filter((t) => t.situacao === 'Reprovado').map((t) => t.categoria)),
+    // mesmo recorte por vendedor, para o gráfico responder ao clique na tabela de vendedores
+    motivosPorVendedor: Object.fromEntries([...agrupar(tarefas.filter((t) => t.situacao === 'Reprovado'), (t) => t.vendedor)]
+      .map(([nome, l]) => [nome, contarCategorias(l.map((t) => t.categoria))])),
   };
 
   // ---- ciclos e retrabalho ----
@@ -675,7 +741,12 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
     pctRetrabalho: ciclos.length ? redondo(comRetrabalho.length / ciclos.length, 4) : null,
     mediaRodadas: ciclos.length ? redondo(ciclos.reduce((s2, c) => s2 + c.rodadas, 0) / ciclos.length) : null,
     horasCiclo: estatistica(ciclos.filter((c) => c.concluido).map((c) => c.horasCiclo)),
-    motivos: contarTextos(ciclos.map((c) => c.motivo)),
+    motivos: contarCategorias(ciclos.map((c) => c.categoria)),
+    // pedidos de verdade: ciclo SEM CPF/CNPJ é tarefa que nunca chegou ao BKO (visita/lead)
+    pedidos: ciclos.filter((c) => c.cpf).length,
+    pedidosComRetrabalho: ciclos.filter((c) => c.cpf && c.retrabalho).length,
+    pctRetrabalhoPedidos: ciclos.some((c) => c.cpf)
+      ? redondo(ciclos.filter((c) => c.cpf && c.retrabalho).length / ciclos.filter((c) => c.cpf).length, 4) : null,
     porVendedor: ranking(ciclos, (c) => c.vendedor, (c) => c.horasCiclo, null, (l) => ({
       comRetrabalho: l.filter((c) => c.retrabalho).length,
       pctRetrabalho: redondo(l.filter((c) => c.retrabalho).length / l.length, 4),
