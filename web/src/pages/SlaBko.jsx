@@ -178,7 +178,7 @@ export default function SlaBko() {
             </div>
           )}
 
-          {!somenteInterno && <AguardandoCadastro data={data} metas={metas} />}
+          {!somenteInterno && <PendentesCadastro data={data} metas={metas} />}
 
           <div className="grid linha-dupla">
             {!somenteInterno && <FilaUmov data={data} />}
@@ -196,7 +196,7 @@ export default function SlaBko() {
 
 function Avisos({ data }) {
   const f = data.qualidade.fontes || {};
-  const nomes = { tarefas: 'uMov · tarefas', ciclos: 'uMov · ciclos', vendas: 'Elleven · vendas' };
+  const nomes = { tarefas: 'uMov · tarefas', ciclos: 'uMov · ciclos', vendas: 'Elleven · vendas', vendasAssistidas: 'Elleven · venda assistida' };
   const erros = Object.entries(f).filter(([, x]) => x?.error);
   return (
     <>
@@ -227,12 +227,14 @@ function Cartoes({ data, metas, somenteInterno, medida }) {
     ...(!somenteInterno ? [
       { label: `Cadastro − input · ${NOME_MEDIDA[medida]}`, value: fmtHoras(c[medida]), desc: `${NOME_MEDIDA[outra]} ${fmtHoras(c[outra])}` },
       { label: `Cadastro no prazo (${metas.cadastro} h)`, value: fmtPct(c.pctNoPrazo), desc: `A2 − A1 · ${int(c.noPrazo || 0)} de ${int(c.n)} externas` },
-      // 14/10/2026: aprovados no uMov que ainda não viraram venda no Elleven, já fora da meta
+      // 15/10/2026: SLA de cadastro ao vivo — pedidos do uMov (em análise ou aprovados) ainda sem
+      // cadastro no Elleven; o relógio corre do envio (A1) até agora, em horas úteis
       {
-        label: `Abertos fora SLA cadastro agora (de ${int(c.abertos?.aguardando || 0)})`,
-        value: int(c.abertos?.foraSla || 0),
-        desc: `aprovados no uMov, sem cadastro no Elleven há mais de ${metas.cadastro} h`
-          + `${c.abertos?.mais24h ? ` · ${int(c.abertos.mais24h)} há mais de 24 h` : ''} · não segue o período`,
+        label: 'Pendentes de cadastro agora',
+        value: int(c.pendentes?.total || 0),
+        desc: `destes, ${int(c.pendentes?.fora || 0)} fora do prazo (${metas.cadastro} h)`
+          + ` · ${int(c.pendentes?.emAnalise || 0)} em análise no uMov · ${int(c.pendentes?.aprovados || 0)} aprovados sem cadastro`
+          + ` · uMov até ${c.pendentes?.umovAte ? fmtData(c.pendentes.umovAte) : '—'}`,
       },
     ] : []),
     { label: `Agendamento · ${NOME_MEDIDA[medida]}`, value: fmtHoras(a[medida]), desc: `${NOME_MEDIDA[outra]} ${fmtHoras(a[outra])}` },
@@ -442,28 +444,32 @@ function MotivosDevolucao({ data, vendedor, onLimpar }) {
   );
 }
 
-function AguardandoCadastro({ data, metas }) {
-  const a = data.cadastro.abertos || { lista: [] };
+function PendentesCadastro({ data, metas }) {
+  const p = data.cadastro.pendentes || { lista: [] };
   const colunas = [
-    { key: 'idTarefa', titulo: 'TAREFA', align: 'left', fmt: (v) => (v ? String(v) : '—') },
+    { key: 'etapa', titulo: 'ETAPA', align: 'left' },
     { key: 'esperaHoras', titulo: 'ESPERANDO (H ÚTEIS)', fmt: fmtHoras },
+    { key: 'fora', titulo: `FORA DO PRAZO (${metas.cadastro} H)`, align: 'left', fmt: (v) => (v ? 'sim' : 'não') },
     { key: 'envio', titulo: 'ÚLTIMO ENVIO (A1)', align: 'left', fmt: fmtData },
     { key: 'aprovadoEm', titulo: 'APROVADO EM', align: 'left', fmt: fmtData },
     { key: 'envios', titulo: 'ENVIOS', fmt: int },
     { key: 'vendedor', titulo: 'VENDEDOR', align: 'left' },
-    { key: 'analista', titulo: 'ANALISTA', align: 'left' },
+    { key: 'analista', titulo: 'ANALISTA', align: 'left', fmt: (v) => v || '—' },
     { key: 'cliente', titulo: 'CLIENTE', align: 'left' },
+    { key: 'idTarefa', titulo: 'TAREFA UMOV', align: 'left', fmt: (v) => (v ? String(v) : '—') },
   ];
-  const dados = a.lista.map((l) => ({ ...l, __key: l.idTarefa }));
+  const dados = p.lista.map((l) => ({ ...l, __key: l.idTarefa }));
   return (
     <Visual
-      title="APROVADOS NO UMOV — AGUARDANDO CADASTRO NO ELLEVEN"
-      sub={`agora, não segue o período · ${int(a.aguardando)} aguardando · ${int(a.foraSla)} fora da meta de ${metas.cadastro} h · aprovação nos últimos 30 dias · `
+      title="PENDENTES DE CADASTRO — ENVIADOS NO UMOV, AINDA SEM CADASTRO NO ELLEVEN"
+      sub={`agora, não segue o período · ${int(p.total)} pendentes (${int(p.emAnalise)} em análise no uMov, ${int(p.aprovados)} aprovados sem cadastro) · `
+        + `${int(p.fora)} fora da meta de ${metas.cadastro} h útil desde o envio · uMov até ${fmtData(p.umovAte)} (Data Hub, de hora em hora) · `
+        + 'fora da conta: reprovados (voltaram ao vendedor), Venda Assistida cancelada e venda interna · '
         + 'base do Elleven só com instalação de fibra: venda de outro tipo ou com CPF diferente aparece aqui'}
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-aguardando-cadastro', tabelaParaCSV(colunas, dados))} />}
+      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-pendentes-cadastro', tabelaParaCSV(colunas, dados))} />}
     >
-      {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'esperaHoras', dir: 'desc' }} /> : <Vazio texto="Nenhum pedido aprovado aguardando cadastro" />}
+      {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'esperaHoras', dir: 'desc' }} /> : <Vazio texto="Nenhum pedido pendente de cadastro" />}
     </Visual>
   );
 }

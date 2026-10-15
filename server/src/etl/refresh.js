@@ -95,6 +95,12 @@ const SOURCES = {
   slaCiclos: { grupo: 'bko', destino: 'slaBko', alvo: 'ciclos', semVaga: true, run: () => lerConjunto('umovme-ciclos-bko') },
   // A base do Elleven casa relatos por texto e leva ~3 min: timeout próprio de 10 min.
   slaVendas: { grupo: 'bko', destino: 'slaBko', alvo: 'vendas', run: () => queryFileLonga('sla_bko', [config.slaSince], 600000) },
+  // Vendas Assistidas dos últimos ~45 dias: a cancelada tira o pedido aprovado do card
+  // "Pendentes de cadastro agora" (ver o cabeçalho do .sql). Consulta leve, por tipo.
+  slaVendasAssistidas: {
+    grupo: 'bko', destino: 'slaBko', alvo: 'vendasAssistidas',
+    run: () => queryFile('sla_bko_venda_assistida', [new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10)]),
+  },
 
   /**
    * --- Campanhas de Marketing (modelo próprio) ---
