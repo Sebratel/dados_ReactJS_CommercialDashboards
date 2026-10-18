@@ -391,29 +391,27 @@ export const CONJUNTOS = {
   // `escopo: 'campanhas'` pelo mesmo motivo dos de condomínio: esta tela tem o
   // próprio par de datas (`cde`/`cate`) e as próprias dimensões.
   'campanhas-atendimentos': {
-    titulo: 'Campanhas — atendimentos tagueados',
-    descricao: 'Um atendimento do Matrix por linha, com a campanha que a tag atribuiu e a classificação do desfecho.',
+    titulo: 'Campanhas — leads de anúncio',
+    descricao: 'Um lead do rastreamento de posts do Matrix por linha, com o anúncio de origem e o desfecho no Matrix.',
     tela: 'campanhas',
-    arquivo: 'campanhas-atendimentos',
+    arquivo: 'campanhas-leads',
     escopo: 'campanhas',
     colunas: () => [
       { titulo: 'PROTOCOLO', valor: (a) => a.protocolo },
-      { titulo: 'ENTRADA', valor: (a) => dataBR(a.entrada) },
-      { titulo: 'ATENDIMENTO', valor: (a) => dataBR(a.atendimento) },
-      { titulo: 'FINALIZAÇÃO', valor: (a) => dataBR(a.finalizacao) },
+      { titulo: 'ENTRADA', valor: (a) => a.entradaHora },
+      { titulo: 'ANÚNCIO', valor: (a) => a.titulo },
+      { titulo: 'TIPO', valor: (a) => a.tipo },
+      { titulo: 'CIDADE', valor: (a) => a.cidade || '' },
       { titulo: 'CONTATO', valor: (a) => a.contato },
       { titulo: 'TELEFONE', valor: (a) => a.telefone },
-      { titulo: 'CANAL', valor: (a) => a.canal },
-      { titulo: 'ATIVO/RECEPTIVO', valor: (a) => a.ativoReceptivo },
+      { titulo: 'PRIMEIRA MENSAGEM', valor: (a) => a.mensagem },
+      { titulo: 'MENSAGENS', valor: (a) => inteiro(a.mensagens) },
+      { titulo: 'CHEGOU A ATENDENTE', valor: (a) => (a.noMatrix ? 'Sim' : 'Não') },
+      { titulo: 'ATENDIMENTO', valor: (a) => dataBR(a.atendimento) },
+      { titulo: 'FINALIZAÇÃO', valor: (a) => dataBR(a.finalizacao) },
       { titulo: 'ATENDENTE', valor: (a) => a.atendente },
       { titulo: 'CLASSIFICAÇÃO', valor: (a) => a.classificacao },
       { titulo: 'VENDA CONCLUÍDA', valor: (a) => (a.venda ? 'Sim' : 'Não') },
-      // a identidade resolvida, e a tag crua ao lado: quem for conferir a
-      // heurística precisa ver as duas na mesma linha
-      { titulo: 'CAMPANHA(S)', valor: (a) => a.identidades.map((i) => `${i.plataforma}|${i.familia}|${i.cidade || 'todas'}`).join(' | ') },
-      { titulo: 'TAG DE ORIGEM', valor: (a) => a.identidades.map((i) => i.bruto).join(' | ') },
-      // o ID do anuncio que a tag declarou: a atribuicao exata, sem heuristica
-      { titulo: 'ID DO ANÚNCIO', valor: (a) => a.identidades.map((i) => i.anuncioId).filter(Boolean).join(' | ') },
     ],
     linhas: (flt) => linhasAtendimentosCampanhas(flt),
   },

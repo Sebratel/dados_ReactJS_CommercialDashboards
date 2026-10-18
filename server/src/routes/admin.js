@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import {
@@ -9,7 +9,9 @@ import { listarQueries, testarQuery } from '../model/catalogo.js';
 import { definirJanela, estadoRecarga, janela, marcarRecarga, restaurarJanela } from '../janela.js';
 import { definirFeriados, estadoFeriados, restaurarFeriados } from '../feriados.js';
 import { definirMetas, estadoMetas, restaurarMetas } from '../metas.js';
-import { refreshAll } from '../etl/refresh.js';
+import { refreshAll, refreshSource } from '../etl/refresh.js';
+import { importarRastreamento } from '../rastreamento.js';
+import { construirCampanhas } from '../model/campanhas.js';
 import { getState } from '../model/store.js';
 import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
 import { ROTULO_TIPO, TIPOS } from '../ia/provedor.js';
@@ -123,6 +125,40 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
     res.status(400).json({ error: err.message });
   }
 });
+
+// ------------------------------------------- rastreamento de posts (Matrix)
+/**
+ * Importa o CSV do "Relatório analítico de rastreamento de posts" do Matrix, que
+ * é a base de leads da tela de Campanhas. Só admin: o arquivo traz telefone e, às
+ * vezes, CPF dentro da mensagem.
+ *
+ * O corpo é o ARQUIVO CRU (`application/octet-stream`), não JSON: a decodificação
+ * precisa dos bytes para decidir entre UTF-8 e Windows-1252 (ver
+ * model/rastreamento.js). O nome do arquivo vem no cabeçalho `X-Arquivo`.
+ *
+ * A resposta só volta depois de o modelo ser reconstruído, então a tela que
+ * recarrega em seguida já mostra os leads novos.
+ */
+admin.post(
+  '/campanhas/rastreamento',
+  exigirAuth({ minPapel: 'admin' }),
+  express.raw({ type: () => true, limit: '30mb' }),
+  async (req, res) => {
+    try {
+      if (!req.body?.length) return res.status(400).json({ error: 'Nenhum arquivo recebido.' });
+      const arquivo = req.get('X-Arquivo') ? decodeURIComponent(req.get('X-Arquivo')).slice(0, 255) : null;
+      const resultado = await importarRastreamento(req.body, { arquivo, usuario: req.usuario?.email || null });
+      console.log(`[rastreamento] ${req.usuario?.email}: ${arquivo} — ${resultado.linhas} linhas `
+        + `(${resultado.novas} novas, ${resultado.existentes} já existiam, ${resultado.recusadas} recusadas)`);
+      await Promise.all(['rastreamento', 'rastreamentoLotes', 'matrixCampanhas'].map(refreshSource));
+      construirCampanhas();
+      return res.json(resultado);
+    } catch (err) {
+      console.error('[rastreamento] importação falhou:', err.message);
+      return res.status(400).json({ error: err.message });
+    }
+  },
+);
 
 // ----------------------------------------------------- janela de dados
 /**

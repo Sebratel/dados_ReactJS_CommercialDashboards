@@ -1,68 +1,88 @@
 /**
- * CAMPANHAS DE MARKETING — réplica em memória do "MKT - Campanhas de Marketing",
- * com a ponte entre as três fontes que o relatório de origem não tem.
+ * CAMPANHAS DE MARKETING — investimento em anúncio contra os leads que o anúncio
+ * trouxe.
  *
  * Estado PRÓPRIO, como condomínios e leads: o fato aqui é um dia de veiculação de
- * anúncio ou um atendimento tagueado, e nenhum dos dois é um contrato vendido.
+ * anúncio ou um lead de anúncio, e nenhum dos dois é um contrato vendido.
  *
- * Fontes (as três no MariaDB que o dashboard já abre — ver sql/marketing.js):
- *   google   -> DB_Marketing.marketing_google_ads
- *   meta     -> DB_Marketing.marketing_meta_ads
- *   matrix   -> API_WebDeveloper.db_matrix, só o que tem tag de marketing
+ * Fontes (todas no MariaDB que o dashboard já abre — ver sql/marketing.js):
+ *   google        -> DB_Marketing.marketing_google_ads
+ *   meta          -> DB_Marketing.marketing_meta_ads
+ *   rastreamento  -> DB_Marketing.marketing_matrix_rastreamento (CSV importado)
+ *   lotes         -> as importações desse CSV
+ *   matrix        -> API_WebDeveloper.db_matrix, só os protocolos do rastreamento
  *
- * O QUE É DIFERENTE DO POWER BI, e por quê:
+ * O LEAD É O PROTOCOLO DO RASTREAMENTO DE POSTS. Até out/2026 era o atendimento com
+ * tag de marketing, e a troca é o que esta versão faz. Em set/2026:
+ *   - o rastreamento registrou 2.250 leads de anúncio;
+ *   - só 819 tinham tag. A tag depende de a primeira mensagem bater com uma frase
+ *     exata ("Vi seu anúncio EM Canoas" não aciona a regra que espera "DE"), e
+ *     quem manda "Oi" nunca recebe;
+ *   - 805 nem existem no `db_matrix`, porque só falaram com o robô — e os fluxos do
+ *     n8n que alimentam a tabela não gravam atendimento sem atendente.
  *
- * 1. NO MODELO DE ORIGEM AS TRÊS TABELAS NÃO SE RELACIONAM — só com o calendário.
- *    A "comparação entre os três" de lá são três relatórios lado a lado. Aqui elas
- *    se encontram pelo vocabulário (`model/vocabulario.js`), que é heurística
- *    declarada: a tela diz, por linha, em que degrau a ligação foi feita.
+ * O que NÃO dá para saber pelo rastreamento: a campanha. O relatório traz o
+ * título do anúncio ("Contrate agora!"), que se repete entre campanhas e cidades,
+ * e nenhum ID. Por isso os leads são agrupados por TÍTULO e por CIDADE, e o
+ * investimento fica no nível da plataforma — sem ratear gasto por semelhança de
+ * nome, que era a heurística da versão por tag. Quando o ID do anúncio vier, ele
+ * entra como chave daqui.
  *
- * 2. `Leads_Manual = 453` era uma CONSTANTE digitada à mão, e alimentava seis
- *    medidas de destaque do relatório — investimento efetivo, investimento não
- *    efetivo e taxa de conversão real, nas páginas de Google e de Meta. Aqui não
- *    existe: o denominador é o atendimento que a tag atribuiu à campanha, que muda
- *    com o filtro, como número de dashboard tem de mudar.
+ * Outras decisões que continuam valendo:
  *
- * 3. `Custo_Total_META` somava TUDO, inclusive as 44 campanhas de vaga de emprego
- *    — R$ 202.517,74, 43,5% do gasto do Meta. Recrutamento não é captação de
- *    cliente e estraga qualquer custo por lead. Aqui ele é uma família à parte
- *    (`vagas`), separável por filtro e fora da conta por padrão.
+ * 1. `Leads_Manual = 453` era uma CONSTANTE digitada à mão no Power BI e
+ *    alimentava seis medidas de destaque. Aqui o denominador é o lead, que muda
+ *    com o filtro.
  *
- * 4. O agrupamento de lá era feito na coluna `tags` CRUA, então a mesma campanha
- *    aparecia várias vezes (com aspas, sem aspas, colada por vírgula ou por ` || `).
- *    Aqui a tag é quebrada e normalizada antes de qualquer contagem.
+ * 2. `Custo_Total_META` somava TUDO, inclusive as campanhas de vaga de emprego
+ *    (R$ 202.517,74, 43,5% do gasto do Meta). Recrutamento não é captação de
+ *    cliente: aqui é a família `vagas`, fora da conta por padrão.
  */
-import { monthKey, today } from './dates.js';
 import {
-  CONFIANCA, FAMILIAS_RECRUTAMENTO, FAMILIA_ROTULO, PLATAFORMAS,
-  chaveDe, chaveSemCidade, cruzar, identidadeDaCampanha, identidadesDoAtendimento,
-  indexarCampanhas, numeroBR, rotuloDaIdentidade,
+  FAMILIAS_RECRUTAMENTO, FAMILIA_ROTULO, PLATAFORMAS,
+  cidadeDe, identidadeDaCampanha, numeroBR, rotuloDaIdentidade,
 } from './vocabulario.js';
+import { chaveProtocolo } from './rastreamento.js';
 
-export { CONFIANCA, FAMILIA_ROTULO, PLATAFORMAS };
+export { FAMILIA_ROTULO, PLATAFORMAS };
 
 /**
- * A classificação que conta como venda, exatamente como no relatório de origem.
- * O abandono também: é a medida TAXA DE ABANDONO (%) de lá.
+ * As classificações que contam como venda e como abandono, exatamente como no
+ * relatório de origem. O `db_matrix` grava sem prefixo; o CSV do rastreamento
+ * grava "STATUS ATENDIMENTO (0800) VENDAS - VENDA CONCLUÍDA" — ver
+ * `classificacaoDe`.
  */
-const VENDA = 'VENDA CONCLUÍDA';
-const ABANDONO = 'FALTA DE CONTATO (SEM RETORNO CLIENTE)';
+export const VENDA = 'VENDA CONCLUÍDA';
+export const ABANDONO = 'FALTA DE CONTATO (SEM RETORNO CLIENTE)';
+
+/**
+ * O lead que não existe no `db_matrix`. Quase sempre é quem falou só com o robô;
+ * pode também ser um atendimento ainda aberto, que o backup diário só grava
+ * depois de finalizado.
+ */
+export const SEM_ATENDENTE = '(NÃO CHEGOU A ATENDENTE)';
+export const SEM_CLASSIFICACAO = '(SEM CLASSIFICAÇÃO)';
 
 const estado = {
-  raw: { google: [], meta: [], matrix: [] },
+  raw: { google: [], meta: [], rastreamento: [], lotes: [], matrix: [] },
   fontes: {},
   anuncios: [],      // um dia de veiculação, das duas plataformas
   campanhas: [],     // uma campanha de anúncio, agregada
-  atendimentos: [],  // um atendimento do Matrix com tag de marketing
-  grupos: [],        // o funil: uma linha por plataforma+família
-  dims: { plataformas: [], familias: [], cidades: [], canais: [], classificacoes: [], atendentes: [] },
+  atendimentos: [],  // um lead de anúncio (protocolo do rastreamento)
+  importacoes: [],   // as últimas importações do CSV
+  dims: { plataformas: [], familias: [], cidades: [], anuncios: [], tipos: [], classificacoes: [], atendentes: [] },
   versao: 0,
   geradoEm: null,
   buildMs: null,
 };
 
 export const getEstadoCampanhas = () => estado;
-export const campanhasPronto = () => estado.anuncios.length > 0 || estado.atendimentos.length > 0;
+
+/**
+ * A tela abre assim que QUALQUER lado carregou, inclusive sem nenhum lead: antes
+ * da primeira importação ela precisa abrir para mostrar o botão de importar.
+ */
+export const campanhasPronto = () => Boolean(estado.geradoEm);
 
 export function setFonteCampanhas(nome, rows, meta = {}) {
   estado.raw[nome] = rows || [];
@@ -80,18 +100,20 @@ export function setFonteErroCampanhas(nome, err) {
 }
 
 const texto = (v) => (v == null ? '' : String(v).trim());
-/** `data_entrada` é varchar 'YYYY-MM-DD HH:MM:SS'; só a data interessa aqui. */
+/** As datas chegam como 'YYYY-MM-DD HH:MM:SS'; só a data interessa aqui. */
 const dia = (v) => texto(v).slice(0, 10) || null;
 
 /**
- * `classificacao` vem em TRÊS sabores de vazio: NULL do banco, a string 'null' e
- * a string vazia. Juntos são 57% dos atendimentos tagueados. Não normalizar faria
- * o gráfico de classificação mostrar três fatias diferentes para "não classificado"
- * — e a de maior volume seria uma delas.
+ * A classificação em uma forma só.
+ *
+ * Vazio vem em TRÊS sabores no `db_matrix` (NULL, a string 'null' e ''), e o CSV
+ * do rastreamento põe o prefixo da árvore antes do nome. Sem normalizar, a mesma
+ * classificação aparece em duas fatias do gráfico.
  */
-const classificacaoDe = (v) => {
+export const classificacaoDe = (v) => {
   const s = texto(v);
-  return !s || s.toLowerCase() === 'null' ? '(sem classificação)' : s.toUpperCase();
+  if (!s || s.toLowerCase() === 'null') return null;
+  return s.replace(/^STATUS ATENDIMENTO \(0800\) VENDAS\s*-\s*/i, '').trim().toUpperCase() || null;
 };
 
 /** `ativo_receptivo` grava 'Receptivo', 'Ativo' e também o número 1 (= receptivo). */
@@ -101,6 +123,96 @@ const ativoReceptivoDe = (v) => {
   if (s === 'receptivo' || s === '1') return 'Receptivo';
   return s ? texto(v) : '(não informado)';
 };
+
+/**
+ * O título do anúncio como rótulo.
+ *
+ * O emoji do começo às vezes chega como "?" (o Matrix perde o caractere) e às
+ * vezes inteiro, então "? Quero falar no WhatsApp!" e "👉 Quero falar no
+ * WhatsApp!" são o mesmo anúncio. Tudo que não é letra ou número no começo sai.
+ */
+export const tituloDe = (v) => texto(v)
+  .replace(/^[^\p{L}\p{N}]+/u, '')
+  .replace(/\s+/g, ' ')
+  .trim() || '(sem título)';
+
+const TIPO = { ad: 'Anúncio', post: 'Post impulsionado' };
+
+/**
+ * Os leads: o rastreamento agrupado por protocolo, com o desfecho do Matrix.
+ *
+ * O rastreamento tem uma linha por MENSAGEM que o cliente mandou dentro do
+ * atendimento rastreado; o lead é o protocolo, e quem o define é a primeira.
+ * O `db_matrix` tem uma linha por TRECHO do atendimento (cada transferência abre
+ * outro): venda em qualquer trecho conta como venda, e atendente e classificação
+ * vêm do último trecho que as tem.
+ */
+export function montarLeads(rastreamento, matrix) {
+  const trechos = new Map();
+  for (const r of matrix) {
+    const k = chaveProtocolo(r.protocolo);
+    if (!k) continue;
+    const l = trechos.get(k);
+    if (l) l.push(r); else trechos.set(k, [r]);
+  }
+
+  const porProtocolo = new Map();
+  for (const r of rastreamento) {
+    const k = chaveProtocolo(r.protocolo);
+    if (!k) continue;
+    const l = porProtocolo.get(k);
+    if (l) l.push(r); else porProtocolo.set(k, [r]);
+  }
+
+  const leads = [];
+  for (const [k, msgs] of porProtocolo) {
+    msgs.sort((a, b) => texto(a.data_acesso).localeCompare(texto(b.data_acesso)) || Number(a.cod) - Number(b.cod));
+    const primeira = msgs[0];
+    const doMatrix = (trechos.get(k) || []).slice().sort((a, b) => Number(a.codigo) - Number(b.codigo));
+    const noMatrix = doMatrix.length > 0;
+
+    const ultimo = (campo, f = texto) => {
+      for (let i = doMatrix.length - 1; i >= 0; i -= 1) {
+        const v = f(doMatrix[i][campo]);
+        if (v) return v;
+      }
+      return null;
+    };
+    const vendeu = doMatrix.some((t) => classificacaoDe(t.classificacao) === VENDA);
+    const doCsv = msgs.map((m) => classificacaoDe(m.classificacao)).filter(Boolean).pop() || null;
+    const classificacao = vendeu ? VENDA
+      : ultimo('classificacao', classificacaoDe) || doCsv || (noMatrix ? SEM_CLASSIFICACAO : SEM_ATENDENTE);
+
+    // a cidade que o anúncio ou o cliente nomeou — título primeiro, depois as mensagens
+    const cidade = cidadeDe(primeira.titulo) || msgs.map((m) => cidadeDe(m.mensagem)).find(Boolean) || null;
+
+    leads.push({
+      protocolo: texto(primeira.protocolo),
+      entrada: dia(primeira.data_acesso),
+      entradaHora: texto(primeira.data_acesso),
+      titulo: tituloDe(primeira.titulo),
+      tipo: TIPO[texto(primeira.tipo).toLowerCase()] || texto(primeira.tipo) || '(não informado)',
+      plataforma: 'meta',
+      cidade,
+      mensagem: texto(primeira.mensagem).slice(0, 300),
+      mensagens: msgs.length,
+      contato: texto(primeira.contato) || ultimo('contato'),
+      telefone: texto(primeira.telefone),
+      noMatrix,
+      trechos: doMatrix.length,
+      classificacao,
+      venda: classificacao === VENDA,
+      abandono: classificacao === ABANDONO,
+      atendente: ultimo('atendente') || (noMatrix ? '(sem atendente)' : SEM_ATENDENTE),
+      servico: ultimo('servico') || null,
+      ativoReceptivo: noMatrix ? ativoReceptivoDe(ultimo('ativo_receptivo')) : '(não informado)',
+      cpf: ultimo('cpf') || '',
+      atendimento: noMatrix ? dia(doMatrix[0].data_atendimento) : null,
+      finalizacao: noMatrix ? dia(doMatrix[doMatrix.length - 1].data_finalizacao) : null,
+    });
+  }
+  return leads;
+}
 
 // ---------------------------------------------------------------------------
 // CONSTRUÇÃO
@@ -113,9 +225,7 @@ export function construirCampanhas() {
    *
    * Google e Meta medem coisas diferentes e isso NÃO é uniformizado à força:
    * o Google entrega clique, o Meta entrega resultado (conversa iniciada) e
-   * alcance. Forçar os dois numa coluna "conversões" só faria somar peras com
-   * maçãs — o que a tela compara é investimento e atendimento gerado, que os
-   * dois têm de verdade.
+   * alcance.
    */
   const anuncios = [];
 
@@ -132,7 +242,7 @@ export function construirCampanhas() {
       investimento: numeroBR(r.custo_txt),
       impressoes: Number(r.impressoes) || 0,
       cliques: Number(r.cliques) || 0,
-      resultados: 0,          // o Google desta base não traz resultado de conversa
+      resultados: 0,
       alcance: 0,
       conversoes: numeroBR(r.conversoes_txt),
       estado: texto(r.estado),
@@ -150,7 +260,7 @@ export function construirCampanhas() {
       identidade: identidadeDaCampanha(nome, 'meta', texto(r.campanha_id)),
       investimento: Number(r.gasto) || 0,
       impressoes: Number(r.impressoes) || 0,
-      cliques: 0,             // o Meta desta base não traz clique
+      cliques: 0,
       resultados: Number(r.resultados) || 0,
       alcance: Number(r.alcance) || 0,
       conversoes: 0,
@@ -158,37 +268,7 @@ export function construirCampanhas() {
     });
   }
 
-  /**
-   * Um atendimento pode carregar MAIS DE UMA tag de marketing — vimos casos com
-   * campanha do Meta e página do site na mesma linha. Ele conta para as duas, e é
-   * o certo: as duas tocaram aquele cliente. O total de atendimentos da tela,
-   * portanto, é sempre a contagem de LINHAS, nunca a soma das campanhas.
-   */
-  const atendimentos = [];
-  for (const r of estado.raw.matrix) {
-    const ids = identidadesDoAtendimento(r.tags);
-    if (!ids.length) continue;
-    const classificacao = classificacaoDe(r.classificacao);
-    atendimentos.push({
-      codigo: texto(r.codigo),
-      protocolo: texto(r.protocolo),
-      entrada: dia(r.data_entrada),
-      entradaHora: texto(r.data_entrada),
-      atendimento: dia(r.data_atendimento),
-      finalizacao: dia(r.data_finalizacao),
-      classificacao,
-      venda: classificacao === VENDA,
-      abandono: classificacao === ABANDONO,
-      servico: texto(r.servico),
-      canal: texto(r.canal) || '(sem canal)',
-      ativoReceptivo: ativoReceptivoDe(r.ativo_receptivo),
-      atendente: texto(r.atendente) || '(sem atendente)',
-      contato: texto(r.contato),
-      telefone: texto(r.telefone),
-      cpf: texto(r.cpf),
-      identidades: ids,
-    });
-  }
+  const atendimentos = montarLeads(estado.raw.rastreamento, estado.raw.matrix);
 
   // ---- campanhas de anúncio, agregadas
   const porCampanha = new Map();
@@ -220,15 +300,13 @@ export function construirCampanhas() {
   estado.anuncios = anuncios;
   estado.campanhas = campanhas;
   estado.atendimentos = atendimentos;
-  estado.indice = indexarCampanhas(campanhas);
+  estado.importacoes = estado.raw.lotes || [];
   estado.dims = {
-    plataformas: uniq([...anuncios.map((a) => a.plataforma),
-      ...atendimentos.flatMap((a) => a.identidades.map((i) => i.plataforma))]),
-    familias: uniq([...campanhas.map((c) => c.identidade.familia),
-      ...atendimentos.flatMap((a) => a.identidades.map((i) => i.familia))]),
-    cidades: uniq([...campanhas.map((c) => c.identidade.cidade),
-      ...atendimentos.flatMap((a) => a.identidades.map((i) => i.cidade))]),
-    canais: uniq(atendimentos.map((a) => a.canal)),
+    plataformas: uniq([...anuncios.map((a) => a.plataforma), ...atendimentos.map((a) => a.plataforma)]),
+    familias: uniq(campanhas.map((c) => c.identidade.familia)),
+    cidades: uniq([...campanhas.map((c) => c.identidade.cidade), ...atendimentos.map((a) => a.cidade)]),
+    anuncios: uniq(atendimentos.map((a) => a.titulo)),
+    tipos: uniq(atendimentos.map((a) => a.tipo)),
     classificacoes: uniq(atendimentos.map((a) => a.classificacao)),
     atendentes: uniq(atendimentos.map((a) => a.atendente)),
   };
@@ -251,10 +329,6 @@ const asArray = (v) => {
 /**
  * `incluirRecrutamento` começa DESLIGADO, e é a única opção desta tela que muda
  * um total por omissão — por isso ela aparece na barra, escrita.
- *
- * Deixá-la ligada seria repetir o erro do relatório de origem: R$ 202 mil de
- * campanha de vaga de emprego dentro do custo por lead comercial faz o número
- * quase dobrar, e nada na tela diria por quê.
  */
 export function parseFiltrosCampanhas(q = {}) {
   return {
@@ -263,7 +337,8 @@ export function parseFiltrosCampanhas(q = {}) {
     plataforma: asArray(q.cplat),
     familia: asArray(q.cfam),
     cidade: asArray(q.ccid),
-    canal: asArray(q.ccanal),
+    anuncio: asArray(q.canun),
+    tipo: asArray(q.ctipo),
     classificacao: asArray(q.cclass),
     atendente: asArray(q.catend),
     busca: q.cbusca ? String(q.cbusca).trim().toUpperCase() : null,
@@ -273,32 +348,40 @@ export function parseFiltrosCampanhas(q = {}) {
 
 const noPeriodo = (d, flt) => !d || ((!flt.de || d >= flt.de) && (!flt.ate || d <= flt.ate));
 
-/** Uma identidade passa pelos filtros de campanha? */
-const idPassa = (id, flt) => {
-  if (flt.plataforma && !flt.plataforma.includes(id.plataforma)) return false;
-  if (flt.familia && !flt.familia.includes(id.familia)) return false;
-  if (flt.cidade && !flt.cidade.includes(id.cidade || '(todas)')) return false;
-  if (!flt.incluirRecrutamento && FAMILIAS_RECRUTAMENTO.has(id.familia)) return false;
-  return true;
-};
-
 /** Campanhas de anúncio depois dos filtros — o período recorta o DIA veiculado. */
 export function anunciosFiltrados(flt) {
-  return estado.anuncios.filter((a) => noPeriodo(a.dia, flt) && idPassa(a.identidade, flt));
+  return estado.anuncios.filter((a) => {
+    if (!noPeriodo(a.dia, flt)) return false;
+    const id = a.identidade;
+    if (flt.plataforma && !flt.plataforma.includes(id.plataforma)) return false;
+    if (flt.familia && !flt.familia.includes(id.familia)) return false;
+    if (flt.cidade && !flt.cidade.includes(id.cidade || '(todas)')) return false;
+    if (!flt.incluirRecrutamento && FAMILIAS_RECRUTAMENTO.has(id.familia)) return false;
+    return true;
+  });
 }
 
-/** Atendimentos depois dos filtros — o período recorta a DATA DE ENTRADA. */
+/**
+ * Leads depois dos filtros — o período recorta a ENTRADA (o primeiro contato).
+ *
+ * O filtro de TIPO DE CAMPANHA (`familia`) não recorta lead: o rastreamento não
+ * diz de qual campanha o lead veio, só o título do anúncio. Fingir que recorta
+ * mostraria o mesmo total com outro rótulo. A barra avisa isso.
+ */
 export function atendimentosFiltrados(flt) {
   return estado.atendimentos.filter((a) => {
     if (!noPeriodo(a.entrada, flt)) return false;
-    if (flt.canal && !flt.canal.includes(a.canal)) return false;
+    if (flt.plataforma && !flt.plataforma.includes(a.plataforma)) return false;
+    if (flt.cidade && !flt.cidade.includes(a.cidade || '(todas)')) return false;
+    if (flt.anuncio && !flt.anuncio.includes(a.titulo)) return false;
+    if (flt.tipo && !flt.tipo.includes(a.tipo)) return false;
     if (flt.classificacao && !flt.classificacao.includes(a.classificacao)) return false;
     if (flt.atendente && !flt.atendente.includes(a.atendente)) return false;
     if (flt.busca) {
       const alvo = `${a.contato} ${a.telefone} ${a.protocolo} ${a.cpf}`.toUpperCase();
       if (!alvo.includes(flt.busca)) return false;
     }
-    return a.identidades.some((id) => idPassa(id, flt));
+    return true;
   });
 }
 

@@ -20,7 +20,10 @@ import {
 import {
   construirCampanhas, setFonteCampanhas, setFonteErroCampanhas,
 } from '../model/campanhas.js';
-import { GOOGLE_ADS_SQL, MATRIX_CAMPANHAS_SQL, META_ADS_SQL } from '../sql/marketing.js';
+import {
+  GOOGLE_ADS_SQL, MATRIX_DOS_LEADS_SQL, META_ADS_SQL, RASTREAMENTO_LOTES_SQL, RASTREAMENTO_SQL,
+} from '../sql/marketing.js';
+import { garantirTabelas } from '../rastreamento.js';
 import { atualizarClima } from '../clima.js';
 
 /**
@@ -103,13 +106,28 @@ const SOURCES = {
    * recortá-las por data economizaria nada e esconderia o histórico de campanha
    * que rodou antes da janela.
    *
-   * O Matrix é o oposto — 605 mil linhas, das quais ~14 mil têm tag de marketing.
-   * O recorte por tag está no WHERE (ver sql/marketing.js) e o de data usa
-   * `relSince`, a mesma janela do outro conjunto pesado.
+   * Os leads vêm do RASTREAMENTO DE POSTS importado do Matrix (tabela nossa, ver
+   * src/rastreamento.js), e o desfecho de cada um vem do `db_matrix`, só dos
+   * protocolos que o rastreamento trouxe. Até out/2026 a base era o atendimento
+   * com tag de marketing, que cobria 36% dos leads de anúncio.
+   *
+   * As três do rastreamento criam a tabela antes de ler: numa instalação nova a
+   * tela abre vazia, pedindo a primeira importação, em vez de falhar.
    */
   googleAds: { grupo: 'mkt', destino: 'campanhas', alvo: 'google', run: () => maria.query(GOOGLE_ADS_SQL) },
   metaAds: { grupo: 'mkt', destino: 'campanhas', alvo: 'meta', run: () => maria.query(META_ADS_SQL) },
-  matrixCampanhas: { grupo: 'mkt', destino: 'campanhas', alvo: 'matrix', run: () => maria.query(MATRIX_CAMPANHAS_SQL, [config.relSince]) },
+  rastreamento: {
+    grupo: 'mkt', destino: 'campanhas', alvo: 'rastreamento',
+    run: async () => { await garantirTabelas(); return maria.query(RASTREAMENTO_SQL); },
+  },
+  rastreamentoLotes: {
+    grupo: 'mkt', destino: 'campanhas', alvo: 'lotes',
+    run: async () => { await garantirTabelas(); return maria.query(RASTREAMENTO_LOTES_SQL); },
+  },
+  matrixCampanhas: {
+    grupo: 'mkt', destino: 'campanhas', alvo: 'matrix',
+    run: async () => { await garantirTabelas(); return maria.query(MATRIX_DOS_LEADS_SQL); },
+  },
 };
 
 const rodando = new Map();
@@ -201,7 +219,7 @@ const DESTINOS = {
     set: setFonteCampanhas,
     erro: setFonteErroCampanhas,
     construir: construirCampanhas,
-    resumo: (s) => `${s.campanhas.length} campanhas · ${s.anuncios.length} dias de veiculação · ${s.atendimentos.length} atendimentos tagueados`,
+    resumo: (s) => `${s.campanhas.length} campanhas · ${s.anuncios.length} dias de veiculação · ${s.atendimentos.length} leads de anúncio`,
   },
   relatorios: {
     set: setFonteRelatorios,

@@ -1,5 +1,8 @@
-import { useDados } from '../api';
-import { LISTAS_CAMPANHAS, useFilters } from '../filters';
+import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { apiUpload, useDados } from '../api';
+import { useSession } from '../auth/session.jsx';
+import { useFilters } from '../filters';
 import { SlicerBarCampanhas } from '../components/SlicerBarCampanhas';
 import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/ui';
 import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
@@ -8,35 +11,20 @@ import { brl, int, labelData, labelPeriodo, pct } from '../format';
 import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
 
 /**
- * CAMPANHAS DE MARKETING — porte do relatório "MKT - Campanhas de Marketing",
- * com a ligação entre as três fontes que lá não existe.
+ * CAMPANHAS DE MARKETING — investimento em Google e Meta contra os leads que o
+ * anúncio trouxe.
  *
- * As quatro sub-páginas espelham as quatro de dados do original (Campanhas,
- * Google Ads, Meta Ads e Detalhamento dos entrantes), e a VISÃO GERAL é nova: no
- * Power BI cada fonte mora numa aba, e comparar exige trocar de página e guardar
- * o número de cabeça.
+ * O LEAD vem do "Relatório analítico de rastreamento de posts" do Matrix, que
+ * registra o clique no anúncio do Meta (Click-to-WhatsApp) — inclusive de quem
+ * mandou só "Oi" ou falou só com o robô. Até out/2026 a tela contava o
+ * atendimento com tag de marketing, que cobria 36% desses leads. O relatório não
+ * sai por API, então é importado aqui como CSV.
  */
-/**
- * Colunas do visual de anúncio identificado.
- *
- * `anuncioId` vem como TEXTO do servidor e precisa continuar texto até a tela:
- * são 18 dígitos, e qualquer conversão para número arredonda — dois anúncios
- * diferentes viram o mesmo.
- */
-const COLUNAS_ANUNCIO = [
-  { key: 'anuncioId', titulo: 'ID DO ANÚNCIO', align: 'left' },
-  { key: 'rotulo', titulo: 'CAMPANHA (pela tag)', align: 'left' },
-  { key: 'atendimentos', titulo: 'ATENDIMENTOS', fmt: int, databar: { cor: CORES.gold } },
-  { key: 'vendas', titulo: 'VENDAS', fmt: int },
-  { key: 'conversao', titulo: 'CONVERSÃO', fmt: pct },
-  { key: 'abandonos', titulo: 'ABANDONOS', fmt: int },
-];
-
 const SUBPAGINAS = [
   { id: 'geral', label: 'Visão geral' },
   { id: 'google', label: 'Google Ads' },
   { id: 'meta', label: 'Meta Ads' },
-  { id: 'atendimentos', label: 'Atendimentos' },
+  { id: 'atendimentos', label: 'Leads' },
 ];
 
 function SubNav({ atual, onChange }) {
@@ -51,40 +39,117 @@ function SubNav({ atual, onChange }) {
   );
 }
 
+const dataHoraBR = (v) => (v ? `${labelData(v.slice(0, 10))} ${v.slice(11, 16)}` : '—');
+
 /**
- * AS TRÊS FONTES PARAM EM DATAS DIFERENTES, e isso muda a leitura de tudo.
+ * De onde vêm os leads e quando foi a última importação — com o botão de
+ * importar para quem é admin.
  *
- * As tabelas de anúncio são de CARGA — foram importadas uma vez, em julho, e não
- * têm esteira. O Matrix é ao vivo. Comparar investimento de julho com atendimento
- * de setembro dá custo por lead zero, e a tela tem de dizer por quê em vez de
- * mostrar o zero e deixar quem olha concluir sozinho.
+ * O arquivo vai cru para o servidor, que decide a codificação e grava. A resposta
+ * só volta com o modelo já reconstruído, então invalidar o cache em seguida basta
+ * para a tela mostrar os leads novos.
+ */
+function Importacao({ frescor }) {
+  const { ehAdmin } = useSession();
+  const qc = useQueryClient();
+  const input = useRef(null);
+  const [estado, setEstado] = useState({ enviando: false, resultado: null, erro: null });
+  const ultima = frescor?.ultimaImportacao;
+
+  const enviar = async (arquivo) => {
+    if (!arquivo) return;
+    setEstado({ enviando: true, resultado: null, erro: null });
+    try {
+      const resultado = await apiUpload('/campanhas/rastreamento', arquivo);
+      setEstado({ enviando: false, resultado, erro: null });
+      qc.invalidateQueries();
+    } catch (err) {
+      setEstado({ enviando: false, resultado: null, erro: err.message });
+    } finally {
+      if (input.current) input.current.value = '';
+    }
+  };
+
+  const r = estado.resultado;
+  return (
+    <>
+      <div className={`banner importacao${ultima ? ' banner-aviso' : ''}`}>
+        <div className="texto">
+          {ultima ? (
+            <>
+              Leads do <b>rastreamento de posts do Matrix</b>, de <b>{labelData(frescor.rastreamentoDe)}</b> a
+              {' '}<b>{labelData(frescor.rastreamento)}</b>. Última importação em {dataHoraBR(ultima.importado_em)}
+              {ultima.importado_por ? <> por {ultima.importado_por}</> : null}. O relatório não sai por API:
+              {' '}depois do último dia importado, a tela não tem lead.
+            </>
+          ) : (
+            <>
+              <b>Nenhum rastreamento importado ainda.</b> Os leads desta tela vêm do “Relatório analítico de
+              {' '}rastreamento de posts” do Matrix: exporte o CSV na tela de relatórios do Matrix e importe aqui.
+              {!ehAdmin && ' A importação é feita por um administrador.'}
+            </>
+          )}
+        </div>
+        {ehAdmin && (
+          <>
+            <input
+              ref={input}
+              id="importar-rastreamento"
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              onChange={(e) => enviar(e.target.files?.[0])}
+            />
+            <button
+              type="button"
+              className="botao-enquadrar"
+              disabled={estado.enviando}
+              onClick={() => input.current?.click()}
+              title="Importar o CSV do Relatório analítico de rastreamento de posts. Reimportar um período atualiza, não duplica."
+            >
+              {estado.enviando ? 'Importando…' : 'Importar CSV do Matrix'}
+            </button>
+          </>
+        )}
+      </div>
+      {r && (
+        <div className="banner">
+          Importado: <b>{int(r.linhas)}</b> mensagens de {labelData(r.de)} a {labelData(r.ate)} —
+          {' '}{int(r.novas)} novas e {int(r.existentes)} que já estavam na base (regravadas, sem duplicar)
+          {r.recusadas ? <>, <b>{int(r.recusadas)} recusadas</b> (ex.: linha {r.exemplosRecusadas[0]?.linha}, {r.exemplosRecusadas[0]?.motivo})</> : null}.
+        </div>
+      )}
+      {estado.erro && <div className="banner error">A importação não foi feita: {estado.erro}</div>}
+    </>
+  );
+}
+
+/**
+ * Investimento e leads param em datas diferentes: são duas cargas manuais. Sem
+ * este aviso, o custo por lead de um mês sem investimento carregado sai zero e
+ * parece real.
  */
 function AvisoFrescor({ frescor }) {
-  if (!frescor) return null;
-  const { google, meta, matrix } = frescor;
-  const anuncio = [google, meta].filter(Boolean).sort().pop();
-  if (!anuncio || !matrix || anuncio >= matrix) return null;
+  if (!frescor?.rastreamento) return null;
+  const { google, meta, rastreamento } = frescor;
+  if (!meta || meta >= rastreamento) return null;
   return (
     <div className="banner banner-aviso">
-      O investimento de anúncio vai até <b>{labelData(anuncio)}</b> (Google {labelData(google) || '—'} ·
-      {' '}Meta {labelData(meta) || '—'}) e os atendimentos vão até <b>{labelData(matrix)}</b>.
-      As tabelas de Google e Meta são de <b>carga manual</b>, não de esteira — depois de {labelData(anuncio)}
-      {' '}o custo por atendimento cai a zero porque falta o investimento, não porque ele acabou.
+      O investimento do Meta vai até <b>{labelData(meta)}</b> (Google {labelData(google) || '—'}) e os leads vão até
+      {' '}<b>{labelData(rastreamento)}</b>. As tabelas de anúncio são de carga manual — depois de {labelData(meta)}
+      {' '}o custo por lead cai a zero porque falta o investimento, não porque ele acabou.
     </div>
   );
 }
 
-/** Um selo curto dizendo por que degrau a ligação campanha↔atendimento foi feita. */
-function SeloConfianca({ valor }) {
-  if (!valor) return <span className="selo-ligacao neutro" title="Nenhuma campanha de anúncio corresponde a esta tag — é tráfego orgânico ou campanha sem verba.">sem anúncio</span>;
-  const texto = { exata: 'exata', familia: 'por família', cidade: 'por cidade' }[valor] || valor;
-  const dica = {
-    exata: 'Plataforma, tipo de campanha e cidade batem entre a tag do atendimento e o nome da campanha.',
-    familia: 'A tag diz a cidade, mas a campanha cobre todas — o investimento é rateado entre as cidades que ela atendeu.',
-    cidade: 'A tag antiga (macro) não diz a plataforma, então a ligação é só pela cidade: junta Google e Meta daquela cidade.',
-  }[valor];
-  return <span className={`selo-ligacao ${valor}`} title={dica}>{texto}</span>;
-}
+const COLUNAS_ANUNCIO = [
+  { key: 'key', titulo: 'ANÚNCIO', align: 'left' },
+  { key: 'leads', titulo: 'LEADS', fmt: int, databar: { cor: CORES.gold } },
+  { key: 'vendas', titulo: 'VENDAS', fmt: int },
+  { key: 'conversao', titulo: 'CONVERSÃO', fmt: pct },
+  { key: 'abandono', titulo: 'ABANDONO', fmt: pct },
+  { key: 'fatiaSemAtendente', titulo: 'SEM ATENDENTE', fmt: pct },
+];
 
 export default function Campanhas() {
   const { filtros, setFiltro } = useFilters();
@@ -96,7 +161,7 @@ export default function Campanhas() {
       {sub === 'geral' && <PaginaGeral filtros={filtros} />}
       {sub === 'google' && <PaginaPlataforma filtros={filtros} plataforma="google" />}
       {sub === 'meta' && <PaginaPlataforma filtros={filtros} plataforma="meta" />}
-      {sub === 'atendimentos' && <PaginaAtendimentos filtros={filtros} />}
+      {sub === 'atendimentos' && <PaginaLeads filtros={filtros} />}
     </main>
   );
 }
@@ -106,130 +171,94 @@ function PaginaGeral({ filtros }) {
   const { data, error, isLoading } = useDados('/campanhas', filtros);
   const vazio = isLoading && !data;
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
-
-  const colunasFunil = [
-    { key: 'rotulo', titulo: 'CAMPANHA', align: 'left' },
-    { key: 'investimento', titulo: 'INVESTIMENTO', fmt: brl },
-    { key: 'atendimentos', titulo: 'ATENDIMENTOS', fmt: int, databar: { cor: CORES.gold } },
-    { key: 'vendas', titulo: 'VENDAS', fmt: int },
-    { key: 'conversao', titulo: 'CONVERSÃO', fmt: pct },
-    { key: 'custoPorAtendimento', titulo: 'CUSTO / ATEND.', fmt: brl },
-    { key: 'custoPorVenda', titulo: 'CUSTO / VENDA', fmt: brl },
-    // `fmt` pode devolver JSX: a célula renderiza o retorno e o `title` já se
-    // protege de não-string. O CSV cai no valor cru ('exata'/'familia'/'cidade').
-    { key: 'confianca', titulo: 'LIGAÇÃO', align: 'center', fmt: (v) => <SeloConfianca valor={v} /> },
-  ];
-
-  const colunasOrfas = [
-    { key: 'campanha', titulo: 'CAMPANHA', align: 'left' },
-    { key: 'plataformaRotulo', titulo: 'PLATAFORMA', align: 'left' },
-    { key: 'investimento', titulo: 'GASTO', fmt: brl, databar: { cor: CORES.primary } },
-    { key: 'impressoes', titulo: 'IMPRESSÕES', fmt: int },
-  ];
+  const k = data?.kpis;
 
   const colunasCidade = [
     { key: 'key', titulo: 'CIDADE', align: 'left' },
     { key: 'investimento', titulo: 'INVESTIMENTO', fmt: brl },
-    { key: 'atendimentos', titulo: 'ATENDIMENTOS', fmt: int, databar: { cor: CORES.gold } },
+    { key: 'leads', titulo: 'LEADS', fmt: int, databar: { cor: CORES.gold } },
     { key: 'vendas', titulo: 'VENDAS', fmt: int },
-    { key: 'custoPorAtendimento', titulo: 'CUSTO / ATEND.', fmt: brl },
+    { key: 'conversao', titulo: 'CONVERSÃO', fmt: pct },
   ];
 
   if (error) return <Erro erro={error} />;
 
   return (
     <>
-      <SlicerBarCampanhas />
+      <SlicerBarCampanhas campos={['plataforma', 'familia', 'cidade', 'anuncio']} />
+      <Importacao frescor={data?.frescor} />
       <AvisoFrescor frescor={data?.frescor} />
 
-      <div className="banner">
-        Google, Meta e Matrix <b>não têm chave comum</b> — as campanhas ainda não carregam o mesmo ID
-        nos três lados. A ligação abaixo é feita pelo <b>nome</b>: plataforma, tipo de campanha e cidade,
-        lidos da tag do atendimento e do nome do anúncio. A coluna <i>Ligação</i> diz, por linha, qual
-        degrau foi usado. Campanhas de <b>vaga de emprego</b> ficam fora do investimento por padrão —
-        o botão “recrutamento” na barra as inclui.
-      </div>
-
       <div className="kpi-faixa">
-        <Kpi value={brl(data?.kpis?.investimento || 0)} label="INVESTIMENTO" desc="Google + Meta no período" />
-        <Kpi value={int(data?.kpis?.atendimentos || 0)} label="ATENDIMENTOS" small desc="entradas com tag de campanha" />
-        <Kpi value={int(data?.kpis?.vendas || 0)} label="VENDAS CONCLUÍDAS" small desc={`conversão ${pct(data?.kpis?.conversao || 0)}`} />
+        <Kpi value={brl(k?.investimento || 0)} label="INVESTIMENTO" desc={`Meta ${brl(k?.investimentoMeta || 0)} · Google ${brl(k?.investimentoGoogle || 0)}`} />
+        <Kpi value={int(k?.leads || 0)} label="LEADS DE ANÚNCIO" small desc="rastreamento de posts do Matrix" />
+        <Kpi value={int(k?.vendas || 0)} label="VENDAS CONCLUÍDAS" small desc={`conversão ${pct(k?.conversao || 0)}`} />
         <Kpi
-          value={brl(data?.kpis?.custoPorAtendimento || 0)}
-          label="CUSTO / ATENDIMENTO"
+          value={brl(k?.custoPorLead || 0)}
+          label="CUSTO / LEAD (META)"
           small
-          desc="investimento ÷ atendimentos tagueados"
-          title="Só das campanhas de captação — recrutamento entra apenas com o botão da barra."
+          desc={`${brl(k?.investimentoMetaCoberto || 0)} do Meta ÷ leads`}
+          title="Só o gasto do Meta (o rastreamento registra clique em anúncio do Meta) e só dos dias que o rastreamento importado cobre — gasto de mês sem lead importado não entra na divisão. Recrutamento entra apenas com o botão da barra."
         />
-        <Kpi value={brl(data?.kpis?.custoPorVenda || 0)} label="CUSTO / VENDA" small desc="investimento ÷ vendas concluídas" />
+        <Kpi
+          value={pct(k?.fatiaSemAtendente || 0)}
+          label="NÃO CHEGARAM A ATENDENTE"
+          small
+          desc={`${int(k?.semAtendente || 0)} leads só com o robô`}
+          title="O lead não existe no histórico de atendimentos do Matrix: conversou só com a ISA, ou o atendimento ainda não foi finalizado."
+        />
       </div>
 
       <div className="grid linha-64-36">
         <Visual
-          title="INVESTIMENTO x ATENDIMENTO / MÊS"
-          sub="a comparação que o relatório de origem não faz: os dois lados no mesmo eixo do tempo"
+          title="INVESTIMENTO META x LEADS / MÊS"
+          sub="o gasto que gerou o lead e o lead que ele gerou, no mesmo eixo do tempo"
           className="v-grafico"
         >
           {vazio ? <Loading /> : (
             <ComboChart
               data={serie}
-              barKey="investimento"
-              barName="INVESTIMENTO"
+              barKey="investimentoMeta"
+              barName="INVESTIMENTO META"
               barFmt={brl}
-              lineKey="atendimentos"
-              lineName="ATENDIMENTOS"
+              lineKey="leads"
+              lineName="LEADS"
               escalaSecundaria
             />
           )}
         </Visual>
 
-        <Visual title="ATENDIMENTOS POR PLATAFORMA" className="v-grafico">
-          {vazio ? <Loading /> : (
-            <BarrasHorizontais
-              data={(data?.porPlataforma || []).map((p) => ({ key: p.key, valor: p.atendimentos }))}
-              nome="ATENDIMENTOS"
-            />
-          )}
+        <Visual title="LEADS POR CLASSIFICAÇÃO" className="v-grafico">
+          {vazio ? <Loading /> : <BarrasHorizontais data={data?.porClassificacao || []} nome="LEADS" larguraCategoria={170} />}
         </Visual>
       </div>
 
       <Visual
-        title="FUNIL POR CAMPANHA"
-        sub={data ? `${int(data.kpis.atendimentos)} atendimentos · investimento rateado entre os grupos que alcançaram cada campanha, para a soma não passar do gasto real` : ''}
+        title="LEADS POR ANÚNCIO"
+        sub="o título do anúncio em que a pessoa clicou — o rastreamento não diz a campanha, e o mesmo título roda em várias"
         flush
         className="v-tabela"
         actions={(
           <BotaoExportar onExportar={() => baixarCSV(
-            'campanhas-funil', tabelaParaCSV(colunasFunil, data?.funil || []),
+            'campanhas-leads-por-anuncio', tabelaParaCSV(COLUNAS_ANUNCIO, data?.porAnuncio || []),
             sufixoPeriodo(filtros, ['cde', 'cate']),
           )} />
         )}
       >
-        {vazio ? <Loading /> : <Tabela colunas={colunasFunil} dados={data?.funil || []} ordemInicial={{ key: 'atendimentos', dir: 'desc' }} />}
+        {vazio ? <Loading />
+          : (data?.porAnuncio || []).length
+            ? <Tabela colunas={COLUNAS_ANUNCIO} dados={data.porAnuncio} ordemInicial={{ key: 'leads', dir: 'desc' }} />
+            : <Vazio texto="Nenhum lead no período. Confira se o rastreamento deste período já foi importado." />}
       </Visual>
 
-      <div className="grid linha-dupla">
-        <Visual
-          title="GASTOU E NÃO GEROU ATENDIMENTO TAGUEADO"
-          sub="campanhas que rodaram sem nenhum atendimento marcado com elas — ou não converteram, ou a tag não foi aplicada"
-          flush
-          className="v-tabela"
-        >
-          {vazio ? <Loading />
-            : (data?.semAtendimento || []).length
-              ? <Tabela colunas={colunasOrfas} dados={data.semAtendimento} ordemInicial={{ key: 'investimento', dir: 'desc' }} />
-              : <Vazio texto="Toda campanha do período gerou algum atendimento tagueado" />}
-        </Visual>
-
-        <Visual
-          title="POR CIDADE"
-          sub="a dimensão em que as três fontes mais se encontram: ela aparece no nome da campanha e na tag"
-          flush
-          className="v-tabela"
-        >
-          {vazio ? <Loading /> : <Tabela colunas={colunasCidade} dados={data?.porCidade || []} ordemInicial={{ key: 'atendimentos', dir: 'desc' }} />}
-        </Visual>
-      </div>
+      <Visual
+        title="POR CIDADE"
+        sub="investimento das campanhas que nomeiam a cidade; lead pela cidade do título do anúncio ou da mensagem"
+        flush
+        className="v-tabela"
+      >
+        {vazio ? <Loading /> : <Tabela colunas={colunasCidade} dados={data?.porCidade || []} ordemInicial={{ key: 'leads', dir: 'desc' }} />}
+      </Visual>
     </>
   );
 }
@@ -280,33 +309,31 @@ function PaginaPlataforma({ filtros, plataforma }) {
         <Kpi value={int(data?.kpis?.impressoes || 0)} label="IMPRESSÕES" small />
         {ehGoogle
           ? <Kpi value={int(data?.kpis?.cliques || 0)} label="CLIQUES" small />
-          : <Kpi value={int(data?.kpis?.resultados || 0)} label="RESULTADOS" small desc="conversas iniciadas" />}
+          : <Kpi value={int(data?.kpis?.resultados || 0)} label="RESULTADOS" small desc="conversas iniciadas, pelo Meta" />}
         <Kpi
-          value={int(data?.kpis?.atendimentos || 0)}
-          label="ATENDIMENTOS ATRIBUÍDOS"
+          value={int(data?.kpis?.leads || 0)}
+          label="LEADS NO MATRIX"
           small
-          desc="pela tag do Matrix"
-          title="Atendimentos cuja tag aponta para esta plataforma. Sem tag da plataforma, não há como atribuir."
+          desc="rastreamento de posts"
+          title="Leads que o Matrix registrou como vindos de anúncio. O rastreamento só cobre o Meta."
         />
-        <Kpi value={brl(data?.kpis?.custoPorAtendimento || 0)} label="CUSTO / ATENDIMENTO" small />
+        <Kpi value={brl(data?.kpis?.custoPorLead || 0)} label="CUSTO / LEAD" small />
       </div>
 
-      {/* o Google não tem tag correspondente no Matrix, e isso precisa ser dito */}
-      {ehGoogle && data && data.kpis.atendimentos < 5 && (
+      {ehGoogle && (
         <div className="banner">
-          Quase nenhum atendimento é atribuído ao Google porque <b>não existe tag de Google no Matrix</b>:
-          a taxonomia de tags nomeia <code>_meta</code> e <code>site_organico</code>, mas não o Google.
-          O investimento aparece aqui; o retorno dele só será mensurável com uma tag própria — ou com o
-          ID de campanha nas tags, que é o passo seguinte.
+          O rastreamento de posts do Matrix registra o clique em anúncio do <b>Meta</b> (Facebook e Instagram), não
+          {' '}o do Google. O investimento do Google aparece aqui; o lead que ele gerou ainda não tem fonte que o
+          {' '}identifique no Matrix.
         </div>
       )}
 
       <div className="grid linha-64-36">
-        <Visual title="INVESTIMENTO x ATENDIMENTO / MÊS" className="v-grafico">
+        <Visual title={ehGoogle ? 'INVESTIMENTO / MÊS' : 'INVESTIMENTO x LEADS / MÊS'} className="v-grafico">
           {vazio ? <Loading /> : (
             <ComboChart
               data={serie} barKey="investimento" barName="INVESTIMENTO" barFmt={brl}
-              lineKey="atendimentos" lineName="ATENDIMENTOS" escalaSecundaria
+              lineKey={ehGoogle ? 'cliques' : 'leads'} lineName={ehGoogle ? 'CLIQUES' : 'LEADS'} escalaSecundaria
             />
           )}
         </Visual>
@@ -332,53 +359,64 @@ function PaginaPlataforma({ filtros, plataforma }) {
   );
 }
 
-// ------------------------------------------------------------- ATENDIMENTOS
-function PaginaAtendimentos({ filtros }) {
+// ---------------------------------------------------------------------- LEADS
+function PaginaLeads({ filtros }) {
   const { data, error, isLoading } = useDados('/campanhas/atendimentos', filtros);
   const vazio = isLoading && !data;
   const serie = (data?.serie || []).map((m) => ({ ...m, label: labelPeriodo(m.periodo) }));
+  const k = data?.kpis;
 
   const colunas = [
     { key: 'entrada', titulo: 'ENTRADA', align: 'center', fmt: labelData },
     { key: 'protocolo', titulo: 'PROTOCOLO', align: 'left' },
     { key: 'contato', titulo: 'CONTATO', align: 'left' },
     { key: 'telefone', titulo: 'TELEFONE', align: 'left' },
-    { key: 'canal', titulo: 'CANAL', align: 'left' },
-    { key: 'ativoReceptivo', titulo: 'ATIVO/RECEPTIVO', align: 'left' },
+    { key: 'titulo', titulo: 'ANÚNCIO', align: 'left' },
+    { key: 'cidade', titulo: 'CIDADE', align: 'left' },
+    { key: 'mensagem', titulo: 'PRIMEIRA MENSAGEM', align: 'left' },
     { key: 'atendente', titulo: 'ATENDENTE', align: 'left' },
     { key: 'classificacao', titulo: 'CLASSIFICAÇÃO', align: 'left' },
-    { key: 'campanhas', titulo: 'CAMPANHA(S)', align: 'left' },
-    // a atribuição EXATA, quando a tag traz o identificador do anúncio
-    { key: 'anuncioId', titulo: 'ID DO ANÚNCIO', align: 'left', fmt: (v) => v || '—' },
   ];
   const contagem = (titulo, cor = CORES.primary) => [
     { key: 'key', titulo, align: 'left' },
-    { key: 'valor', titulo: 'QTD', fmt: int, databar: { cor } },
+    { key: 'valor', titulo: 'LEADS', fmt: int, databar: { cor } },
+  ];
+  const colunasCidade = [
+    { key: 'key', titulo: 'CIDADE', align: 'left' },
+    { key: 'leads', titulo: 'LEADS', fmt: int, databar: { cor: CORES.gold } },
+    { key: 'vendas', titulo: 'VENDAS', fmt: int },
+    { key: 'fatiaSemAtendente', titulo: 'SEM ATENDENTE', fmt: pct },
   ];
 
   if (error) return <Erro erro={error} />;
 
   return (
     <>
-      <SlicerBarCampanhas campos={['plataforma', 'familia', 'cidade', 'canal', 'classificacao', 'atendente']} />
-      <AvisoFrescor frescor={data?.frescor} />
+      <SlicerBarCampanhas campos={['cidade', 'anuncio', 'tipo', 'classificacao', 'atendente']} />
+      <Importacao frescor={data?.frescor} />
 
       <div className="kpi-faixa">
-        <Kpi value={int(data?.kpis?.atendimentos || 0)} label="ATENDIMENTOS" desc="entradas com tag de campanha" />
-        <Kpi value={int(data?.kpis?.vendas || 0)} label="VENDAS CONCLUÍDAS" small desc={`efetividade ${pct(data?.kpis?.conversao || 0)}`} />
+        <Kpi value={int(k?.leads || 0)} label="LEADS DE ANÚNCIO" desc="um por protocolo do rastreamento" />
+        <Kpi value={int(k?.vendas || 0)} label="VENDAS CONCLUÍDAS" small desc={`efetividade ${pct(k?.conversao || 0)}`} />
         <Kpi
-          value={pct(data?.kpis?.abandono || 0)}
+          value={pct(k?.abandono || 0)}
           label="TAXA DE ABANDONO"
           small
           desc="falta de contato sem retorno do cliente"
-          title="Mesma medida do relatório de origem: atendimentos classificados como FALTA DE CONTATO (SEM RETORNO CLIENTE) sobre o total."
+          title="Mesma medida do relatório de origem: leads classificados como FALTA DE CONTATO (SEM RETORNO CLIENTE) sobre o total."
         />
-        <Kpi value={int(data?.kpis?.protocolos || 0)} label="PROTOCOLOS" small />
+        <Kpi
+          value={pct(k?.fatiaSemAtendente || 0)}
+          label="NÃO CHEGARAM A ATENDENTE"
+          small
+          desc={`${int(k?.semAtendente || 0)} leads`}
+          title="O histórico de atendimentos do Matrix (db_matrix) só guarda atendimento com atendente. Quem conversou só com a ISA aparece aqui."
+        />
       </div>
 
-      <Visual title="ATENDIMENTOS x VENDAS / MÊS" className="v-grafico">
+      <Visual title="LEADS x VENDAS / MÊS" className="v-grafico">
         {vazio ? <Loading /> : (
-          <ComboChart data={serie} barKey="atendimentos" barName="ATENDIMENTOS" lineKey="vendas" lineName="VENDAS" escalaSecundaria />
+          <ComboChart data={serie} barKey="leads" barName="LEADS" lineKey="vendas" lineName="VENDAS" escalaSecundaria />
         )}
       </Visual>
 
@@ -387,52 +425,38 @@ function PaginaAtendimentos({ filtros }) {
           {vazio ? <Loading /> : <Tabela colunas={contagem('CLASSIFICAÇÃO')} dados={data?.porClassificacao || []} />}
         </Visual>
         <Visual
-          title="POR CAMPANHA"
-          sub="um atendimento pode carregar mais de uma tag, então a soma daqui passa do total — cada linha conta quem tocou aquele cliente"
+          title="POR ANÚNCIO"
+          sub="o título do anúncio em que a pessoa clicou"
           flush
           className="v-meia"
-        >
-          {vazio ? <Loading /> : <Tabela colunas={contagem('CAMPANHA', CORES.gold)} dados={data?.porCampanha || []} />}
-        </Visual>
-      </div>
-
-      {/* o único lugar da tela em que a atribuição não é heurística: aqui o
-          atendimento DECLAROU de qual anúncio veio */}
-      {!!(data?.porAnuncio || []).length && (
-        <Visual
-          title="POR ANÚNCIO IDENTIFICADO"
-          sub="atribuição exata — o identificador veio na própria tag do atendimento, sem cruzamento por nome"
-          flush
-          className="v-tabela"
           actions={(
             <BotaoExportar onExportar={() => baixarCSV(
-              'campanhas-por-anuncio',
-              tabelaParaCSV(COLUNAS_ANUNCIO, data?.porAnuncio || []),
+              'campanhas-leads-por-anuncio', tabelaParaCSV(COLUNAS_ANUNCIO, data?.porAnuncio || []),
               sufixoPeriodo(filtros, ['cde', 'cate']),
             )} />
           )}
         >
-          <Tabela colunas={COLUNAS_ANUNCIO} dados={data.porAnuncio} ordemInicial={{ key: 'atendimentos', dir: 'desc' }} />
+          {vazio ? <Loading /> : <Tabela colunas={COLUNAS_ANUNCIO} dados={data?.porAnuncio || []} ordemInicial={{ key: 'leads', dir: 'desc' }} />}
         </Visual>
-      )}
+      </div>
 
       <div className="grid linha-dupla">
-        <Visual title="POR CANAL" flush className="v-meia">
-          {vazio ? <Loading /> : <Tabela colunas={contagem('CANAL')} dados={data?.porCanal || []} />}
+        <Visual title="POR CIDADE" sub="a do título do anúncio ou a que o cliente escreveu" flush className="v-meia">
+          {vazio ? <Loading /> : <Tabela colunas={colunasCidade} dados={data?.porCidade || []} ordemInicial={{ key: 'leads', dir: 'desc' }} />}
         </Visual>
-        <Visual title="POR ATENDENTE" flush className="v-meia">
+        <Visual title="POR ATENDENTE" sub="só dos leads que chegaram a um atendente" flush className="v-meia">
           {vazio ? <Loading /> : <Tabela colunas={contagem('ATENDENTE', CORES.goldSoft)} dados={data?.porAtendente || []} />}
         </Visual>
       </div>
 
       <Visual
-        title="RELATÓRIO DETALHADO DOS ATENDIMENTOS"
-        sub={data ? `${int(data.total)} atendimentos · a tabela mostra os ${int((data.detalhe || []).length)} mais recentes` : ''}
+        title="RELATÓRIO DETALHADO DOS LEADS"
+        sub={data ? `${int(data.total)} leads · a tabela mostra os ${int((data.detalhe || []).length)} mais recentes` : ''}
         flush
         className="v-tabela-alta"
         actions={(
           <BotaoExportar onExportar={() => baixarCSV(
-            'campanhas-atendimentos', tabelaParaCSV(colunas, data?.detalhe || []),
+            'campanhas-leads', tabelaParaCSV(colunas, data?.detalhe || []),
             sufixoPeriodo(filtros, ['cde', 'cate']),
           )} />
         )}

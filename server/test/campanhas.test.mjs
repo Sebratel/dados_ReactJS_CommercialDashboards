@@ -1,10 +1,11 @@
 /**
- * CAMPANHAS — o funil e o rateio do investimento.
+ * CAMPANHAS — o lead do rastreamento de posts e o desfecho dele no Matrix.
  *
- * O risco desta tela não é errar uma conta: é somar a mesma campanha em várias
- * linhas e mostrar um investimento maior do que o que foi gasto. Uma tag casa com
- * várias campanhas e uma campanha é alcançada por vários grupos, então o total só
- * fecha se o rateio conservar. É isso que se segura aqui.
+ * O risco desta tela é contar errado o lead: um protocolo tem várias mensagens no
+ * rastreamento e vários trechos no `db_matrix`, e olhar uma linha só de cada lado
+ * já produziu uma conclusão errada (a de que a tag "se perdia" na transferência).
+ * Os testes seguram a junção, a venda em qualquer trecho, o lead que não chegou a
+ * atendente e o custo por lead calculado só com o gasto que gerou o lead.
  */
 import assert from 'node:assert/strict';
 import test, { beforeEach } from 'node:test';
@@ -12,158 +13,196 @@ import test, { beforeEach } from 'node:test';
 process.env.AUTH_ENABLED = 'false';
 
 const {
-  construirCampanhas, parseFiltrosCampanhas, setFonteCampanhas,
+  SEM_ATENDENTE, VENDA, classificacaoDe, construirCampanhas, montarLeads,
+  parseFiltrosCampanhas, setFonteCampanhas, tituloDe,
 } = await import('../src/model/campanhas.js');
 const {
-  funil, painelCampanhasAtendimentos, painelCampanhasPlataforma, painelCampanhasVisaoGeral,
+  painelCampanhasAtendimentos, painelCampanhasPlataforma, painelCampanhasVisaoGeral,
 } = await import('../src/model/paineis-campanhas.js');
 
-const diaGoogle = (campanha, dia, custo, cliques = 10) => ({
+const diaGoogle = (campanha, dia, custo) => ({
   campanha, campanha_id: `G-${campanha}`, dia, custo_txt: custo,
-  cliques, impressoes: 100, conversoes_txt: '1', estado: 'Ativa',
+  cliques: 10, impressoes: 100, conversoes_txt: '1', estado: 'Ativa',
 });
-const diaMeta = (campanha, dia, gasto, resultados = 5) => ({
+const diaMeta = (campanha, dia, gasto) => ({
   campanha, campanha_id: `M-${campanha}`, dia, gasto,
-  resultados, impressoes: 1000, alcance: 800, estado: 'Ativa',
+  resultados: 5, impressoes: 1000, alcance: 800, estado: 'Ativa',
 });
-const atendimento = (codigo, entrada, tags, classificacao = null) => ({
-  codigo, protocolo: `P${codigo}`, data_entrada: `${entrada} 10:00:00`,
-  data_atendimento: `${entrada} 10:05:00`, data_finalizacao: `${entrada} 10:30:00`,
-  classificacao, canal: 'Whatsapp', ativo_receptivo: 'Receptivo',
-  atendente: 'ANA', contato: 'Cliente', num_telefone: '5551999', cpf: '', tags,
+let cod = 0;
+const msg = (protocolo, quando, titulo, mensagem, extra = {}) => ({
+  cod: (cod += 1), protocolo, data_acesso: quando, titulo, tipo: 'ad',
+  contato: 'Cliente', telefone: '5551999', classificacao: null, mensagem, ...extra,
+});
+const trecho = (codigo, protocolo, classificacao, atendente = 'ANA') => ({
+  codigo, protocolo, classificacao, atendente, servico: 'VENDAS', ativo_receptivo: 'Receptivo',
+  cpf: '', data_entrada: '2026-09-10 10:00:00', data_atendimento: '2026-09-10 10:05:00',
+  data_finalizacao: '2026-09-10 10:30:00',
 });
 
 /**
- * Cenário: a campanha comercial do Meta cobre as seis cidades (uma campanha só), e
- * o Google roda uma por cidade. Os atendimentos são tagueados dos dois jeitos —
- * com cidade e sem — que é exatamente o que a base real tem.
+ * Cenário de setembro em miniatura:
+ *  - A: duas mensagens, dois trechos no Matrix, vendeu no PRIMEIRO trecho;
+ *  - B: protocolo com zero à esquerda (o bigint do Matrix perde o zero);
+ *  - C: só falou com o robô — não existe no Matrix;
+ *  - D: mandou "Oi" num anúncio sem cidade no título, e é de julho.
  */
 function montar() {
-  setFonteCampanhas('google', [
-    diaGoogle('RP - Felicidade Ilimitada - Canoas', '2026-03-10', '1.000,00'),
-    diaGoogle('RP - Felicidade Ilimitada - Canoas', '2026-03-11', '500,50'),
-  ]);
+  setFonteCampanhas('google', [diaGoogle('RP - Felicidade Ilimitada - Canoas', '2026-09-10', '1.000,00')]);
   setFonteCampanhas('meta', [
-    diaMeta('[W] [CP-02] [ENG] [WHATSAPP] [COMERCIAL] [01-05-2026]', '2026-06-01', 800),
-    diaMeta('[W] [CP-04] [ENG] [WHATSAPP] [VAGAS] [CIDADES] [01-05-2026]', '2026-06-01', 5000),
+    diaMeta('[Vendas][Engajamento][WPP][Todas Cidades]', '2026-09-10', 900),
+    diaMeta('[W] [CP-04] [ENG] [WHATSAPP] [VAGAS] [CIDADES] [01-05-2026]', '2026-09-10', 5000),
+  ]);
+  setFonteCampanhas('rastreamento', [
+    msg('1111000005430001', '2026-09-10 10:00:00', 'Canoas: contrate agora!', 'Gostaria de saber mais'),
+    msg('1111000005430001', '2026-09-10 10:02:00', 'Canoas: contrate agora!', 'Rua tal, 50'),
+    msg('0924000005436812', '2026-09-11 09:00:00', '? Quero falar no WhatsApp!', 'Olá! Gostaria de falar com um atendente sobre os planos de Cachoeirinha.'),
+    msg('5555000005430003', '2026-09-12 23:00:00', 'Contrate agora!', 'Vi seu anúncio em Esteio, quero saber mais!',
+      { classificacao: 'STATUS ATENDIMENTO (0800) VENDAS - FORA DE COBERTURA' }),
+    msg('7777000005430004', '2026-07-05 08:00:00', 'Contrate agora!', 'Oi', { tipo: 'post' }),
   ]);
   setFonteCampanhas('matrix', [
-    // era antiga: a tag não diz plataforma, só cidade
-    atendimento(1, '2026-03-10', 'marketing_campanha_macro_canoas', 'VENDA CONCLUÍDA'),
-    atendimento(2, '2026-03-11', '"marketing_campanha_macro_canoas"'),
-    // era nova: com e sem cidade, as duas para a mesma campanha comercial
-    atendimento(3, '2026-06-01', 'marketing_comercial_meta', 'VENDA CONCLUÍDA'),
-    atendimento(4, '2026-06-02', 'marketing_comercial_meta_canoas'),
-    atendimento(5, '2026-06-03', 'marketing_comercial_meta_canoas,ISA_VENDAS_RECEPTIVAS',
-      'FALTA DE CONTATO (SEM RETORNO CLIENTE)'),
-    // orgânico: existe atendimento e não existe anúncio atrás
-    atendimento(6, '2026-06-04', 'marketing_site_organico_planos', 'VENDA CONCLUÍDA'),
+    trecho(10, '1111000005430001', 'VENDA CONCLUÍDA', 'ANA'),
+    trecho(11, '1111000005430001', 'null', 'BRUNO'),
+    trecho(20, '924000005436812', 'FALTA DE CONTATO (SEM RETORNO CLIENTE)', 'CARLA'),
+    trecho(40, '7777000005430004', null, null),
   ]);
-  construirCampanhas();
+  setFonteCampanhas('lotes', [{ id: 3, arquivo: 'set.csv', linhas: 5, periodo_de: '2026-07-05', periodo_ate: '2026-09-12' }]);
+  return construirCampanhas();
 }
 
-beforeEach(montar);
-const tudo = () => parseFiltrosCampanhas({});
+beforeEach(() => montar());
 
-test('o investimento da tela não estoura o que foi gasto de verdade', () => {
-  const p = painelCampanhasVisaoGeral(tudo());
-  // 1.000,50 + 500,00 do Google + 800 do Meta comercial. Vagas fica de fora.
-  assert.equal(Number(p.kpis.investimento.toFixed(2)), 2300.5);
-  assert.equal(
-    Number(p.kpis.investimentoGoogle.toFixed(2)), 1500.5,
-    'o custo do Google é texto em português; 1.000,00 tem de virar mil, não um',
-  );
+const lead = (estado, protocolo) => estado.atendimentos.find((a) => a.protocolo === protocolo);
+
+test('o lead é o PROTOCOLO, não a mensagem: duas mensagens são um lead só', () => {
+  const s = montar();
+  assert.equal(s.atendimentos.length, 4);
+  const a = lead(s, '1111000005430001');
+  assert.equal(a.mensagens, 2);
+  assert.equal(a.mensagem, 'Gostaria de saber mais', 'quem define o lead é a primeira mensagem');
 });
 
-test('o rateio conserva: a soma das linhas do funil nunca passa do total', () => {
-  const p = painelCampanhasVisaoGeral(tudo());
-  const somaLinhas = p.funil.reduce((a, l) => a + l.investimento, 0);
-  const semAtend = p.semAtendimento.reduce((a, c) => a + c.investimento, 0);
-  assert.ok(
-    somaLinhas <= p.kpis.investimento + 0.01,
-    `funil soma ${somaLinhas} contra total ${p.kpis.investimento} — campanha contada em dois grupos`,
-  );
-  assert.equal(
-    Number((somaLinhas + semAtend).toFixed(2)), Number(p.kpis.investimento.toFixed(2)),
-    'o que não entrou no funil tem de aparecer como campanha sem atendimento, e não sumir',
-  );
+test('venda em QUALQUER trecho do Matrix conta, e o atendente vem do último', () => {
+  const a = lead(montar(), '1111000005430001');
+  assert.equal(a.classificacao, VENDA, 'a venda estava no primeiro trecho e o último veio sem classificação');
+  assert.ok(a.venda);
+  assert.equal(a.atendente, 'BRUNO');
+  assert.equal(a.trechos, 2);
 });
 
-test('a tag com cidade e a sem cidade caem no MESMO grupo, sem duplicar a campanha', () => {
-  const f = funil(tudo());
-  const comercial = f.linhas.find((l) => l.chave === 'meta|comercial');
-  assert.equal(comercial.atendimentos, 3, 'os três atendimentos comerciais, com e sem cidade');
-  assert.equal(
-    Number(comercial.investimento.toFixed(2)), 800,
-    'a campanha comercial é uma só; contada por grupo, não por variação de tag',
-  );
+test('o protocolo com zero à esquerda casa com o bigint do Matrix, e mantém o zero na tela', () => {
+  const a = lead(montar(), '0924000005436812');
+  assert.ok(a.noMatrix, 'o db_matrix grava 924000005436812, sem o zero');
+  assert.ok(a.abandono);
+  assert.equal(a.cidade, 'CACHOEIRINHA', 'sem cidade no título, vale a cidade da mensagem');
 });
 
-test('o atendimento da era macro encontra a campanha pela cidade, e a tela diz isso', () => {
-  const f = funil(tudo());
-  const macro = f.linhas.find((l) => l.chave === '?|macro');
-  assert.equal(macro.atendimentos, 2);
-  assert.equal(
-    macro.confianca, 'cidade',
-    'é o degrau mais frouxo do cruzamento; a linha precisa carregar o aviso',
-  );
-  assert.equal(Number(macro.investimento.toFixed(2)), 1500.5);
+test('quem não existe no Matrix vira "não chegou a atendente", ou a classificação do CSV', () => {
+  const s = montar();
+  const robo = lead(s, '5555000005430003');
+  assert.equal(robo.noMatrix, false);
+  assert.equal(robo.classificacao, 'FORA DE COBERTURA', 'o prefixo da árvore do CSV sai');
+  assert.equal(robo.atendente, SEM_ATENDENTE);
+
+  const s2 = montarLeads([msg('9', '2026-09-01 10:00:00', 'Contrate agora!', 'Oi')], []);
+  assert.equal(s2[0].classificacao, SEM_ATENDENTE);
 });
 
-test('recrutamento fica fora da conta por padrão, e some do funil', () => {
-  const sem = painelCampanhasVisaoGeral(tudo());
-  const com = painelCampanhasVisaoGeral(parseFiltrosCampanhas({ crec: '1' }));
-  assert.equal(Number(com.kpis.investimento.toFixed(2)), 7300.5);
-  assert.equal(
-    Number((com.kpis.investimento - sem.kpis.investimento).toFixed(2)), 5000,
-    'vaga de emprego dentro do custo por lead comercial foi o que inflou o relatório de origem',
-  );
-  assert.ok(!sem.funil.some((l) => l.recrutamento));
+test('a classificação do CSV e a do Matrix caem na mesma forma', () => {
+  assert.equal(classificacaoDe('STATUS ATENDIMENTO (0800) VENDAS - VENDA CONCLUÍDA'), VENDA);
+  assert.equal(classificacaoDe('VENDA CONCLUÍDA'), VENDA);
+  assert.equal(classificacaoDe('null'), null);
+  assert.equal(classificacaoDe(''), null);
 });
 
-test('o orgânico aparece com atendimento e investimento zero, em vez de sumir', () => {
-  const f = funil(tudo());
-  const site = f.linhas.find((l) => l.chave === 'site|site_organico');
-  assert.ok(site, 'é 1/3 dos atendimentos tagueados da base real');
-  assert.equal(site.investimento, 0);
-  assert.equal(site.ligada, false, 'não há anúncio atrás — e é isso que o torna interessante');
+test('o emoji perdido no começo do título não cria um segundo anúncio', () => {
+  assert.equal(tituloDe('? Quero falar no WhatsApp!'), 'Quero falar no WhatsApp!');
+  assert.equal(tituloDe('👉 Quero falar no WhatsApp! '), 'Quero falar no WhatsApp!');
+  assert.equal(tituloDe(''), '(sem título)');
 });
 
-test('campanha que gastou e não gerou atendimento tagueado é mostrada, não descartada', () => {
-  setFonteCampanhas('google', [diaGoogle('RP - Felicidade Ilimitada - Esteio', '2026-03-10', '999,00')]);
-  setFonteCampanhas('meta', []);
-  setFonteCampanhas('matrix', [atendimento(1, '2026-03-10', 'marketing_site_organico_planos')]);
+test('o custo por lead usa só o gasto do Meta, e recrutamento fica fora por padrão', () => {
+  montar();
+  const g = painelCampanhasVisaoGeral(parseFiltrosCampanhas({ cde: '2026-09-01', cate: '2026-09-30' }));
+  assert.equal(g.kpis.leads, 3);
+  assert.equal(g.kpis.investimentoMeta, 900, 'os R$ 5.000 de vaga de emprego não entram');
+  assert.equal(g.kpis.investimentoGoogle, 1000);
+  assert.equal(g.kpis.custoPorLead, 300, 'o lead do rastreamento é do Meta: 900 ÷ 3, sem o Google');
+
+  const comVagas = painelCampanhasVisaoGeral(parseFiltrosCampanhas({ cde: '2026-09-01', cate: '2026-09-30', crec: '1' }));
+  assert.equal(comVagas.kpis.investimentoMeta, 5900);
+});
+
+test('o custo por lead não divide gasto de mês sem rastreamento importado', () => {
+  setFonteCampanhas('meta', [
+    diaMeta('[Vendas][Engajamento][WPP][Todas Cidades]', '2026-09-10', 900),
+    // março: antes do primeiro lead importado (05/07) — não pode entrar na divisão
+    diaMeta('[Vendas][Engajamento][WPP][Todas Cidades]', '2026-03-10', 99000),
+  ]);
   construirCampanhas();
-  const p = painelCampanhasVisaoGeral(tudo());
-  assert.equal(p.semAtendimento.length, 1);
-  assert.equal(Number(p.semAtendimento[0].investimento.toFixed(2)), 999);
+  const g = painelCampanhasVisaoGeral(parseFiltrosCampanhas({}));
+  assert.equal(g.kpis.investimentoMeta, 99900, 'o cartão de investimento continua inteiro');
+  assert.equal(g.kpis.investimentoMetaCoberto, 900);
+  assert.equal(g.kpis.custoPorLead, 225, '900 ÷ 4 leads, e não 99.900 ÷ 4');
 });
 
-test('o período recorta o dia do anúncio e a entrada do atendimento', () => {
-  const p = painelCampanhasVisaoGeral(parseFiltrosCampanhas({ cde: '2026-06-01', cate: '2026-06-30' }));
-  assert.equal(Number(p.kpis.investimento.toFixed(2)), 800, 'o Google rodou em março');
-  assert.equal(p.kpis.atendimentos, 4);
+test('o período recorta a entrada do lead', () => {
+  montar();
+  const jul = painelCampanhasAtendimentos(parseFiltrosCampanhas({ cde: '2026-07-01', cate: '2026-07-31' }));
+  assert.equal(jul.kpis.leads, 1);
+  assert.equal(jul.detalhe[0].tipo, 'Post impulsionado');
 });
 
-test('o frescor diz até quando cada fonte tem dado', () => {
-  const p = painelCampanhasVisaoGeral(tudo());
-  assert.deepEqual(p.frescor, { google: '2026-03-11', meta: '2026-06-01', matrix: '2026-06-04' });
+test('o filtro de tipo de campanha recorta o investimento, mas não o lead', () => {
+  montar();
+  const flt = parseFiltrosCampanhas({ cde: '2026-09-01', cate: '2026-09-30', cfam: 'alcance' });
+  const g = painelCampanhasVisaoGeral(flt);
+  assert.equal(g.kpis.investimentoMeta, 0);
+  assert.equal(g.kpis.leads, 3, 'o rastreamento não diz a campanha; recortar fingiria uma atribuição');
 });
 
-test('classificação vazia vira uma categoria só, e não três', () => {
-  const p = painelCampanhasAtendimentos(tudo());
-  const semClass = p.porClassificacao.filter((c) => /sem classifica/i.test(c.key));
-  assert.equal(
-    semClass.length, 1,
-    'a base grava NULL, a string "null" e a string vazia — três fatias para a mesma coisa',
-  );
-  assert.equal(semClass[0].valor, 2);
+test('anúncio, cidade e tipo filtram o lead', () => {
+  montar();
+  const p = (q) => painelCampanhasAtendimentos(parseFiltrosCampanhas(q)).kpis.leads;
+  assert.equal(p({ canun: 'Contrate agora!' }), 2);
+  assert.equal(p({ ccid: 'CANOAS' }), 1);
+  assert.equal(p({ ctipo: 'Post impulsionado' }), 1);
 });
 
-test('a página de uma plataforma só mostra o investimento dela', () => {
-  const g = painelCampanhasPlataforma('google', tudo());
-  assert.equal(Number(g.kpis.investimento.toFixed(2)), 1500.5);
-  assert.equal(g.kpis.campanhas, 1);
-  const m = painelCampanhasPlataforma('meta', tudo());
-  assert.equal(Number(m.kpis.investimento.toFixed(2)), 800, 'vagas fora por padrão');
+test('os leads por anúncio somam o total, e mostram quem não chegou a atendente', () => {
+  montar();
+  const a = painelCampanhasAtendimentos(parseFiltrosCampanhas({}));
+  assert.equal(a.porAnuncio.reduce((s, r) => s + r.leads, 0), a.kpis.leads);
+  const contrate = a.porAnuncio.find((r) => r.key === 'Contrate agora!');
+  assert.equal(contrate.semAtendente, 1);
+  assert.equal(a.kpis.semAtendente, 1);
+});
+
+test('a página do Google não recebe lead: o rastreamento só registra anúncio do Meta', () => {
+  montar();
+  const g = painelCampanhasPlataforma('google', parseFiltrosCampanhas({}));
+  assert.equal(g.kpis.investimento, 1000);
+  assert.equal(g.kpis.leads, 0);
+  const m = painelCampanhasPlataforma('meta', parseFiltrosCampanhas({}));
+  assert.equal(m.kpis.leads, 4);
+});
+
+test('o frescor diz até quando vai o rastreamento e qual foi a última importação', () => {
+  montar();
+  const g = painelCampanhasVisaoGeral(parseFiltrosCampanhas({}));
+  assert.equal(g.frescor.rastreamento, '2026-09-12');
+  assert.equal(g.frescor.rastreamentoDe, '2026-07-05');
+  assert.equal(g.frescor.ultimaImportacao.arquivo, 'set.csv');
+});
+
+test('sem nenhuma importação a tela abre vazia, em vez de ficar carregando', () => {
+  setFonteCampanhas('rastreamento', []);
+  setFonteCampanhas('matrix', []);
+  setFonteCampanhas('lotes', []);
+  const s = construirCampanhas();
+  assert.equal(s.atendimentos.length, 0);
+  const g = painelCampanhasVisaoGeral(parseFiltrosCampanhas({}));
+  assert.equal(g.kpis.leads, 0);
+  assert.equal(g.kpis.custoPorLead, 0);
+  assert.equal(g.frescor.ultimaImportacao, null);
 });

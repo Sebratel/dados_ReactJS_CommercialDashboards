@@ -1,31 +1,20 @@
 /**
- * O VOCABULÁRIO DE CAMPANHAS — o que torna as três fontes comparáveis.
+ * O VOCABULÁRIO DE CAMPANHAS — o que se lê do nome de uma campanha de anúncio.
  *
- * Matrix, Google e Meta nomeiam a mesma campanha de três jeitos, e nenhum deles é
- * um ID. Este módulo traduz qualquer um dos três para a MESMA identidade:
+ * Google e Meta não têm campo de tipo de campanha nem de cidade: está tudo no
+ * nome. Este módulo traduz o nome para
  *
  *     { plataforma, familia, cidade }
  *
- *   tag do Matrix   marketing_alcance_meta_cachoeirinha
  *   campanha Meta   [W] [CP-21] [REC] [ALCANCE+BOTÃO WHATSAPP] [CACHOEIRINHA] [04-06-2026]
  *   identidade      { plataforma: 'meta', familia: 'alcance', cidade: 'CACHOEIRINHA' }
  *
- * É uma HEURÍSTICA declarada, não uma chave. Enquanto não existir o ID de campanha
- * nas tags, esta é a ponte — e a tela diz isso em cima do funil, porque número
- * junto com número vira conclusão, e conclusão sobre suposição escondida é a pior
- * espécie de erro de dashboard.
+ * e acha a cidade em qualquer texto — também no título do anúncio e na mensagem
+ * do lead do rastreamento.
  *
- * DUAS ERAS DE NOMENCLATURA, e o resolvedor conhece as duas:
- *
- *   até jun/2026   marketing_campanha_macro_<cidade>, marketing_campanha_organica
- *                  "RP - Felicidade Ilimitada - <Cidade>", "Camp. Comercial - Abr.26"
- *   de jul/2026    marketing_<familia>_<plataforma>[_<cidade>]
- *                  "[W] [CP-nn] [ENG] [WHATSAPP] [COMERCIAL] [01-05-2026]"
- *
- * A virada é o motivo de o relatório de origem estar cego desde 20/07/2026: ele
- * procura o padrão antigo, que parou de ser escrito. Traduzir as duas para o mesmo
- * vocabulário devolve a série inteira, com a troca de padrão aparecendo como troca
- * de padrão — e não como queda a zero.
+ * Até out/2026 este módulo também traduzia as TAGS de marketing do Matrix e ligava
+ * tag a campanha por semelhança. Essa ponte saiu junto com a tag: o lead agora vem
+ * do rastreamento de posts (ver model/campanhas.js).
  */
 
 /** Sem acento, sem pontuação, minúsculo: a forma em que tudo é comparado. */
@@ -38,10 +27,9 @@ export const simples = (v) => String(v ?? '')
 /**
  * As seis cidades da operação, com os apelidos que cada fonte usa.
  *
- * `sao_leopodo` não é engano de digitação meu: é como a tag foi gravada no Matrix
- * durante seis meses (310 atendimentos). Corrigir na origem é outro assunto; aqui
- * ela precisa casar com "SÃO LEOPOLDO" do Google, senão a mesma cidade aparece
- * duas vezes no funil, cada metade com um número.
+ * `sao leopodo` não é engano de digitação meu: é como a cidade foi escrita em
+ * parte das fontes durante seis meses. Precisa casar com "SÃO LEOPOLDO", senão a
+ * mesma cidade aparece duas vezes, cada metade com um número.
  */
 const CIDADES = [
   ['CANOAS', ['canoas']],
@@ -129,70 +117,6 @@ export const PLATAFORMAS = {
 };
 
 /**
- * A identidade de uma TAG do Matrix.
- *
- * O padrão novo põe a plataforma no próprio nome (`..._meta`), e é isso que torna a
- * ponte possível sem ID: `marketing_comercial_meta_canoas` diz, sozinha, que veio
- * do Meta, que é campanha comercial e que é de Canoas.
- *
- * O padrão antigo (`marketing_campanha_macro_canoas`) NÃO diz a plataforma —
- * naquela época o Google e o Meta rodavam as macro juntos e a tag não separava.
- * Por isso a plataforma dele fica '?' em vez de chutar: atribuir a macro ao Meta
- * daria ao Meta um funil que é dos dois.
- */
-/**
- * O ID do anúncio dentro da tag — a ponte que a área montou em outubro/2026.
- *
- * A partir daí o atendimento passou a carregar, além do rótulo, o identificador
- * numérico do anúncio no Meta:
- *
- *     120248421965260047_Comercial_Meta_SAO LEOPOLDO
- *     120249119020270047_ Alcance_Meta _CANOAS
- *
- * Note o espaçamento inconsistente entre os dois exemplos — por isso o corte é
- * "os dígitos do começo", e não uma divisão por `_`.
- *
- * ATENÇÃO AO QUE ESSE NÚMERO É. Conferido contra `marketing_meta_ads` em
- * 05/10/2026: nenhum dos dez IDs em uso é um ID de CAMPANHA. Eles são vizinhos
- * imediatos de campanhas reais (o de CACHOEIRINHA difere do
- * `[Vendas][Reconhecimento][WPP][Todas Cidades]` em +10 no 14º dígito, e os cinco
- * `Comercial_Meta_*` compartilham 11 dígitos com o `[CP-27] [COMERCIAL]`), o que
- * os identifica como CONJUNTOS DE ANÚNCIOS — um por cidade, dentro da campanha.
- * A exportação do Meta que temos é de nível `campaign` apenas, então hoje esse
- * ID não encontra par. Guardamos ele mesmo assim: identifica o atendimento com
- * exatidão, agrupa sozinho, e casa automaticamente no dia em que a exportação
- * trouxer o nível de conjunto.
- */
-const ID_NA_TAG = /^\s*(\d{10,})[\s_-]+(.*)$/;
-
-export function identidadeDaTag(tag) {
-  const bruto = String(tag ?? '');
-  const comId = bruto.match(ID_NA_TAG);
-  const anuncioId = comId ? comId[1] : null;
-  // com ID, o que descreve a campanha é o resto; sem ID, a tag inteira
-  const descritor = comId ? comId[2] : bruto;
-  const s = simples(descritor);
-
-  // a tag com ID não começa com "marketing" — o prefixo ficou na tag irmã
-  if (!anuncioId && !s.startsWith('marketing')) return null;
-
-  let plataforma = '?';
-  if (/\bmeta\b/.test(s)) plataforma = 'meta';
-  else if (/\bgoogle\b/.test(s)) plataforma = 'google';
-  else if (/\bsite\b/.test(s)) plataforma = 'site';
-  else if (/\borganic[ao]\b/.test(s)) plataforma = 'organico';
-
-  return {
-    plataforma,
-    familia: familiaDe(s) || 'outras',
-    cidade: cidadeDe(s),
-    anuncioId,
-    origem: 'tag',
-    bruto,
-  };
-}
-
-/**
  * A identidade de um NOME DE CAMPANHA de anúncio (Google ou Meta).
  *
  * `plataforma` vem de fora, porque é a tabela que diz de onde a linha veio — o nome
@@ -216,109 +140,6 @@ export function identidadeDaCampanha(nome, plataforma, id = null) {
 }
 
 /**
- * A chave com que as três fontes se encontram.
- *
- * Cidade entra como 'TODAS' quando não há: a campanha do Meta chamada
- * "[COMERCIAL]" sem cidade cobre as seis, e é com ela que o atendimento tagueado
- * `marketing_comercial_meta` (também sem cidade) tem de casar.
- */
-export const chaveDe = (id) => (id
-  ? `${id.plataforma}|${id.familia}|${id.cidade || 'TODAS'}`
-  : null);
-
-/** A mesma chave ignorando a cidade — o degrau de fallback do cruzamento. */
-export const chaveSemCidade = (id) => (id ? `${id.plataforma}|${id.familia}` : null);
-
-/**
- * O CRUZAMENTO, EM TRÊS DEGRAUS — e cada degrau diz o quanto se pode confiar nele.
- *
- * Um degrau só não serve, e a base mostra por quê:
- *
- *   1. EXATA — plataforma, família e cidade batem.
- *      `marketing_alcance_meta_cachoeirinha` ↔ "[CP-21] [REC] [ALCANCE...] [CACHOEIRINHA]"
- *
- *   2. FAMÍLIA — a tag tem cidade, a campanha cobre todas.
- *      No Meta, a campanha comercial é uma só para as seis cidades
- *      (`[ENG] [WHATSAPP] [COMERCIAL]`), mas a tag do atendimento diz de qual
- *      cidade a pessoa falou (`marketing_comercial_meta_canoas`). Sem este degrau,
- *      1.490 atendimentos achavam a campanha e outros 1.490 não — os mesmos
- *      atendimentos, separados por terem sido tagueados com mais precisão.
- *      O investimento aqui é RATEADO entre as cidades que a campanha atendeu.
- *
- *   3. CIDADE — a tag não diz a plataforma, então vale a cidade.
- *      É a era das macro (jan–jun/2026): `marketing_campanha_macro_canoas` não
- *      distingue Google de Meta porque naquela época os dois rodavam a campanha de
- *      cidade juntos. Casar por cidade junta os dois investimentos, que é
- *      justamente o que aconteceu na realidade — e a tela precisa dizer isso.
- *
- * `confianca` sai junto no resultado, e a tela mostra. Número cruzado por
- * heurística sem dizer qual heurística é como chegou a virar conclusão errada.
- */
-export const CONFIANCA = {
-  id: 'ID', exata: 'exata', familia: 'família', cidade: 'cidade',
-};
-
-/** Índice das campanhas de anúncio, nos recortes que o cruzamento consulta. */
-export function indexarCampanhas(campanhas) {
-  const porChave = new Map();
-  const porFamilia = new Map();
-  const porCidade = new Map();
-  const porId = new Map();
-  const empurrar = (mapa, k, v) => {
-    if (!k) return;
-    const l = mapa.get(k);
-    if (l) l.push(v); else mapa.set(k, [v]);
-  };
-  for (const c of campanhas) {
-    empurrar(porChave, chaveDe(c.identidade), c);
-    empurrar(porFamilia, chaveSemCidade(c.identidade), c);
-    empurrar(porCidade, c.identidade.cidade, c);
-    // o ID vai como TEXTO: estes numeros tem 18 digitos e nao cabem em double.
-    // Comparar como numero arredonda e faz IDs diferentes virarem o mesmo.
-    if (c.campanhaId) empurrar(porId, String(c.campanhaId), c);
-  }
-  return { porChave, porFamilia, porCidade, porId };
-}
-
-/**
- * As campanhas de anúncio que correspondem a uma identidade de tag.
- * Devolve `{ campanhas, confianca }`, ou `null` quando nenhum degrau alcança.
- */
-export function cruzar(idTag, indice) {
-  if (!idTag) return null;
-
-  /**
-   * DEGRAU 0 — o ID. Quando existe dos dois lados, acabou a heuristica.
-   *
-   * Hoje ele quase nunca casa, e a razao esta documentada em `identidadeDaTag`:
-   * a tag carrega o ID do CONJUNTO de anuncios e a exportacao do Meta so traz o
-   * nivel de campanha. O degrau fica aqui pronto, e passa a valer sozinho no dia
-   * em que a exportacao trouxer o conjunto -- sem mexer em codigo.
-   */
-  if (idTag.anuncioId) {
-    const porId = indice.porId?.get(String(idTag.anuncioId));
-    if (porId?.length) return { campanhas: porId, confianca: 'id' };
-  }
-
-  const exata = indice.porChave.get(chaveDe(idTag));
-  if (exata?.length) return { campanhas: exata, confianca: 'exata' };
-
-  // a tag tem cidade e a campanha cobre todas — degrau 2
-  if (idTag.cidade) {
-    const daFamilia = indice.porFamilia.get(chaveSemCidade(idTag));
-    if (daFamilia?.length) return { campanhas: daFamilia, confianca: 'familia' };
-  }
-
-  // sem plataforma na tag (era das macro), vale a cidade — degrau 3
-  if (idTag.plataforma === '?' && idTag.cidade) {
-    const daCidade = indice.porCidade.get(idTag.cidade);
-    if (daCidade?.length) return { campanhas: daCidade, confianca: 'cidade' };
-  }
-
-  return null;
-}
-
-/**
  * Rótulo legível de uma identidade, para a tela e para o CSV.
  * "Meta Ads · Alcance · CACHOEIRINHA"
  */
@@ -329,39 +150,6 @@ export function rotuloDaIdentidade(id) {
     FAMILIA_ROTULO[id.familia] || id.familia,
     id.cidade || 'todas as cidades',
   ].join(' · ');
-}
-
-/**
- * Quebra a coluna `tags` do Matrix na lista de tags de verdade.
- *
- * O campo é uma sopa: vem com aspas duplas em volta da string inteira, separador
- * vírgula em umas linhas e ` || ` em outras, e a mesma campanha aparece nas duas
- * formas. Sem normalizar, `marketing_campanha_macro_canoas` e
- * `"marketing_campanha_macro_canoas"` contam como campanhas diferentes — no
- * relatório de origem, Canoas aparece partida em quatro linhas do mesmo gráfico.
- */
-export function tagsDe(bruto) {
-  if (!bruto) return [];
-  return String(bruto)
-    .replace(/^"+|"+$/g, '')
-    .split(/\s*\|\|\s*|,/)
-    .map((t) => t.replace(/^"+|"+$/g, '').trim())
-    .filter(Boolean);
-}
-
-/** Só as tags de marketing de um atendimento, já traduzidas para identidade. */
-export function identidadesDoAtendimento(tagsBrutas) {
-  const out = [];
-  const vistas = new Set();
-  for (const t of tagsDe(tagsBrutas)) {
-    const id = identidadeDaTag(t);
-    if (!id) continue;
-    const k = chaveDe(id);
-    if (vistas.has(k)) continue;
-    vistas.add(k);
-    out.push(id);
-  }
-  return out;
 }
 
 /**

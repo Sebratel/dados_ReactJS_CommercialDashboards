@@ -48,7 +48,7 @@ export const TELAS = [
   { id: 'condominios', curto: 'Condomínios', label: 'Condomínios', rota: '/condominios', descricao: 'Ocupação das portas dos splitters instalados em condomínios' },
   { id: 'leads', curto: 'Leads', label: 'Leads e Negociações', rota: '/leads', descricao: 'Funil de CRM: leads cadastrados, negociações e desempenho por vendedor e cidade' },
   { id: 'relatorios', curto: 'Relatórios', label: 'Relatórios Comercial', rota: '/relatorios', descricao: 'Sete consultas operacionais: detalhe de contrato, cesta de produtos, fila de instalação, meta diária por cidade, base de clientes, pesquisa de cancelamento e clima' },
-  { id: 'campanhas', curto: 'Campanhas', label: 'Campanhas de Marketing', rota: '/campanhas', descricao: 'Investimento em Google e Meta Ads contra o atendimento que cada campanha gerou no Matrix' },
+  { id: 'campanhas', curto: 'Campanhas', label: 'Campanhas de Marketing', rota: '/campanhas', descricao: 'Investimento em Google e Meta Ads contra os leads que o rastreamento de anúncios do Matrix registrou' },
   { id: 'preditivo', curto: 'Preditiva', label: 'Análise Preditiva', rota: '/preditivo', descricao: 'Projeções, carteira em risco e leitura por IA' },
 ];
 

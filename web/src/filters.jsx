@@ -106,10 +106,12 @@ export const LISTAS_REL_CLIMA = ['ccidade'];
 
 /**
  * Seletores da tela de Campanhas de Marketing. Prefixo `c` pelo mesmo motivo dos
- * outros: `cidade` e `canal` existem no lado comercial com outra lista de valores
- * — lá a cidade é a do contrato, aqui é a que o nome da campanha nomeia.
+ * outros: `cidade` existe no lado comercial com outra lista de valores — lá a
+ * cidade é a do contrato, aqui é a que a campanha, o anúncio ou o lead nomeia.
+ * `canun` é o título do anúncio e `ctipo` o tipo (anúncio ou post), os dois do
+ * rastreamento de posts do Matrix.
  */
-export const LISTAS_CAMPANHAS = ['cplat', 'cfam', 'ccid', 'ccanal', 'cclass', 'catend'];
+export const LISTAS_CAMPANHAS = ['cplat', 'cfam', 'ccid', 'canun', 'ctipo', 'cclass', 'catend'];
 
 const TODAS_AS_LISTAS = [
   ...LISTAS, ...LISTAS_PAGINA, ...LISTAS_CONDOMINIO, ...LISTAS_LEADS, ...LISTAS_NEGOCIACAO, ...LISTAS_DESEMPENHO,

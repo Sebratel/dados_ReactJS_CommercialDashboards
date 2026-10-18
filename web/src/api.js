@@ -42,7 +42,8 @@ export function buildQuery(filtros = {}) {
   add('cplat', filtros.cplat);
   add('cfam', filtros.cfam);
   add('ccid', filtros.ccid);
-  add('ccanal', filtros.ccanal);
+  add('canun', filtros.canun);
+  add('ctipo', filtros.ctipo);
   add('cclass', filtros.cclass);
   add('catend', filtros.catend);
   // recorte de período vindo do clique na coluna; cruza com de/ate no servidor
@@ -224,6 +225,26 @@ export async function apiJson(path, { method = 'GET', body } = {}) {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
+  });
+  let dados = null;
+  try { dados = await res.json(); } catch { /* sem corpo */ }
+  if (!res.ok) {
+    const err = new Error(dados?.error || `Erro ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return dados;
+}
+
+/**
+ * Envia um ARQUIVO cru (sem JSON, sem multipart). O servidor precisa dos bytes
+ * originais para decidir a codificação do texto; o nome vai no cabeçalho.
+ */
+export async function apiUpload(path, arquivo) {
+  const res = await apiFetch(`/api${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', 'X-Arquivo': encodeURIComponent(arquivo.name) },
+    body: arquivo,
   });
   let dados = null;
   try { dados = await res.json(); } catch { /* sem corpo */ }

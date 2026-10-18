@@ -12,10 +12,10 @@ import { FiltroLista, FiltroPeriodo } from './SlicerBar';
  * equipe. Herdar a barra comercial ofereceria seis filtros que não mexem em nada
  * desta tela.
  *
- * "Tudo" vem primeiro nos presets: o dado de anúncio termina em 01/07/2026 e o de
- * atendimento segue até ontem, então abrir a tela em "Este ano" é o que mostra as
- * duas pontas. Um recorte de mês por padrão mostraria atendimento com
- * investimento zero e pareceria defeito.
+ * "Tudo" vem primeiro nos presets: o investimento e os leads vêm de cargas
+ * diferentes (as tabelas de anúncio e o CSV importado do Matrix) e podem parar em
+ * datas diferentes. Um recorte de mês por padrão mostraria lead com investimento
+ * zero, ou o contrário, e pareceria defeito.
  */
 const PRESETS_MKT = ['tudo', 'mes', 'mesPassado', '30d', '12m', 'ano']
   .map((id) => PRESETS.find((p) => p.id === id))
@@ -42,11 +42,17 @@ export function SlicerBarCampanhas({ campos = ['plataforma', 'familia', 'cidade'
    */
   const rotular = (lista, mapa) => (lista || []).map((v) => ({ v, r: mapa?.[v] || v }));
 
+  /**
+   * "Campanha" recorta só o INVESTIMENTO: o rastreamento de posts não diz de qual
+   * campanha o lead veio, só o título do anúncio. O rótulo diz isso para ninguém
+   * esperar que o número de leads mude ao escolher uma campanha.
+   */
   const OPCOES = {
     plataforma: { campo: 'cplat', titulo: 'Plataforma', itens: rotular(dims?.plataformas, dims?.plataformasRotulo) },
-    familia: { campo: 'cfam', titulo: 'Campanha', itens: rotular(dims?.familias, dims?.familiasRotulo) },
+    familia: { campo: 'cfam', titulo: 'Campanha (investimento)', itens: rotular(dims?.familias, dims?.familiasRotulo) },
     cidade: { campo: 'ccid', titulo: 'Cidade', itens: rotular(dims?.cidades) },
-    canal: { campo: 'ccanal', titulo: 'Canal', itens: rotular(dims?.canais) },
+    anuncio: { campo: 'canun', titulo: 'Anúncio', itens: rotular(dims?.anuncios) },
+    tipo: { campo: 'ctipo', titulo: 'Tipo', itens: rotular(dims?.tipos) },
     classificacao: { campo: 'cclass', titulo: 'Classificação', itens: rotular(dims?.classificacoes) },
     atendente: { campo: 'catend', titulo: 'Atendente', itens: rotular(dims?.atendentes) },
   };
