@@ -58,6 +58,15 @@ services:
       # ---- SLA do BKO (Data Hub) ----
       DATAHUB_URL: ${DATAHUB_URL:-https://data-hub.sebratel.net.br/api/public/v1/datasets}
       DATAHUB_TOKEN: ${DATAHUB_TOKEN}
+
+      # ---- Meta Ads (Marketing API) — carga diária do investimento ----
+      # Token de USUÁRIO DO SISTEMA do portfólio Sebratel, app
+      # campanhas-marketing-sebratel (1922323302485380), permissão ads_read,
+      # sem expiração. Sem as duas, a carga automática fica desligada e a tela
+      # segue com a tabela carregada à mão.
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN}
+      META_AD_ACCOUNT_ID: ${META_AD_ACCOUNT_ID}
+      META_API_VERSION: ${META_API_VERSION:-v23.0}
       SLA_SINCE: ${SLA_SINCE:-2026-01-01}
       UMOV_AJUSTE_HORAS: ${UMOV_AJUSTE_HORAS:-0}
     volumes:

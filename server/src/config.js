@@ -43,6 +43,15 @@ export const config = {
   },
 
   // MariaDB — dsn=dbMaria no Power BI
+  /**
+   * Meta Ads (Marketing API). Opcional: sem token e conta, a carga automática
+   * do investimento não roda e a tabela continua a da carga manual.
+   */
+  meta: {
+    token: process.env.META_ACCESS_TOKEN || '',
+    contaAnuncios: process.env.META_AD_ACCOUNT_ID || '',
+    versao: process.env.META_API_VERSION || 'v23.0',
+  },
   maria: {
     host: process.env.DB_MARIA_HOST,
     database: process.env.DB_MARIA_DATABASE || 'DB_Applicattion',
