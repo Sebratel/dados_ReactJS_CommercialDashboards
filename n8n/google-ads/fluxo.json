@@ -1,0 +1,245 @@
+{
+  "name": "MKT · Google Ads → DB_Marketing (carga diária)",
+  "nodes": [
+    {
+      "id": "Sobre",
+      "name": "Sobre",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -620
+      ],
+      "parameters": {
+        "content": "## MKT · Google Ads → DB_Marketing\n\n**O que faz.** Recebe, uma vez por dia, o desempenho das campanhas do Google Ads e grava em `DB_Marketing.marketing_google_ads` — a tabela da tela **Campanhas** do dashboard comercial. Substitui a exportação manual do relatório \"Performance da campanha\".\n\n**Origem.** Script do Google Ads (*Ferramentas › Ações em massa › Scripts*), agendado diariamente às 06:00. Envia os **últimos 7 dias, sem hoje**: o Google revisa custo e conversão de dias recentes, e reenviar a janela corrige isso.\n\n**Por que n8n.** O script roda nos servidores do Google, fora da rede. O webhook do n8n já é alcançável de fora (o Matrix usa o mesmo caminho), então o dado chega ao MariaDB sem abrir o proxy do dashboard nem o banco.\n\n**Código-fonte.** Repositório `dados_ReactJS_CommercialDashboards`, pasta `n8n/google-ads/` (fluxo, script e validação). Publicar com `node n8n/publicar.mjs --aplicar` — editar só pela tela faz o repositório mentir.\n\n**Responsável.** Inteligência de Dados.",
+        "width": 620,
+        "height": 540
+      }
+    },
+    {
+      "id": "Contrato",
+      "name": "Contrato",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        580,
+        -620
+      ],
+      "parameters": {
+        "content": "## Contrato\n\n**POST** `/webhook/mkt-google-ads-campanhas`\nCabeçalho `X-Chave-Carga` (credencial *MKT · Google Ads · chave do webhook*). Sem ele: 403.\n\nCorpo: `conta`, `geradoEm`, `de`, `ate` e `linhas` — uma por campanha e dia, com `campanhaId`, `dia` (AAAA-MM-DD), métricas em número e frações para CTR e taxas.\n\n**Respostas**\n- **200** — gravado: total de linhas, campanhas e período.\n- **400** — lote recusado, com o motivo (nada é gravado).\n- **500** — falha ao gravar: vai para o fluxo de erro global (AUT_GLOBAL_ERR) e o script do Google registra a falha.\n\n**Idempotente.** A chave da tabela é ID da campanha + Dia: reenviar o mesmo período regrava, não duplica.",
+        "width": 560,
+        "height": 540,
+        "color": 5
+      }
+    },
+    {
+      "id": "Decisões e armadilhas",
+      "name": "Decisões e armadilhas",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        -620
+      ],
+      "parameters": {
+        "content": "## Decisões e armadilhas\n\n**SQL montado no Code, não upsert nativo.** A chave é composta (ID + Dia) e o upsert do nó MySQL casa por UMA coluna — cada dia sobrescreveria o anterior. Além disso, nesta instância o `queryReplacement` não vincula os `?` (medido em 06/10/2026). Os valores são validados por tipo e escapados um a um.\n\n**Números como texto em português** ('216,95', '17,5%'): é o formato da carga manual, e a tela lê assim.\n\n**Linhas do SQL unidas com espaço antes da quebra.** O nó apaga a quebra de linha sem pôr espaço e colava palavras.\n\n**Blocos de 200 linhas.** Falha num bloco não desfaz os anteriores — e não precisa: reenviar o lote corrige, porque a gravação é idempotente.\n\n**Reprocessar um período.** Rodar o script de novo no Google Ads (Executar agora) ou mudar `CONFIG.DIAS` temporariamente para cobrir o buraco.",
+        "width": 600,
+        "height": 540,
+        "color": 3
+      }
+    },
+    {
+      "id": "a1f0c3e2-1111-4c4a-9b0a-000000000001",
+      "name": "Receber lote do Google Ads",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b7e2f1a4-6c1d-4f7e-9a2b-5d3c8e9f0a11",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mkt-google-ads-campanhas",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mV99pZNbgda2YhyH",
+          "name": "MKT · Google Ads · chave do webhook"
+        }
+      },
+      "notes": "Autenticado pelo cabeçalho X-Chave-Carga. Responde só no fim (nó \"Responder\"), para o script do Google saber se gravou de verdade.",
+      "notesInFlow": true
+    },
+    {
+      "id": "a1f0c3e2-1111-4c4a-9b0a-000000000002",
+      "name": "Validar lote e montar SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "/**\n * VALIDAR O LOTE E MONTAR O SQL\n * Fluxo: MKT · Google Ads → DB_Marketing (carga diária)\n *\n * Recebe o lote que o script do Google Ads envia (uma linha por campanha e dia)\n * e devolve os comandos de gravação em `DB_Marketing.marketing_google_ads`.\n *\n * CONTRATO DE ENTRADA (corpo JSON do webhook)\n *   { conta, geradoEm, de, ate, linhas: [ {\n *       campanha, campanhaId, estado, tipo, dia (AAAA-MM-DD), moeda,\n *       cliques, impressoes, ctr (fração), cpcMedio, custo,\n *       impressaoTopoAbsoluto (fração|null), impressaoTopo (fração|null),\n *       conversoes, conversoesVisualizacao, custoPorConversao,\n *       taxaConversao (fração)\n *   } ] }\n *\n * SAÍDA\n *   Lote inválido: um item { valido: false, erro } — o fluxo responde 400.\n *   Lote válido:   um item por bloco de até 200 linhas\n *                  { valido: true, query, total, campanhas, de, ate }.\n *\n * POR QUE SQL MONTADO AQUI, E NÃO A OPERAÇÃO NATIVA \"UPSERT\"\n *   1. A chave da tabela é COMPOSTA (ID da campanha + Dia). O upsert nativo do\n *      nó MySQL casa por UMA coluna: casando só pelo ID, cada dia sobrescreveria\n *      o anterior e a tabela ficaria com uma linha por campanha.\n *   2. Nesta instância o `queryReplacement` não vincula os `?` (medido em\n *      06/10/2026). Por isso os valores são ESCAPADOS aqui, um a um, e todos\n *      passam por validação de tipo antes — número é número, data é data, ID é\n *      só dígitos.\n *\n * POR QUE OS NÚMEROS VIRAM TEXTO EM PORTUGUÊS\n *   A tabela nasceu da exportação manual do Google Ads: custo, CTR, CPC e\n *   conversões são varchar no formato brasileiro ('216,95', '17,5%'), e a tela\n *   de Campanhas do dashboard lê assim. Gravar no mesmo formato deixa a carga\n *   automática e a manual indistinguíveis — e nada no dashboard precisa mudar.\n *\n * As linhas do SQL são unidas com ' \\n': o nó MySQL desta instância apaga a\n * quebra de linha sem pôr espaço, e \"VALUES\\n(\" virava \"VALUES(\" — ou pior,\n * colava duas palavras.\n */\nconst TABELA = 'DB_Marketing.marketing_google_ads';\nconst LINHAS_POR_COMANDO = 200;\nconst MAX_LINHAS = 20000;\nconst DIAS_PARA_TRAS = 400;\n\nconst ESTADO = { ENABLED: 'Ativada', PAUSED: 'Pausada', REMOVED: 'Removida' };\nconst TIPO = {\n  SEARCH: 'Pesquisa',\n  DISPLAY: 'Display',\n  PERFORMANCE_MAX: 'Performance Max',\n  VIDEO: 'Vídeo',\n  DEMAND_GEN: 'Geração de demanda',\n  SHOPPING: 'Shopping',\n  MULTI_CHANNEL: 'Multicanal',\n  LOCAL: 'Local',\n  SMART: 'Inteligente',\n};\n\nconst COLUNAS = [\n  'Campanha', 'ID da campanha', 'Estado da campanha', 'Tipo de campanha', 'Dia',\n  'Cliques', 'Impr.', 'CTR', 'Código da moeda', 'CPC méd.', 'Custo',\n  '% de impr. (1ª posição)', '% de impr. (parte sup.)', 'Conversões',\n  'Conv. de visualização', 'Custo / conv.', 'Taxa de conv.',\n];\n\nconst recusar = (erro) => [{ json: { valido: false, erro } }];\n\nconst corpo = $input.first().json.body || {};\nconst linhas = Array.isArray(corpo.linhas) ? corpo.linhas : null;\nif (!linhas) return recusar('O corpo precisa trazer \"linhas\" como uma lista.');\nif (!linhas.length) return recusar('Lote vazio: nenhuma linha recebida.');\nif (linhas.length > MAX_LINHAS) return recusar(`Lote grande demais: ${linhas.length} linhas (máximo ${MAX_LINHAS}).`);\n\nconst hoje = new Date().toISOString().slice(0, 10);\nconst limite = new Date(Date.now() - DIAS_PARA_TRAS * 864e5).toISOString().slice(0, 10);\n\n/** Número não negativo; vazio vira 0, ou null quando a métrica pode não existir. */\nfunction numero(v, campo, n, aceitaNulo = false) {\n  if (v === null || v === undefined || v === '') return aceitaNulo ? null : 0;\n  const x = Number(v);\n  if (!Number.isFinite(x) || x < 0) throw new Error(`Linha ${n}: \"${campo}\" inválido (${v}).`);\n  return x;\n}\n\n/** 216.95 -> '216,95'; 17.5 -> '17,5'; 0 -> '0'. Até duas casas, sem zero à direita. */\nconst br = (x) => (x === null ? null : String(Number(x.toFixed(2))).replace('.', ','));\nconst pct = (fracao) => (fracao === null ? null : `${br(fracao * 100)}%`);\n\n/** Literal SQL de texto, escapado. Barra invertida primeiro, depois a aspa. */\nconst texto = (v) => (v === null || v === undefined\n  ? 'NULL'\n  : `'${String(v).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\")}'`);\n\nconst tuplas = [];\nconst campanhas = new Set();\nlet de = null;\nlet ate = null;\n\ntry {\n  linhas.forEach((l, i) => {\n    const n = i + 1;\n    const id = String(l.campanhaId ?? '').trim();\n    if (!/^\\d{1,19}$/.test(id)) throw new Error(`Linha ${n}: \"campanhaId\" precisa ser só dígitos (${l.campanhaId}).`);\n    const dia = String(l.dia ?? '').trim();\n    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dia)) throw new Error(`Linha ${n}: \"dia\" precisa ser AAAA-MM-DD (${l.dia}).`);\n    if (dia > hoje || dia < limite) throw new Error(`Linha ${n}: \"dia\" fora da janela aceita (${dia}).`);\n    const nome = String(l.campanha ?? '').trim().slice(0, 128);\n    if (!nome) throw new Error(`Linha ${n}: \"campanha\" vazia.`);\n\n    const cliques = Math.round(numero(l.cliques, 'cliques', n));\n    const impressoes = Math.round(numero(l.impressoes, 'impressoes', n));\n    const visualizacao = Math.round(numero(l.conversoesVisualizacao, 'conversoesVisualizacao', n));\n\n    campanhas.add(id);\n    if (!de || dia < de) de = dia;\n    if (!ate || dia > ate) ate = dia;\n\n    tuplas.push(`(${[\n      texto(nome),\n      id, // validado acima: só dígitos, entra como número sem passar por float\n      texto(ESTADO[l.estado] || String(l.estado || '').slice(0, 50) || null),\n      texto(TIPO[l.tipo] || String(l.tipo || '').slice(0, 50) || null),\n      texto(`${dia} 00:00:00`),\n      String(cliques),\n      String(impressoes),\n      texto(pct(numero(l.ctr, 'ctr', n))),\n      texto(String(l.moeda || 'BRL').slice(0, 50)),\n      texto(br(numero(l.cpcMedio, 'cpcMedio', n))),\n      texto(br(numero(l.custo, 'custo', n))),\n      texto(pct(numero(l.impressaoTopoAbsoluto, 'impressaoTopoAbsoluto', n, true))),\n      texto(pct(numero(l.impressaoTopo, 'impressaoTopo', n, true))),\n      texto(br(numero(l.conversoes, 'conversoes', n))),\n      String(visualizacao),\n      texto(br(numero(l.custoPorConversao, 'custoPorConversao', n))),\n      texto(pct(numero(l.taxaConversao, 'taxaConversao', n))),\n    ].join(', ')})`);\n  });\n} catch (err) {\n  return recusar(err.message);\n}\n\nconst colunas = COLUNAS.map((c) => `\\`${c}\\``).join(', ');\nconst atualizar = COLUNAS\n  .filter((c) => c !== 'ID da campanha' && c !== 'Dia')\n  .map((c) => `\\`${c}\\` = VALUES(\\`${c}\\`)`)\n  .join(', ');\n\nconst blocos = [];\nfor (let i = 0; i < tuplas.length; i += LINHAS_POR_COMANDO) {\n  const query = [\n    `INSERT INTO ${TABELA} (${colunas})`,\n    'VALUES',\n    tuplas.slice(i, i + LINHAS_POR_COMANDO).join(', \\n'),\n    `ON DUPLICATE KEY UPDATE ${atualizar};`,\n  ].join(' \\n');\n  blocos.push({\n    json: {\n      valido: true,\n      query,\n      total: tuplas.length,\n      campanhas: campanhas.size,\n      de,\n      ate,\n      conta: corpo.conta || null,\n    },\n  });\n}\nreturn blocos;\n"
+      },
+      "notes": "Valida tipo de cada campo e escapa os valores. Lote inválido sai com valido=false (responde 400, nada é gravado). Fonte: n8n/google-ads/validar-e-montar-sql.js.",
+      "notesInFlow": true
+    },
+    {
+      "id": "a1f0c3e2-1111-4c4a-9b0a-000000000003",
+      "name": "Lote válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c0ffee00-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c3e2-1111-4c4a-9b0a-000000000004",
+      "name": "DB_Marketing: gravar campanhas",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        780,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "credentials": {
+        "mySql": {
+          "id": "078INFtNw5JHOdGu",
+          "name": "dbMaria_DB_Marketing"
+        }
+      },
+      "notes": "INSERT ... ON DUPLICATE KEY UPDATE pela chave ID da campanha + Dia. Um comando por bloco de 200 linhas. Falha aqui vai para o fluxo de erro global.",
+      "notesInFlow": true
+    },
+    {
+      "id": "a1f0c3e2-1111-4c4a-9b0a-000000000005",
+      "name": "Responder: gravado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        -100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, linhas: $('Validar lote e montar SQL').first().json.total, campanhas: $('Validar lote e montar SQL').first().json.campanhas, de: $('Validar lote e montar SQL').first().json.de, ate: $('Validar lote e montar SQL').first().json.ate }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c3e2-1111-4c4a-9b0a-000000000006",
+      "name": "Responder: lote recusado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, erro: $json.erro }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "notes": "Nada foi gravado. O script do Google Ads termina com erro e mostra este motivo.",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Receber lote do Google Ads": {
+      "main": [
+        [
+          {
+            "node": "Validar lote e montar SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar lote e montar SQL": {
+      "main": [
+        [
+          {
+            "node": "Lote válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lote válido?": {
+      "main": [
+        [
+          {
+            "node": "DB_Marketing: gravar campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder: lote recusado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Marketing: gravar campanhas": {
+      "main": [
+        [
+          {
+            "node": "Responder: gravado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "YQflxrNGhAmVwu96",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "America/Sao_Paulo"
+  }
+}
