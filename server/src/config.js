@@ -47,9 +47,18 @@ export const config = {
    * Meta Ads (Marketing API). Opcional: sem token e conta, a carga automática
    * do investimento não roda e a tabela continua a da carga manual.
    */
+  /*
+   * `META_AD_ACCOUNT_ID` aceita uma ou mais contas, separadas por vírgula, com ou
+   * sem o prefixo `act_` — a tela do Meta mostra só o número, e a API exige o
+   * prefixo. O portfólio Sebratel tem três contas (principal, DHO e V4).
+   */
   meta: {
     token: process.env.META_ACCESS_TOKEN || '',
-    contaAnuncios: process.env.META_AD_ACCOUNT_ID || '',
+    contas: String(process.env.META_AD_ACCOUNT_ID || '')
+      .split(',')
+      .map((c) => c.trim().replace(/^act_/i, '').replace(/\D/g, ''))
+      .filter(Boolean)
+      .map((c) => `act_${c}`),
     versao: process.env.META_API_VERSION || 'v23.0',
   },
   maria: {
