@@ -91,6 +91,15 @@ export function setFonteCampanhas(nome, rows, meta = {}) {
   };
 }
 
+/**
+ * Situação de uma carga que não traz linhas para o modelo — hoje, a sincronização
+ * do Meta pela API. Vai para `fontes`, que o indicador do topo da tela já lê:
+ * falha de token aparece lá em vez de só no log do contêiner.
+ */
+export function registrarCargaCampanhas(nome, info) {
+  estado.fontes[nome] = { ...info, updatedAt: new Date().toISOString(), error: null };
+}
+
 export function setFonteErroCampanhas(nome, err) {
   estado.fontes[nome] = {
     ...(estado.fontes[nome] || {}),

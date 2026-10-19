@@ -60,6 +60,8 @@ export const config = {
       .filter(Boolean)
       .map((c) => `act_${c}`),
     versao: process.env.META_API_VERSION || 'v23.0',
+    // dias reenviados a cada rodada: o Meta revisa os dias recentes
+    dias: num(process.env.META_DIAS, 7),
   },
   maria: {
     host: process.env.DB_MARIA_HOST,
@@ -152,6 +154,8 @@ export const config = {
     // SLA do BKO: o Data Hub recalcula o conjunto a cada 60 min e a base do Elleven
     // leva ~3 min no Voalle. A 30 min isso é 10% do tempo com uma conexão ocupada.
     bko: num(process.env.REFRESH_BKO_MS, 1800000), // 30 min
+    // Meta Ads pela Marketing API: chamada externa, com limite de taxa — 3 h basta
+    meta: num(process.env.REFRESH_META_MS, 10800000), // 3 h
   },
 };
 

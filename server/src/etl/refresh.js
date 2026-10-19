@@ -18,13 +18,49 @@ import {
   construirRelatorios, setFonteErroRelatorios, setFonteRelatorios,
 } from '../model/relatorios.js';
 import {
-  construirCampanhas, setFonteCampanhas, setFonteErroCampanhas,
+  construirCampanhas, registrarCargaCampanhas, setFonteCampanhas, setFonteErroCampanhas,
 } from '../model/campanhas.js';
 import {
   GOOGLE_ADS_SQL, MATRIX_DOS_LEADS_SQL, META_ADS_SQL, RASTREAMENTO_LOTES_SQL, RASTREAMENTO_SQL,
 } from '../sql/marketing.js';
 import { garantirTabelas } from '../rastreamento.js';
 import { atualizarClima } from '../clima.js';
+import { metaConfigurado, sincronizarMeta } from '../metaAds.js';
+
+/**
+ * Sincroniza o Meta Ads pela Marketing API e, em seguida, relê a tabela para o
+ * modelo de campanhas. Não é uma "fonte" do modelo: ela ESCREVE no MariaDB, e a
+ * fonte `metaAds` continua lendo a tabela — a mesma que a carga manual usava.
+ *
+ * Falha da API (token revogado, limite de taxa) não derruba a tela: o modelo
+ * segue com o que já está na tabela, e o erro aparece no indicador de fontes.
+ */
+let metaEmCurso = null;
+export async function sincronizarMetaEAtualizar(periodo = {}) {
+  if (!metaConfigurado()) return { pulado: 'Meta não configurado' };
+  // a rodada automática que chega com outra em curso só espera por ela; um
+  // período pedido à mão espera e depois roda o SEU período
+  if (metaEmCurso) {
+    if (!periodo.de && !periodo.ate) return metaEmCurso;
+    await metaEmCurso.catch(() => {});
+  }
+  metaEmCurso = (async () => {
+    try {
+      const r = await sincronizarMeta(periodo);
+      registrarCargaCampanhas('metaApi', { rows: r.linhas, ms: r.ms, de: r.de, ate: r.ate, novas: r.novas });
+      console.log(`[meta] ${r.de} a ${r.ate}: ${r.linhas} linhas (${r.novas} novas) em ${r.ms}ms`);
+      await refreshSource('metaAds');
+      return r;
+    } catch (err) {
+      setFonteErroCampanhas('metaApi', err);
+      console.error(`[meta] sincronização falhou: ${err.message}`);
+      throw err;
+    } finally {
+      metaEmCurso = null;
+    }
+  })();
+  return metaEmCurso;
+}
 
 /**
  * Seis cadências:
@@ -345,6 +381,8 @@ export async function refreshAll() {
     console.log(`[etl] ETL_GRUPOS=${config.etlGrupos.join(',')} — os demais grupos não carregam neste processo`);
   }
   if (grupoAtivo('dims')) await refreshGroup('dims');
+  // sem await: a tela abre com a tabela como está, e o Meta da API entra quando chegar
+  if (grupoAtivo('mkt')) sincronizarMetaEAtualizar().catch(() => {});
   await Promise.all([
     grupoAtivo('full') ? refreshGroup('full') : null,
     grupoAtivo('hot') ? refreshSource('phone') : null,
@@ -380,6 +418,13 @@ export function startScheduler() {
     }, config.refresh.clima);
     tc.unref?.();
     console.log(`[etl] clima verifica a cada ${Math.round(config.refresh.clima / 1000)}s`);
+  }
+
+  // Meta Ads: chamada externa com limite de taxa — cadência própria, longe dos 15 min do grupo
+  if (config.refresh.meta > 0 && grupoAtivo('mkt') && metaConfigurado()) {
+    const tm = setInterval(() => { sincronizarMetaEAtualizar().catch(() => {}); }, config.refresh.meta);
+    tm.unref?.();
+    console.log(`[etl] Meta Ads sincroniza a cada ${Math.round(config.refresh.meta / 1000)}s (últimos ${config.meta.dias} dias)`);
   }
 
   for (const [grupo, intervalo] of Object.entries(grupos)) {

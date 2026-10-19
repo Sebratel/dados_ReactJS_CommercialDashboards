@@ -9,7 +9,8 @@ import { listarQueries, testarQuery } from '../model/catalogo.js';
 import { definirJanela, estadoRecarga, janela, marcarRecarga, restaurarJanela } from '../janela.js';
 import { definirFeriados, estadoFeriados, restaurarFeriados } from '../feriados.js';
 import { definirMetas, estadoMetas, restaurarMetas } from '../metas.js';
-import { refreshAll, refreshSource } from '../etl/refresh.js';
+import { refreshAll, refreshSource, sincronizarMetaEAtualizar } from '../etl/refresh.js';
+import { metaConfigurado } from '../metaAds.js';
 import { importarRastreamento } from '../rastreamento.js';
 import { construirCampanhas } from '../model/campanhas.js';
 import { getState } from '../model/store.js';
@@ -159,6 +160,33 @@ admin.post(
     }
   },
 );
+
+// ------------------------------------------------------ Meta Ads (Marketing API)
+/**
+ * Sincroniza o Meta Ads de um período, sob demanda. Serve para trazer histórico
+ * e para reprocessar um intervalo; a carga diária roda sozinha a cada
+ * REFRESH_META_MS. Só admin: cada chamada consome o limite de taxa do app.
+ *
+ * Corpo: { de: 'AAAA-MM-DD', ate: 'AAAA-MM-DD' } — os dois opcionais; sem eles,
+ * os últimos META_DIAS dias.
+ */
+admin.post('/campanhas/meta/sincronizar', exigirAuth({ minPapel: 'admin' }), async (req, res) => {
+  const { de = null, ate = null } = req.body || {};
+  const data = /^\d{4}-\d{2}-\d{2}$/;
+  if ((de && !data.test(de)) || (ate && !data.test(ate)) || (de && ate && de > ate)) {
+    return res.status(400).json({ error: 'Use "de" e "ate" no formato AAAA-MM-DD, com de <= ate.' });
+  }
+  if (!metaConfigurado()) {
+    return res.status(400).json({ error: 'META_ACCESS_TOKEN e META_AD_ACCOUNT_ID não estão configurados.' });
+  }
+  try {
+    const r = await sincronizarMetaEAtualizar({ de, ate });
+    console.log(`[meta] sincronização manual por ${req.usuario?.email}: ${r.de} a ${r.ate}`);
+    return res.json(r);
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
+});
 
 // ----------------------------------------------------- janela de dados
 /**

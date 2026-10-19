@@ -67,6 +67,9 @@ services:
       META_ACCESS_TOKEN: ${META_ACCESS_TOKEN}
       META_AD_ACCOUNT_ID: ${META_AD_ACCOUNT_ID}
       META_API_VERSION: ${META_API_VERSION:-v23.0}
+      # dias reenviados a cada rodada (o Meta revisa os recentes) e a cadência
+      META_DIAS: ${META_DIAS:-7}
+      REFRESH_META_MS: ${REFRESH_META_MS:-10800000}
       SLA_SINCE: ${SLA_SINCE:-2026-01-01}
       UMOV_AJUSTE_HORAS: ${UMOV_AJUSTE_HORAS:-0}
     volumes:
