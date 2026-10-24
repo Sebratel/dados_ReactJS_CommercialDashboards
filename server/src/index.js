@@ -12,6 +12,54 @@ import * as cofre from './cofre.js';
 assertConfig();
 
 /**
+ * POR QUE O PROCESSO MORREU — a pergunta que 431 reinícios não responderam.
+ *
+ * Em 24/10/2026 o contêiner acumulou 431 reinícios e o painel só mostrava o
+ * contador. O motivo estava no log, mas perdido entre as linhas do ETL; e uma
+ * promessa rejeitada sem `catch` em qualquer lugar derruba o processo inteiro
+ * no Node 18+, sem deixar nada escrito.
+ *
+ * Os dois ganchos abaixo não consertam falha nenhuma — fazem a falha FALAR.
+ *
+ * `unhandledRejection` não derruba: este é um painel de LEITURA, e uma carga
+ * que falhou não justifica tirar a tela do ar de quem está olhando. O erro
+ * aparece marcado e a vida segue com o dado anterior.
+ *
+ * `uncaughtException` DERRUBA, de propósito: ali o estado do processo é
+ * desconhecido, e servir número errado é pior do que não servir. A diferença é
+ * que agora ele morre dizendo por quê.
+ */
+process.on('unhandledRejection', (motivo) => {
+  const erro = motivo instanceof Error ? motivo : new Error(String(motivo));
+  console.error(`[processo] promessa rejeitada sem catch — SEGUINDO: ${erro.message}\n${erro.stack}`);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error(`[processo] exceção não capturada — ENCERRANDO: ${err.message}\n${err.stack}`);
+  process.exit(1);
+});
+
+/**
+ * Memória a cada cinco minutos, para o próximo estouro ter rastro.
+ *
+ * O crash de 24/10 foi do V8 batendo em `--max-old-space-size`, não do cgroup
+ * (`OOMKilled: false`). Nenhum painel de contêiner enxerga esse teto: para o
+ * Docker a memória estava folgada. Só o próprio processo sabe, e agora conta.
+ */
+const MEM_MS = Number(process.env.LOG_MEM_MS || 300000);
+if (MEM_MS > 0) {
+  const t = setInterval(() => {
+    const m = process.memoryUsage();
+    const mb = (v) => Math.round(v / 1048576);
+    const teto = mb(m.heapTotal);
+    const uso = mb(m.heapUsed);
+    const aviso = uso / Math.max(teto, 1) > 0.85 ? '  ATENÇÃO: perto do teto do heap' : '';
+    console.log(`[mem] heap ${uso}/${teto} MB · rss ${mb(m.rss)} MB · externo ${mb(m.external)} MB${aviso}`);
+  }, MEM_MS);
+  t.unref?.();
+}
+
+/**
  * A chave que cifra os segredos em repouso (hoje a do provedor de IA) PRECISA
  * vir do ambiente.
  *

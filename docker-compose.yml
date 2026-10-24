@@ -19,7 +19,13 @@ services:
     environment:
       TZ: America/Sao_Paulo
       PORT: 8080
-      NODE_OPTIONS: --max-old-space-size=1024
+      # TETO DO HEAP, e nao do conteiner -- foi este que matou o processo.
+      # Em 24/10/2026: "Ineffective mark-compacts near heap limit" com
+      # OOMKilled:false e 431 reinicios. O conteiner tinha 1,5 GB e meio giga
+      # ocioso; quem doia era o V8 em 1024 MB.
+      # Regra: heap ~70% do limite do conteiner, deixando o resto para buffer de
+      # driver, nativo e pilha, que NAO contam no --max-old-space-size.
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=2048}
 
       # ---- Voalle (PostgreSQL) ----
       DB_VOALLE_HOST: ${DB_VOALLE_HOST}
@@ -95,7 +101,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1.5g
+          # 3 GB para 2 GB de heap. Conferir se o host comporta antes de subir:
+          # o Zabbix ja acompanha RAM/swap deste servidor.
+          memory: ${MEM_LIMIT:-3g}
 
 volumes:
   comercial-dashboard-data:
