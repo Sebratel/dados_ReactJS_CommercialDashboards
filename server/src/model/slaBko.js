@@ -62,8 +62,8 @@ function deslocar(texto, minutos) {
 const LIMITE_LINHAS = 3000;
 
 const vazio = () => ({
-  fontes: {}, brutos: { vendas: [], tarefas: [], ciclos: [] },
-  tarefas: [], ciclos: [], vendas: [], versao: 0, buildMs: 0, construidoEm: null,
+  fontes: {}, brutos: { vendas: [], tarefas: [], ciclos: [], vendasAssistidas: [] },
+  tarefas: [], ciclos: [], vendas: [], vendasAssistidas: [], versao: 0, buildMs: 0, construidoEm: null,
 });
 let estado = vazio();
 
@@ -461,6 +461,7 @@ export function construirSla() {
 
   estado = {
     ...estado, tarefas, ciclos, vendas, diagFuso,
+    vendasAssistidas: construirVendasAssistidas(estado.brutos.vendasAssistidas || []),
     versao: estado.versao + 1, buildMs: Date.now() - inicio, construidoEm: new Date().toISOString(),
   };
   return estado;
@@ -600,48 +601,114 @@ function backlogAgora(todas, flt, agora) {
   };
 }
 
+/** Venda Assistida do Elleven (tipo 1054): só o que o card de pendentes precisa. */
+function construirVendasAssistidas(brutos) {
+  const out = [];
+  for (const r of brutos) {
+    const cpf = normalizarCpf(r.cpf_digitos);
+    const abertoEm = dt(r.aberto_em);
+    if (!cpf || !abertoEm) continue;
+    const statusId = Number(r.status_id);
+    out.push({
+      protocolo: txt(r.protocolo) || null, cpf, abertoEm,
+      // 8 = Cancelado na incident_status; o título cobre um id novo com o mesmo nome
+      cancelada: statusId === 8 || /cancel/i.test(txt(r.status)),
+    });
+  }
+  return out;
+}
+
 /**
- * Pedidos APROVADOS no uMov que ainda não viraram venda no Elleven — o "em aberto" do SLA de
- * cadastro (A2 − A1, meta 1 h). Pedido do BKO de 14/10/2026. Retrato de agora, não segue o período.
+ * PENDENTES DE CADASTRO AGORA — o SLA de cadastro (A2 − A1, meta 1 h útil) medido ao vivo.
+ * Pedido do BKO de 15/10/2026 (ver claude/sla-bko-pendentes-cadastro-online-2026-10-15.md).
+ * Retrato de agora, não segue o período.
  *
- * Regras: ciclo com CPF/CNPJ cuja ÚLTIMA tarefa foi aprovada nos últimos 30 dias (mesma janela
- * que vale para o cruzamento — depois disso o ciclo é tratado como de outra venda) e sem nenhuma
- * venda do mesmo CPF cadastrada depois do 1º envio do ciclo. O tempo conta do último envio (A1),
- * igual ao SLA de cadastro.
+ * Pedido = tarefa do uMov com CPF/CNPJ (sem documento é visita/lead, nunca chega ao BKO).
+ * Para cada CPF vale a ÚLTIMA tarefa (cada reenvio é uma tarefa nova), com envio nos últimos
+ * 30 dias. Ela é pendente quando:
+ *  - não foi reprovada (reprovada = devolvida ao vendedor; o reenvio reinicia o relógio);
+ *  - não há venda do mesmo CPF no Elleven cadastrada desde o 1º envio do ciclo (envios do
+ *    mesmo CPF sem intervalo maior que 7 dias, a regra dos ciclos);
+ *  - não há Venda Assistida do mesmo CPF CANCELADA aberta desde o 1º envio do ciclo
+ *    (negociação perdida — caso Vera Regina, protocolo 1819251).
+ * Etapa: "Em análise no uMov" (sem análise) ou "Aprovado sem cadastro". O tempo conta do
+ * último envio (A1) até agora, em horas úteis, igual ao SLA de cadastro.
  *
- * Limite conhecido: a base do Elleven aqui só tem instalação de FIBRA. Um pedido aprovado que
- * virou venda de rádio/telefonia, ou cadastrado com CPF diferente, aparece como "aguardando".
+ * Limites conhecidos: a base de vendas só tem instalação de FIBRA (pedido que virou venda de
+ * outro tipo, ou cadastrado com CPF diferente, aparece como pendente); vendedor que não usa o
+ * uMov nunca aparece; o uMov chega pelo Data Hub de hora em hora (`umovAte` = último
+ * movimento visto).
  */
-export function aguardandoCadastro(s, agora) {
-  const porId = new Map(s.tarefas.filter((t) => t.idTarefa).map((t) => [t.idTarefa, t]));
+const DIAS_ENTRE_ENVIOS_DO_CICLO = 7;
+export function pendentesCadastro(s, agora) {
   const vendasPorCpf = new Map();
   for (const v of s.vendas) {
     if (!v.cpf || !v.criadoEm) continue;
     if (!vendasPorCpf.has(v.cpf)) vendasPorCpf.set(v.cpf, []);
     vendasPorCpf.get(v.cpf).push(v.criadoEm);
   }
+  const canceladasPorCpf = new Map();
+  for (const va of s.vendasAssistidas || []) {
+    if (!va.cancelada) continue;
+    if (!canceladasPorCpf.has(va.cpf)) canceladasPorCpf.set(va.cpf, []);
+    canceladasPorCpf.get(va.cpf).push(va.abertoEm);
+  }
+  const tarefasPorCpf = new Map();
+  let umovAte = null;
+  for (const t of s.tarefas) {
+    for (const d of [t.envio, t.analise]) if (d && (!umovAte || d > umovAte)) umovAte = d;
+    if (!t.cpf || !t.envio) continue;
+    if (!tarefasPorCpf.has(t.cpf)) tarefasPorCpf.set(t.cpf, []);
+    tarefasPorCpf.get(t.cpf).push(t);
+  }
   const limite = diasAtras(agora, DIAS_CICLO_VALIDO);
   const lista = [];
-  for (const c of s.ciclos) {
-    if (!c.cpf || !c.tarefaUltimo || !c.primeiroInput) continue;
-    const t = porId.get(c.tarefaUltimo);
-    if (!t || t.situacao !== 'Aprovado' || !t.analise || t.analise < limite) continue;
-    if ((vendasPorCpf.get(c.cpf) || []).some((d) => d >= c.primeiroInput)) continue;
-    const a1 = c.ultimoInput || c.primeiroInput;
+  for (const [cpf, ts] of tarefasPorCpf) {
+    ts.sort((a, b) => a.envio.localeCompare(b.envio) || (a.idTarefa || 0) - (b.idTarefa || 0));
+    const ult = ts[ts.length - 1];
+    if (ult.envio < limite || ult.situacao === 'Reprovado') continue;
+    // 1º envio do ciclo: volta enquanto o envio anterior está a até 7 dias do seguinte
+    // — e para se houve venda entre os dois envios: o pedido anterior já virou venda, este é outro
+    const vendasCpf = vendasPorCpf.get(cpf) || [];
+    let inicio = ult.primeiroEnvio && ult.primeiroEnvio < ult.envio ? ult.primeiroEnvio : ult.envio;
+    for (let i = ts.length - 2; i >= 0; i -= 1) {
+      if (horasCorridas(ts[i].envio, inicio) > DIAS_ENTRE_ENVIOS_DO_CICLO * 24) break;
+      if (vendasCpf.some((d) => d >= ts[i].envio && d < inicio)) break;
+      if (ts[i].envio < inicio) inicio = ts[i].envio;
+    }
+    // tolerância de 24 h para trás: venda cadastrada pouco ANTES do envio (acontece — a OBS
+    // "Envio no uMov só depois do cadastro") já resolveu o pedido
+    if (vendasCpf.some((d) => horasCorridas(d, inicio) <= 24)) continue;
+    if ((canceladasPorCpf.get(cpf) || []).some((d) => d >= inicio)) continue;
+    const esperaHoras = horasUteis(ult.envio, agora) ?? 0;
     lista.push({
-      idTarefa: t.idTarefa, envio: a1, aprovadoEm: t.analise, vendedor: t.vendedor, cliente: t.cliente,
-      analista: t.analista, envios: c.rodadas || 1,
-      esperaHoras: horasUteis(a1, agora), corridas: horasCorridas(a1, agora),
+      idTarefa: ult.idTarefa,
+      etapa: ult.situacao === 'Aprovado' ? 'Aprovado sem cadastro' : 'Em análise no uMov',
+      envio: ult.envio, primeiroEnvio: inicio, aprovadoEm: ult.situacao === 'Aprovado' ? ult.analise : null,
+      envios: ts.filter((t) => t.envio >= inicio).length,
+      vendedor: ult.vendedor, cliente: ult.cliente, analista: ult.situacao === 'Aprovado' ? ult.analista : null,
+      esperaHoras, corridas: horasCorridas(ult.envio, agora),
+      fora: esperaHoras > METAS.cadastro,
     });
   }
-  lista.sort((a, b) => (b.aprovadoEm || '').localeCompare(a.aprovadoEm || ''));
+  // o mais antigo primeiro: é o que o BKO precisa tratar antes
+  lista.sort((a, b) => a.envio.localeCompare(b.envio));
+  const conta = (f) => lista.filter(f).length;
+  const emAnalise = (x) => x.etapa === 'Em análise no uMov';
   return {
-    aguardando: lista.length,
-    foraSla: lista.filter((x) => x.esperaHoras > METAS.cadastro).length,
-    mais24h: lista.filter((x) => x.corridas > 24).length,
-    lista: lista.slice(0, 300).map(({ corridas, ...x }) => ({ ...x, estourado: x.esperaHoras > METAS.cadastro })),
+    total: lista.length,
+    emAnalise: conta(emAnalise),
+    aprovados: conta((x) => !emAnalise(x)),
+    fora: conta((x) => x.fora),
+    foraEmAnalise: conta((x) => x.fora && emAnalise(x)),
+    foraAprovados: conta((x) => x.fora && !emAnalise(x)),
+    mais24h: conta((x) => x.corridas > 24),
+    umovAte,
+    lista: lista.slice(0, 300).map(({ corridas, ...x }) => x),
   };
 }
+
+const PENDENTES_VAZIO = { total: 0, emAnalise: 0, aprovados: 0, fora: 0, foraEmAnalise: 0, foraAprovados: 0, mais24h: 0, umovAte: null, lista: [] };
 
 export function painelSlaBko(flt, agora = agoraLocal()) {
   const s = estado;
@@ -696,8 +763,8 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
   const totalInterna = estatistica(internas.filter((v) => v.situacao === 'Agendado').map((v) => v.slaAgendamento));
   const cadastro = {
     ...estatistica(externas.map((v) => v.slaCadastro), METAS.cadastro),
-    // aprovados no uMov ainda sem venda no Elleven (agora, não segue o período)
-    abertos: querExterno ? aguardandoCadastro(s, agora) : { aguardando: 0, foraSla: 0, mais24h: 0, lista: [] },
+    // pedidos do uMov (em análise ou aprovados) ainda sem venda no Elleven — agora, não segue o período
+    pendentes: querExterno ? pendentesCadastro(s, agora) : PENDENTES_VAZIO,
     serie: serie(externas.filter((v) => v.slaCadastro !== null), (v) => v.criadoEm, (v) => v.slaCadastro, flt.g, METAS.cadastro),
   };
 
