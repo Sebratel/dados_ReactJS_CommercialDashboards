@@ -875,6 +875,7 @@ table.matrix tfoot td {
 .banner.importacao { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .banner.importacao .texto { flex: 1 1 320px; min-width: 0; }
 .banner.importacao .botao-enquadrar:disabled { opacity: 0.6; cursor: progress; }
+.banner.importacao a.botao-enquadrar { text-decoration: none; }
 
 /**
  * Interruptor escrito na barra de filtros. Existe para a opcao que muda um total

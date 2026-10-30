@@ -39,6 +39,9 @@ function SubNav({ atual, onChange }) {
   );
 }
 
+/** Onde o CSV é exportado: a tela do relatório no Matrix (exige login no Matrix). */
+const URL_RELATORIO_MATRIX = 'https://sebratel.matrixdobrasil.ai/relatorio-atendimento/relatorio-analitico-rastreamento-posts';
+
 const dataHoraBR = (v) => (v ? `${labelData(v.slice(0, 10))} ${v.slice(11, 16)}` : '—');
 
 /**
@@ -92,6 +95,15 @@ function Importacao({ frescor }) {
         </div>
         {ehAdmin && (
           <>
+            <a
+              className="botao-enquadrar"
+              href={URL_RELATORIO_MATRIX}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abre o Relatório analítico de rastreamento de posts no Matrix, de onde se exporta o CSV."
+            >
+              Abrir relatório no Matrix ↗
+            </a>
             <input
               ref={input}
               id="importar-rastreamento"
