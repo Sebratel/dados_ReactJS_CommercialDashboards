@@ -65,11 +65,12 @@ async function main() {
   const resultado = { geradoEm: new Date().toISOString(), conjuntos: {} };
 
   for (const slug of CONJUNTOS) {
-    const url = `${config.datahub.url}/${slug}/rows?limit=${LINHAS}&offset=0&token=${encodeURIComponent(config.datahub.token)}`;
+    // Token só no cabeçalho, como em `src/datahub.js`: desde 30/10/2026 o Data Hub recusa ?token=.
+    const url = `${config.datahub.url}/${slug}/rows?limit=${LINHAS}&offset=0`;
     process.stdout.write(`${slug}: `);
     try {
       const inicio = Date.now();
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      const res = await fetch(url, { headers: { Accept: 'application/json', 'X-Api-Token': config.datahub.token } });
       const texto = await res.text();
       if (!res.ok) {
         console.log(`erro HTTP ${res.status}`);
