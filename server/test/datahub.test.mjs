@@ -17,6 +17,7 @@ import test, { afterEach } from 'node:test';
 process.env.AUTH_ENABLED = 'false';
 process.env.DATAHUB_TOKEN = 'token-de-teste-123';
 process.env.DATAHUB_URL = 'http://datahub-de-teste/api/public/v1/datasets';
+process.env.DATAHUB_RETRY_MS = '0';
 
 const { lerConjunto } = await import('../src/datahub.js');
 
@@ -81,7 +82,7 @@ test('o token nunca vaza na mensagem, nem quando o servidor o devolve', async ()
     corpo: '<html>Forbidden: /rows?token=token-de-teste-123 (ref token-de-teste-123)</html>',
   });
   const msg = await erroDe();
-  assert.doesNotMatch(msg, /token-de-teste-123/, 'o token vai na query string e pode voltar no corpo');
+  assert.doesNotMatch(msg, /token-de-teste-123/, 'um servidor que ecoa a requisição pode devolver o token no corpo');
   assert.match(msg, /\*\*\*/, 'todas as ocorrências trocadas, não só a primeira');
 });
 
@@ -111,4 +112,44 @@ test('o caminho feliz continua lendo e convertendo os BIGINT que vêm como texto
     'BIGINT chega como texto; quem soma sem converter concatena string sem erro nenhum',
   );
   assert.equal(rows[0].cliente, 'ANA');
+});
+
+test('API nova (out/2026): token no cabeçalho X-Api-Token, nunca na URL', async () => {
+  const chamadas = [];
+  globalThis.fetch = async (url, opts) => {
+    chamadas.push({ url, opts });
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ rows: [], total: 0 }) };
+  };
+  await lerConjunto('umuvme-sls-bko');
+  assert.equal(chamadas.length, 1);
+  assert.equal(chamadas[0].opts.headers['X-Api-Token'], 'token-de-teste-123');
+  assert.doesNotMatch(chamadas[0].url, /token/, 'o token saiu da query string');
+  assert.match(chamadas[0].url, /\/umuvme-sls-bko\/rows\?limit=\d+&offset=0$/);
+});
+
+test('página menor que a pedida (teto da API) não corta o conjunto: segue até o total', async () => {
+  const offsets = [];
+  globalThis.fetch = async (url) => {
+    const offset = Number(new URL(url).searchParams.get('offset'));
+    offsets.push(offset);
+    const n = Math.min(300, 700 - offset);   // a API devolve no máximo 300 por página
+    const rows = Array.from({ length: Math.max(n, 0) }, (_, i) => ({ id: offset + i }));
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ rows, total: 700 }) };
+  };
+  const { rows } = await lerConjunto('umuvme-sls-bko');
+  assert.equal(rows.length, 700);
+  assert.deepEqual(offsets, [0, 300, 600]);
+  assert.equal(new Set(rows.map((r) => r.id)).size, 700, 'sem linha repetida nem pulada');
+});
+
+test('conexão recusada uma vez (Data Hub reiniciando) é tentada de novo e a carga sai', async () => {
+  let tentativas = 0;
+  globalThis.fetch = async () => {
+    tentativas += 1;
+    if (tentativas === 1) { const e = new Error('fetch failed'); e.cause = { code: 'ECONNREFUSED' }; throw e; }
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ rows: [{ a: 1 }], total: 1 }) };
+  };
+  const { rows } = await lerConjunto('umuvme-sls-bko');
+  assert.equal(tentativas, 2);
+  assert.equal(rows.length, 1);
 });
