@@ -162,10 +162,40 @@ escopo: nenhuma marcada significa "vê tudo".
 
 > **O escopo vale no dashboard INTEIRO, não na tela onde foi configurado.** Marcar equipes
 > para alguém recorta todas as visões por equipe de **todas** as telas — Diretoria, Vendas,
-> Vendas Histórico, Ativações, Ativações Histórico, Rampagem, Premiações, Vendas Canceladas e
-> Análise Preditiva — mais as exportações e a leitura de IA. Não existe escopo "só de uma
-> tela": ele é atributo da pessoa. A interface repete isso em três lugares (introdução da aba,
-> seletor de equipes e legenda) porque é a confusão mais provável de quem configura.
+> Vendas Histórico, Ativações, Ativações Histórico, Primeiro Pagamento, Rampagem, Premiações,
+> Vendas Canceladas, Análise Preditiva, **Relatórios Comercial** e **SLA BKO** — mais as
+> exportações e a leitura de IA. Não existe escopo "só de uma tela": ele é atributo da pessoa.
+> A interface repete isso em três lugares (introdução da aba, seletor de equipes e legenda)
+> porque é a confusão mais provável de quem configura.
+
+**Para quem é (decisão do IC, 10/11/2026).** O escopo existe para supervisor e coordenador não
+abrirem a equipe do colega para comparar. Todo o resto do pessoal continua sem escopo, vendo
+tudo — por isso "nenhuma equipe marcada" segue significando acesso amplo, e não acesso nenhum.
+
+**Relatórios Comercial e SLA BKO** (pedido "Fixação de times", 21/10/2026) não leem o `equipe`
+da query comercial, então o middleware sozinho não os alcançava. Lá o escopo chega por
+`req.usuario.escopo` (`equipesDoEscopo` em `routes/api.js`) e é cruzado com `equipesNoEscopo`
+(`model/measures.js`), a mesma regra de `aplicarEscopo`:
+
+* **Relatórios Comercial** — as quatro abas de venda (Geral, Resumo de vendas, Quadro de
+  equipes e Relatório diário) cruzam o escopo com o seletor de equipe da própria aba
+  (`requipe`, `vequipe`, `qequipe`, `dequipe`), e os seletores só oferecem equipes e
+  vendedores do escopo. Ele **não** vem pelo `equipe` da URL porque o filtro da barra
+  comercial vazaria para cá. Clientes Base, Pesquisa de cancelamento e Clima ficam livres:
+  não são dado de vendedor.
+* **SLA BKO** — a tela não tem equipe comercial (a `equipe` da venda é a fila do protocolo,
+  não o time do vendedor). O recorte é pelo **nome do vendedor** da venda, do envio ou do
+  ciclo, casado com a Comercial_Teams pela `chavePessoa` (sem caixa, acento e partículas).
+  Rankings de analista e atendente passam a contar só as vendas dos vendedores da equipe.
+  Vendedor que não casa fica de fora para quem tem escopo, e a Qualidade do dado mostra
+  quantos são (`vendedoresSemEquipe`) — se o número crescer, é grafia diferente entre
+  uMov/Elleven e o cadastro. O escopo entra **explícito** na chave do cache da rota
+  `/sla-bko`, que não lê o `equipe` reescrito pelo middleware.
+
+> **A equipe é a ATUAL do vendedor.** Venda, ativação e envio levam a equipe que o vendedor
+> tem hoje na Comercial_Teams, não a da data da venda: quem muda de equipe leva o histórico
+> junto. O IC decidiu manter assim (10/11/2026), mas a tela diz: a nota aparece no seletor de
+> Equipe e no selo de escopo da barra de filtros.
 
 **Nada é gravado até você clicar em Salvar.** As alterações ficam em rascunho: a célula
 alterada aparece destacada, uma barra mostra quantas estão pendentes e oferece **Descartar**.

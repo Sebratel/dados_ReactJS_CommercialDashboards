@@ -79,7 +79,8 @@ const MODELOS = {
     ],
   },
   relResumo: {
-    parse: (q) => ({ flt: parseFiltrosResumo(q) }),
+    // as três abas de venda dos Relatórios recebem o escopo de equipe, como a tela
+    parse: (q, escopo) => ({ flt: parseFiltrosResumo(q, escopo) }),
     montar: (visual, ctx) => painelResumo(ctx.flt),
     periodo: ({ flt }) => (flt.de || flt.ate
       ? `Período pela CRIAÇÃO DO CONTRATO: ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
@@ -94,7 +95,7 @@ const MODELOS = {
     ],
   },
   relEquipes: {
-    parse: (q) => ({ flt: parseFiltrosEquipes(q) }),
+    parse: (q, escopo) => ({ flt: parseFiltrosEquipes(q, escopo) }),
     montar: (visual, ctx) => painelEquipes(ctx.flt),
     periodo: ({ flt }) => (flt.de || flt.ate
       ? `Período de ${flt.de || 'início'} a ${flt.ate || 'hoje'}, aplicado às TRÊS datas do quadro (venda, ativação e primeiro pagamento) de forma independente — por isso as colunas não fecham entre si.`
@@ -107,7 +108,7 @@ const MODELOS = {
     ],
   },
   relDiario: {
-    parse: (q) => ({ flt: parseFiltrosDiario(q) }),
+    parse: (q, escopo) => ({ flt: parseFiltrosDiario(q, escopo) }),
     montar: (visual, ctx) => painelDiario(ctx.flt),
     periodo: ({ flt }) => (flt.de || flt.ate
       ? `Mês de ${flt.de || 'início'} a ${flt.ate || 'hoje'}.`
@@ -839,7 +840,7 @@ export const listarVisuais = () => Object.entries(VISUAIS)
  *
  * Lança se o id não existir — a rota traduz em 404.
  */
-export function recortarVisual(id, query = {}) {
+export function recortarVisual(id, query = {}, equipesPermitidas = null) {
   const visual = VISUAIS[id];
   if (!visual) {
     const erro = new Error('Visual desconhecido.');
@@ -847,7 +848,9 @@ export function recortarVisual(id, query = {}) {
     throw erro;
   }
   const modelo = MODELOS[visual.modelo || 'comercial'];
-  const ctx = modelo.parse(query);
+  // o modelo comercial já recebe o escopo pelo `equipe` da query (middleware); os que
+  // têm campo próprio de equipe o recebem aqui — a IA não lê mais que a tela mostra
+  const ctx = modelo.parse(query, equipesPermitidas);
   const painel = modelo.montar(visual, ctx);
   return {
     tela: visual.tela,

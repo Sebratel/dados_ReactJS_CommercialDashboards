@@ -31,6 +31,27 @@ const asArray = (v) => {
  */
 export const EQUIPE_INEXISTENTE = '__sem-acesso__';
 
+/**
+ * Cruza as equipes PEDIDAS com as que o escopo da pessoa PERMITE.
+ *
+ * É a regra de `aplicarEscopo` (auth/middleware.js) para as telas que não leem o
+ * `equipe` da query comercial — os Relatórios Comercial têm um campo de equipe por
+ * aba (`requipe`, `vequipe`…) e o SLA BKO não tem nenhum. Lá o escopo chega pelo
+ * `req.usuario` e cada leitor de filtros chama esta função.
+ *
+ *   sem escopo .............. o que foi pedido (vazio = todas)
+ *   escopo, nada pedido ..... todas as permitidas
+ *   escopo, pedido dentro ... o pedido
+ *   escopo, pedido fora ..... [EQUIPE_INEXISTENTE] — vazio, não "tudo que pode"
+ */
+export function equipesNoEscopo(pedido = [], permitido = null) {
+  const lista = pedido || [];
+  if (!permitido?.length) return lista;
+  if (!lista.length) return [...permitido];
+  const dentro = lista.filter((e) => permitido.includes(e));
+  return dentro.length ? dentro : [EQUIPE_INEXISTENTE];
+}
+
 export function parseFilters(q = {}) {
   return {
     de: q.de || null,

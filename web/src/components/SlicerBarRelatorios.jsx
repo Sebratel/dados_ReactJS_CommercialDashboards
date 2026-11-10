@@ -5,7 +5,9 @@ import {
 } from '../api';
 import { PRESETS, useFilters } from '../filters';
 import { Icone } from './Icone';
-import { FiltroLista, FiltroPeriodo } from './SlicerBar';
+import {
+  AvisoEscopo, FiltroLista, FiltroPeriodo, NOTA_EQUIPE,
+} from './SlicerBar';
 
 /**
  * Barra de filtros das sete sub-páginas de Relatórios Comercial.
@@ -31,6 +33,7 @@ const PRESETS_MES = PRESETS.filter((p) => p.id !== 'hoje' && p.id !== 'ontem');
  */
 const ABAS = {
   geral: {
+    escopo: true,
     hook: useFiltrosRelGeral,
     de: 'relDe',
     ate: 'relAte',
@@ -50,6 +53,7 @@ const ABAS = {
     ],
   },
   resumo: {
+    escopo: true,
     hook: useFiltrosRelResumo,
     de: 'resDe',
     ate: 'resAte',
@@ -66,6 +70,7 @@ const ABAS = {
     ],
   },
   equipes: {
+    escopo: true,
     hook: useFiltrosRelEquipes,
     de: 'eqpDe',
     ate: 'eqpAte',
@@ -81,6 +86,7 @@ const ABAS = {
     ],
   },
   diario: {
+    escopo: true,
     hook: useFiltrosRelDiario,
     de: 'diaDe',
     ate: 'diaAte',
@@ -168,6 +174,9 @@ export function SlicerBarRelatorios({ aba }) {
 
   return (
     <div className="filtros">
+      {/* só as abas de venda são recortadas pelo escopo (decisão do IC, 10/11/2026) */}
+      {def.escopo && <AvisoEscopo />}
+
       {def.de && (
         <FiltroPeriodo
           de={filtros[def.de]}
@@ -192,6 +201,7 @@ export function SlicerBarRelatorios({ aba }) {
           valor={filtros[campo]}
           onChange={(v) => setFiltro({ [campo]: v })}
           alinhar={i >= def.campos.length - 2 ? 'direita' : undefined}
+          nota={opcoes === 'equipes' ? NOTA_EQUIPE : null}
         />
       ))}
 

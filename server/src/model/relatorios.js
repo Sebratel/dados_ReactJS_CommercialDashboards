@@ -16,6 +16,7 @@
  * onde está medido por que ela entra filtrada e não inteira.
  */
 import { getState } from './store.js';
+import { equipesNoEscopo } from './measures.js';
 import { clima } from '../clima.js';
 import { contarDias } from '../feriados.js';
 import { metas } from '../metas.js';
@@ -398,15 +399,27 @@ const dentro = (data, de, ate) => {
 
 const combinaLista = (valor, alvos) => !alvos.length || alvos.includes(valor);
 
+/*
+ * ESCOPO DE EQUIPE (Configurações → Acesso por tela). As quatro abas que mostram
+ * venda recebem as equipes que a pessoa pode ver em `escopo` e cruzam com o seletor
+ * de equipe da aba (`equipesNoEscopo`): supervisor e coordenador enxergam só as
+ * próprias equipes, e quem não tem escopo continua vendo tudo. O escopo não chega
+ * pelo `equipe` da query porque cada aba tem o seu campo (`requipe`, `vequipe`…) e
+ * o `equipe` da barra comercial não pode vazar para cá pela URL.
+ *
+ * Clientes Base, Pesquisa de cancelamento e Clima ficam livres de propósito (decisão
+ * do IC, 10/11/2026): não são dado de vendedor, e não há com o que recortá-los.
+ */
+
 /** Filtros da aba GERAL. */
-export function parseFiltrosGeral(q = {}) {
+export function parseFiltrosGeral(q = {}, escopo = null) {
   return {
     de: q.rde || '',
     ate: q.rate || '',
     cidades: lista(q.rcidade),
     bairros: lista(q.rbairro),
     vendedores: lista(q.rvend),
-    equipes: lista(q.requipe),
+    equipes: equipesNoEscopo(lista(q.requipe), escopo),
     situacoes: lista(q.rsit),
     status: lista(q.rstatus),
     tecnologias: lista(q.rtec),
@@ -418,13 +431,13 @@ export function parseFiltrosGeral(q = {}) {
 }
 
 /** Filtros da aba RESUMO - VENDAS. */
-export function parseFiltrosResumo(q = {}) {
+export function parseFiltrosResumo(q = {}, escopo = null) {
   return {
     de: q.vde || '',
     ate: q.vate || '',
     cidades: lista(q.vcidade),
     vendedores: lista(q.vvend),
-    equipes: lista(q.vequipe),
+    equipes: equipesNoEscopo(lista(q.vequipe), escopo),
     situacoes: lista(q.vsit),
     status: lista(q.vstatus),
     tecnologias: lista(q.vtec),
@@ -434,12 +447,12 @@ export function parseFiltrosResumo(q = {}) {
 }
 
 /** Filtros da aba QUADRO EQUIPES. */
-export function parseFiltrosEquipes(q = {}) {
+export function parseFiltrosEquipes(q = {}, escopo = null) {
   return {
     de: q.qde || '',
     ate: q.qate || '',
     vendedores: lista(q.qvend),
-    equipes: lista(q.qequipe),
+    equipes: equipesNoEscopo(lista(q.qequipe), escopo),
     situacoes: lista(q.qsit),
     tecnologias: lista(q.qtec),
     somenteAtivos: q.qativo === '1',
@@ -447,12 +460,12 @@ export function parseFiltrosEquipes(q = {}) {
 }
 
 /** Filtros da aba RELATÓRIO DIÁRIO. */
-export function parseFiltrosDiario(q = {}) {
+export function parseFiltrosDiario(q = {}, escopo = null) {
   return {
     de: q.dde || '',
     ate: q.date || '',
     cidades: lista(q.dcidade),
-    equipes: lista(q.dequipe),
+    equipes: equipesNoEscopo(lista(q.dequipe), escopo),
     situacoes: lista(q.dsit),
     tecnologias: lista(q.dtec),
     tipos: lista(q.dtipo),
@@ -1252,28 +1265,52 @@ export function painelClima(flt) {
 }
 
 // ------------------------------------------------------- listas de filtro
-export const filtrosGeral = () => ({
-  cidades: estado.dims.cidades, bairros: estado.dims.bairros, vendedores: estado.dims.vendedores,
-  equipes: estado.dims.equipes, situacoes: estado.dims.situacoes, status: estado.dims.statusContrato,
+/**
+ * As listas de equipe, vendedor e situação que a pessoa com escopo pode ver.
+ *
+ * Mesmo motivo do `/filters` comercial: sem o recorte, o seletor oferecia equipes e
+ * vendedores de fora — escolher um devolvia tela vazia, e a lista em si já entregava
+ * os nomes da equipe do colega, que é justamente o que o escopo existe para evitar.
+ */
+function dimsDoEscopo(escopo) {
+  const d = estado.dims;
+  if (!escopo?.length) return { equipes: d.equipes, vendedores: d.vendedores, situacoes: d.situacoes };
+  const permitidas = new Set(escopo);
+  const unico = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const doEscopo = estado.fatos.filter((f) => permitidas.has(f.equipe));
+  return {
+    equipes: d.equipes.filter((e) => permitidas.has(e)),
+    vendedores: unico(doEscopo.map((f) => f.vendedor)),
+    situacoes: unico(doEscopo.map((f) => f.situacao)),
+  };
+}
+
+export const filtrosGeral = (escopo = null) => ({
+  cidades: estado.dims.cidades, bairros: estado.dims.bairros,
+  status: estado.dims.statusContrato,
   tecnologias: estado.dims.tecnologias, servicos: estado.dims.servicos,
   etiquetas: estado.dims.etiquetas, situacoesItem: estado.dims.situacoesItem,
+  ...dimsDoEscopo(escopo),
 });
 
-export const filtrosResumo = () => ({
-  cidades: estado.dims.cidades, vendedores: estado.dims.vendedores, equipes: estado.dims.equipes,
-  situacoes: estado.dims.situacoes, status: estado.dims.statusContrato,
+export const filtrosResumo = (escopo = null) => ({
+  cidades: estado.dims.cidades, status: estado.dims.statusContrato,
   tecnologias: estado.dims.tecnologias, tipos: estado.dims.tiposSolicitacao,
+  ...dimsDoEscopo(escopo),
 });
 
-export const filtrosEquipes = () => ({
-  vendedores: estado.dims.vendedores, equipes: estado.dims.equipes,
-  situacoes: estado.dims.situacoes, tecnologias: estado.dims.tecnologias,
+export const filtrosEquipes = (escopo = null) => ({
+  tecnologias: estado.dims.tecnologias,
+  ...dimsDoEscopo(escopo),
 });
 
-export const filtrosDiario = () => ({
-  cidades: estado.dims.cidades, equipes: estado.dims.equipes, situacoes: estado.dims.situacoes,
-  tecnologias: estado.dims.tecnologias, tipos: estado.dims.tiposSolicitacao,
-});
+export const filtrosDiario = (escopo = null) => {
+  const { equipes, situacoes } = dimsDoEscopo(escopo);
+  return {
+    cidades: estado.dims.cidades, equipes, situacoes,
+    tecnologias: estado.dims.tecnologias, tipos: estado.dims.tiposSolicitacao,
+  };
+};
 
 export const filtrosBase = () => ({
   cidades: estado.dims.cidadesBase,

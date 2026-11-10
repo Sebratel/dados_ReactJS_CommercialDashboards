@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { usuarioDoToken } from './google.js';
 import { ehPowerUser, escopoDe, papelDe, peloMenos, podeVerTela } from './access.js';
-import { EQUIPE_INEXISTENTE } from '../model/measures.js';
+import { equipesNoEscopo } from '../model/measures.js';
 
 /**
  * Autenticação + autorização.
@@ -30,9 +30,7 @@ import { EQUIPE_INEXISTENTE } from '../model/measures.js';
 export function aplicarEscopo(req, escopo) {
   if (!escopo?.equipes?.length) return;
   const pedido = String(req.query.equipe || '').split(',').map((x) => x.trim()).filter(Boolean);
-  const permitido = escopo.equipes;
-  const efetivo = pedido.length ? pedido.filter((x) => permitido.includes(x)) : permitido;
-  req.query.equipe = efetivo.length ? efetivo.join(',') : EQUIPE_INEXISTENTE;
+  req.query.equipe = equipesNoEscopo(pedido, escopo.equipes).join(',');
 }
 
 export function exigirAuth({ minPapel = 'viewer', powerUser = false, tela = null } = {}) {
