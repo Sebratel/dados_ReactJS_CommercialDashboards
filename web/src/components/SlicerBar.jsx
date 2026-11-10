@@ -17,6 +17,38 @@ const CAMPOS_COMERCIAL = [...LISTAS, 'cliente', 'zoom'];
 /** O chip do período mostra 'agosto de 2026', não '2026-08'. */
 const FORMATOS = { zoom: labelPeriodoLongo };
 
+/**
+ * A regra que muda o número de quem filtra por equipe, com escopo ou sem.
+ *
+ * Venda e ativação levam a equipe ATUAL do vendedor (Comercial_Teams), não a da data
+ * da venda. Decidido com o IC em 10/11/2026 manter assim, mas DIZER: sem o aviso, o
+ * supervisor que recebe um vendedor transferido vê o mês passado da equipe crescer e
+ * conclui que o número está errado.
+ */
+export const NOTA_EQUIPE = 'A equipe é a ATUAL de cada vendedor: quem mudou de equipe leva o histórico junto, '
+  + 'e as vendas e ativações de antes aparecem na equipe nova.';
+
+/**
+ * O selo de escopo da barra de filtros: quem tem equipes marcadas em Configurações →
+ * Acesso por tela vê só elas, e recorte invisível faz a pessoa concluir que o número
+ * está errado. `detalhe` acrescenta o que a tela tem de próprio.
+ */
+export function AvisoEscopo({ detalhe = '' }) {
+  const { escopo } = useSession();
+  if (!escopo?.length) return null;
+  const texto = [
+    `Você enxerga apenas: ${escopo.join(', ')}. Os totais desta tela já vêm recortados.`,
+    detalhe,
+    NOTA_EQUIPE,
+  ].filter(Boolean).join('\n\n');
+  return (
+    <span className="escopo-aviso" title={texto}>
+      <Icone nome="cadeado" tamanho={11} />
+      {escopo.length === 1 ? escopo[0] : `${escopo.length} equipes`}
+    </span>
+  );
+}
+
 /** Fecha o popover ao clicar fora ou apertar Esc. */
 export function usarFechamento(aberto, fechar) {
   const ref = useRef(null);
@@ -48,7 +80,9 @@ export function usarFechamento(aberto, fechar) {
  * Sem isso a lista mostraria o código, e a busca dentro dela também — ninguém
  * procura campanha digitando 'site_organico'.
  */
-export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, alinhar, rotulos = null }) {
+export function FiltroLista({
+  campo, titulo, opcoes = [], valor = [], onChange, alinhar, rotulos = null, nota = null,
+}) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const ref = usarFechamento(aberto, () => setAberto(false));
@@ -101,6 +135,7 @@ export function FiltroLista({ campo, titulo, opcoes = [], valor = [], onChange, 
             <button type="button" onClick={() => onChange([])}>Limpar</button>
             <span>{opcoes.length} opções</span>
           </div>
+          {nota && <div className="pop-limite pop-nota">{nota}</div>}
         </div>
       )}
     </div>
@@ -375,7 +410,6 @@ export function SlicerBar({
   const { filtros, setFiltro, presetAtivo, contar, limpar } = useFilters();
   const { data: dims } = useFiltros();
   const { data: meta } = useMeta();
-  const { escopo } = useSession();
   const [cliente, setCliente] = useState(filtros.cliente || '');
 
   useEffect(() => setCliente(filtros.cliente || ''), [filtros.cliente]);
@@ -420,16 +454,7 @@ export function SlicerBar({
     <div className="filtros">
       <span className="rotulo">Filtros</span>
 
-      {/* recorte invisível faz a pessoa concluir que o número está errado */}
-      {!!escopo?.length && (
-        <span
-          className="escopo-aviso"
-          title={`Você enxerga apenas: ${escopo.join(', ')}. Os totais desta tela já vêm recortados.`}
-        >
-          <Icone nome="cadeado" tamanho={11} />
-          {escopo.length === 1 ? escopo[0] : `${escopo.length} equipes`}
-        </span>
-      )}
+      <AvisoEscopo />
 
       {campos.includes('periodo') && (
         <FiltroPeriodo
@@ -468,6 +493,7 @@ export function SlicerBar({
           valor={filtros[campo]}
           onChange={(v) => setFiltro({ [campo]: v })}
           alinhar={i >= listas.length - 2 ? 'direita' : undefined}
+          nota={campo === 'equipe' ? NOTA_EQUIPE : null}
         />
       ))}
 

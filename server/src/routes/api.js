@@ -231,6 +231,13 @@ function meta() {
 const withMeta = (payload) => ({ ...payload, meta: meta() });
 
 /**
+ * Equipes que a pessoa pode ver, para as telas que NÃO leem o `equipe` da query
+ * comercial (Relatórios Comercial, SLA BKO). Null = sem escopo (vê tudo) — inclusive
+ * o administrador, que o middleware isenta.
+ */
+const equipesDoEscopo = (req) => req.usuario?.escopo?.equipes || null;
+
+/**
  * Painel com cache, para as telas do modelo comercial.
  *
  * A versão é a do modelo comercial, então uma carga nova invalida tudo sozinha. A
@@ -424,33 +431,36 @@ api.get('/desempenho', auth('leads'), exigirNegociacoes, (req, res) => {
  * Sete sub-páginas, um ACL só (`relatorios`), cada uma com o seu recorte e as suas
  * dimensões. A separação por endpoint é a mesma dos outros relatórios: cada aba
  * pede o que precisa, e uma aba lenta não segura as outras.
+ *
+ * As quatro abas de venda recebem o escopo de equipe da pessoa (`equipesDoEscopo`);
+ * Clientes Base, Pesquisa e Clima não têm vendedor e ficam livres.
  */
 api.get('/relatorios/geral/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(filtrosGeral()));
+  res.json(withMeta(filtrosGeral(equipesDoEscopo(req))));
 });
 api.get('/relatorios/geral', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(painelGeral(parseFiltrosGeral(req.query))));
+  res.json(withMeta(painelGeral(parseFiltrosGeral(req.query, equipesDoEscopo(req)))));
 });
 
 api.get('/relatorios/resumo/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(filtrosResumo()));
+  res.json(withMeta(filtrosResumo(equipesDoEscopo(req))));
 });
 api.get('/relatorios/resumo', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(painelResumo(parseFiltrosResumo(req.query))));
+  res.json(withMeta(painelResumo(parseFiltrosResumo(req.query, equipesDoEscopo(req)))));
 });
 
 api.get('/relatorios/equipes/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(filtrosEquipes()));
+  res.json(withMeta(filtrosEquipes(equipesDoEscopo(req))));
 });
 api.get('/relatorios/equipes', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(painelEquipes(parseFiltrosEquipes(req.query))));
+  res.json(withMeta(painelEquipes(parseFiltrosEquipes(req.query, equipesDoEscopo(req)))));
 });
 
 api.get('/relatorios/diario/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(filtrosDiario()));
+  res.json(withMeta(filtrosDiario(equipesDoEscopo(req))));
 });
 api.get('/relatorios/diario', auth('relatorios'), exigirRelatorios, (req, res) => {
-  res.json(withMeta(painelDiario(parseFiltrosDiario(req.query))));
+  res.json(withMeta(painelDiario(parseFiltrosDiario(req.query, equipesDoEscopo(req)))));
 });
 
 api.get('/relatorios/base/filtros', auth('relatorios'), exigirRelatorios, (req, res) => {
@@ -498,7 +508,7 @@ const exigirSla = (req, res, next) => {
  * sem ele, no máximo `limite` (a tabela não precisa de 30 mil linhas no navegador).
  */
 api.get('/sla-bko/detalhe', auth('sla-bko'), exigirSla, (req, res) => {
-  const flt = parseFiltrosDetalhe(req.query);
+  const flt = parseFiltrosDetalhe(req.query, equipesDoEscopo(req));
   const d = detalheSlaBko(flt);
   if (req.query.formato === 'csv') {
     const periodo = [flt.de, flt.ate].filter(Boolean).join('_a_') || 'completo';
@@ -511,9 +521,18 @@ api.get('/sla-bko/detalhe', auth('sla-bko'), exigirSla, (req, res) => {
 });
 
 api.get('/sla-bko', auth('sla-bko'), exigirSla, (req, res) => {
+  const escopo = equipesDoEscopo(req);
   const painel = comCache(
-    { nome: 'sla-bko', versao: getEstadoSla().versao, query: req.query },
-    () => painelSlaBko(parseFiltrosSla(req.query)),
+    {
+      nome: 'sla-bko',
+      versao: getEstadoSla().versao,
+      // O escopo entra na chave EXPLÍCITO. Esta tela não lê o `equipe` reescrito
+      // pelo middleware, então confiar nele deixaria uma brecha: alguém sem escopo
+      // pedindo ?equipe=A gravaria o painel INTEIRO na mesma chave de quem só pode
+      // ver A. A versão do comercial vai junto porque o vendedor → equipe vem de lá.
+      query: escopo ? { ...req.query, __escopo: `${escopo.join(',')}@${getState().version}` } : req.query,
+    },
+    () => painelSlaBko(parseFiltrosSla(req.query, escopo)),
   );
   res.json(painel);
 });
@@ -526,7 +545,7 @@ api.get('/premiacoes', auth('premiacoes'), (req, res) => {
 /** Conjuntos que o usuário pode exportar (respeita o acesso por tela). */
 api.get('/exportacoes', auth(), (req, res) => {
   const podeVer = (tela) => podeVerTela(req.usuario, tela);
-  res.json(withMeta({ conjuntos: listarConjuntos(podeVer, req.query) }));
+  res.json(withMeta({ conjuntos: listarConjuntos(podeVer, req.query, equipesDoEscopo(req)) }));
 });
 
 /** Amostra do conjunto — as primeiras linhas, como sairão no arquivo. */
@@ -537,7 +556,7 @@ api.get('/exportar/:id/amostra', auth(), (req, res) => {
     return res.status(403).json({ error: 'Você não tem acesso a estes dados.' });
   }
   try {
-    const flt = filtrosDoConjunto(conjunto, req.query);
+    const flt = filtrosDoConjunto(conjunto, req.query, equipesDoEscopo(req));
     return res.json(gerarAmostra(req.params.id, flt, req.query.limite));
   } catch (err) {
     return res.status(400).json({ error: err.message });
@@ -557,7 +576,7 @@ api.get('/exportar/:id', auth(), (req, res) => {
   }
 
   try {
-    const flt = filtrosDoConjunto(conjunto, req.query);
+    const flt = filtrosDoConjunto(conjunto, req.query, equipesDoEscopo(req));
     const { csv, nome, linhas } = gerarCSV(req.params.id, flt);
     console.log(`[export] ${req.usuario.email} baixou ${req.params.id}: ${linhas} linhas`);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -603,7 +622,7 @@ api.post('/insights/visual/:id', authVisual, async (req, res) => {
   try {
     // A query vai crua: quem sabe quais filtros o visual entende é o catálogo,
     // porque cada modelo em memória tem o seu conjunto.
-    const insights = await gerarInsightsVisual(req.params.id, req.query);
+    const insights = await gerarInsightsVisual(req.params.id, req.query, equipesDoEscopo(req));
     console.log(`[ia] leitura de ${req.params.id} para ${req.usuario.email} (${insights.modelo})`);
     return res.json(insights);
   } catch (err) {

@@ -724,14 +724,17 @@ export const CONJUNTOS = {
  * alguém acrescentaria um conjunto novo e ele receberia `de`/`ate` de vendas
  * sem ninguém notar, exportando o recorte errado em silêncio.
  */
-export function filtrosDoConjunto(conjunto, query = {}) {
+export function filtrosDoConjunto(conjunto, query = {}, equipesPermitidas = null) {
+  // `equipesPermitidas` é o escopo de equipe da pessoa. Os conjuntos comerciais já o
+  // recebem pelo `equipe` da query (o middleware reescreve); Relatórios e SLA têm os
+  // próprios campos e o recebem aqui — o arquivo não pode ver mais que a tela.
   if (conjunto?.escopo === 'condominios') return parseFiltrosCondominios(query);
   if (conjunto?.escopo === 'leads') return parseFiltrosLeads(query);
   if (conjunto?.escopo === 'negociacoes') return parseFiltrosNegociacoes(query);
   if (conjunto?.escopo === 'campanhas') return parseFiltrosCampanhas(query);
-  if (conjunto?.escopo === 'relatorios-geral') return parseFiltrosGeral(query);
+  if (conjunto?.escopo === 'relatorios-geral') return parseFiltrosGeral(query, equipesPermitidas);
   if (conjunto?.escopo === 'relatorios-pesquisa') return parseFiltrosPesquisa(query);
-  if (conjunto?.escopo === 'sla') return parseFiltrosSla(query);
+  if (conjunto?.escopo === 'sla') return parseFiltrosSla(query, equipesPermitidas);
   if (conjunto?.escopo === 'desempenho') {
     // a mesma leitura da rota /desempenho: o que não for "cidade" é vendedor
     return { ...parseFiltrosDesempenho(query), por: query.por === 'cidade' ? 'cidade' : 'vendedor' };
@@ -754,11 +757,11 @@ function nomeDoArquivo(conjunto, flt) {
   return `${arquivo}_${periodo}.csv`;
 }
 
-export function listarConjuntos(usuarioPodeVer, query) {
+export function listarConjuntos(usuarioPodeVer, query, equipesPermitidas = null) {
   return Object.entries(CONJUNTOS)
     .filter(([, c]) => !c.soNaTela && usuarioPodeVer(c.tela))
     .map(([id, c]) => {
-      const flt = filtrosDoConjunto(c, query);
+      const flt = filtrosDoConjunto(c, query, equipesPermitidas);
       const colunas = c.colunas(flt);
       // a contagem já sai aqui: o usuário precisa saber o tamanho antes de baixar
       let linhas = null;

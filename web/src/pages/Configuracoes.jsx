@@ -449,7 +449,8 @@ function AbaTelas() {
         Duas perguntas diferentes na mesma tabela. As colunas de tela dizem <b>quais telas</b> a
         pessoa abre. A coluna <b>Equipes</b> diz <b>qual fatia dos dados</b> ela enxerga, e essa
         <b> vale no dashboard inteiro</b>: recorta todas as visões por equipe de todas as telas,
-        além das exportações e da leitura de IA — não é um filtro de uma tela só. Coluna em
+        além das exportações e da leitura de IA — não é um filtro de uma tela só. Marque para
+        <b> supervisor e coordenador</b>; quem fica sem equipe marcada continua vendo tudo. Coluna em
         <b> todos</b> vale para qualquer conta do domínio, então aparece preenchida e sem caixa.
       </p>
 

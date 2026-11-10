@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, useDados } from '../api';
 import { PRESETS } from '../filters';
-import { FiltroPeriodo } from '../components/SlicerBar';
+import { AvisoEscopo, FiltroPeriodo } from '../components/SlicerBar';
 import {
   BotaoExportar, Erro, Kpi, Loading, Segmentado, Vazio, Visual,
 } from '../components/ui';
@@ -102,6 +102,7 @@ export default function SlaBko() {
     <main className="page tela-sla">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
+        <AvisoEscopo detalhe="Aqui o recorte é pelo vendedor da venda ou do envio: entra só o que veio dos vendedores das suas equipes, inclusive nos rankings de analista e atendente." />
         <FiltroPeriodo
           de={filtros.de}
           ate={filtros.ate}
@@ -564,6 +565,12 @@ function Qualidade({ data }) {
       { item: 'Fuso do uMov: diferença típica análise − envio (mediana, horas corridas)', valor: `${String(q.fuso.medianaAnaliseMenosEnvioH ?? '—').replace('.', ',')} h` },
     ] : []),
     { item: 'Vendas com datas fora de ordem (excluídas do cálculo)', valor: int(q.datasForaDeOrdem) },
+    // quem tem escopo de equipe NÃO vê o que é destes vendedores: o número existe para
+    // o recorte não esconder gente calado (grafia diferente da Comercial_Teams)
+    ...(q.vendedoresSemEquipe ? [{
+      item: 'Vendedores do período sem equipe no cadastro de times (ficam fora para quem tem escopo de equipe)',
+      valor: `${int(q.vendedoresSemEquipe.vendedores)} vendedores · ${int(q.vendedoresSemEquipe.vendas)} vendas`,
+    }] : []),
   ].map((l, i) => ({ ...l, __key: i }));
   return (
     <Visual

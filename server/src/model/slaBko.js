@@ -29,6 +29,7 @@ import {
   agoraLocal, deMinutos, esquecerFeriados, horasCorridas, horasUteis, normalizarData, paraMinutos,
 } from '../sla/horasUteis.js';
 import { categoriaMotivo } from './motivosBko.js';
+import { getState } from './store.js';
 
 export const METAS = { cadastro: 1, agendamento: 12 };
 export const CANAL_EXTERNO = 'vendedor externo';
@@ -513,14 +514,75 @@ const casaCanal = (v, flt) => !flt.canal || grupoCanal(v) === flt.canal;
  */
 const entraNoCalculo = (v, flt) => (flt.canal ? grupoCanal(v) === flt.canal : grupoCanal(v) !== 'Sem canal');
 
-export function parseFiltrosSla(q = {}) {
+/**
+ * `escopo` são as equipes que a pessoa pode ver (Configurações → Acesso por tela);
+ * null = sem escopo, vê tudo. Não vem da query: esta tela não tem seletor de equipe.
+ */
+export function parseFiltrosSla(q = {}, escopo = null) {
   const canais = lista(q.canal).filter((c) => GRUPOS_CANAL.includes(c));
   return {
     de: ISO.test(q.de || '') ? q.de : null,
     ate: ISO.test(q.ate || '') ? q.ate : null,
     canal: canais.length === 1 ? canais[0] : null,
     g: q.g === 'dia' ? 'dia' : 'mes',
+    equipes: escopo?.length ? [...escopo] : null,
   };
+}
+
+// ---------------------------------------------------------------- escopo
+/*
+ * ESCOPO DE EQUIPE (decisão do IC, 10/11/2026): supervisor e coordenador veem só o
+ * que veio dos vendedores das próprias equipes — inclusive os rankings de analista e
+ * de atendente, que passam a contar só essas vendas e envios.
+ *
+ * O SLA não tem equipe comercial. A `equipe` da venda é a fila do protocolo no Voalle
+ * ("Validação de dados - BKO"), não o time do vendedor. A ponte é o NOME do vendedor
+ * na Comercial_Teams — o mesmo cadastro que dá a equipe nas telas comerciais, então
+ * vendedor transferido leva o histórico junto, como lá. A comparação é a `chavePessoa`
+ * (sem caixa, acento, espaço duplo e partículas "de/da/do"), a mesma que já casa os
+ * nomes Voalle × uMov nesta tela. Vendedor que não casa fica de FORA para quem tem
+ * escopo (falhar fechado, como no resto do dashboard); `qualidade.vendedoresSemEquipe`
+ * conta quantos são, para o caso de o recorte esconder gente que deveria aparecer.
+ */
+let indiceEquipes = { teams: null, mapa: new Map() };
+
+/** Equipe comercial do vendedor pelo nome; '' quando não está no cadastro. */
+export function equipeDoVendedor(nome) {
+  const { teamsByName } = getState();
+  // o mapa é recriado a cada carga do comercial: a identidade dele é a versão
+  if (indiceEquipes.teams !== teamsByName) {
+    const mapa = new Map();
+    for (const [n, t] of teamsByName || []) mapa.set(chavePessoa(n), t?.equipe || '');
+    indiceEquipes = { teams: teamsByName, mapa };
+  }
+  return indiceEquipes.mapa.get(chavePessoa(nome)) || '';
+}
+
+/**
+ * Vendedores do período (vendas e envios) que NÃO casam com a Comercial_Teams. Quem
+ * tem escopo não vê o que é deles; o número existe para isso não acontecer calado —
+ * se crescer, é grafia diferente entre uMov/Elleven e o cadastro, não falta de venda.
+ * Conta sobre a base inteira do período, não sobre o recorte de quem pergunta.
+ */
+function semEquipeNoPeriodo(flt) {
+  const nomes = new Set();
+  let vendas = 0;
+  for (const v of estado.vendas) {
+    if (!naJanela(v.criadoEm, flt) || equipeDoVendedor(v.vendedor)) continue;
+    vendas += 1;
+    nomes.add(v.vendedor);
+  }
+  for (const t of estado.tarefas) {
+    if (naJanela(t.envio, flt) && !equipeDoVendedor(t.vendedor)) nomes.add(t.vendedor);
+  }
+  return { vendedores: nomes.size, vendas };
+}
+
+/** Predicado "este vendedor está no escopo do filtro?". Sem escopo, todos estão. */
+function vendedorNoEscopo(flt) {
+  if (!flt.equipes?.length) return () => true;
+  const permitidas = new Set(flt.equipes);
+  return (nome) => permitidas.has(equipeDoVendedor(nome));
 }
 
 const naJanela = (iso, flt) => {
@@ -640,8 +702,13 @@ function construirVendasAssistidas(brutos) {
  * movimento visto).
  */
 const DIAS_ENTRE_ENVIOS_DO_CICLO = 7;
-/** `completo` tira o corte de 300 linhas da lista (é o caminho do CSV). */
-export function pendentesCadastro(s, agora, { completo = false } = {}) {
+/**
+ * `completo` tira o corte de 300 linhas da lista (é o caminho do CSV). `noEscopo`
+ * recorta pelo vendedor do pedido — e só o pedido: as vendas e as vendas assistidas
+ * continuam inteiras como CONSULTA, senão a venda que um colega cadastrou para o
+ * mesmo CPF sumiria da busca e o pedido apareceria como pendente sem estar.
+ */
+export function pendentesCadastro(s, agora, { completo = false, noEscopo = () => true } = {}) {
   const vendasPorCpf = new Map();
   for (const v of s.vendas) {
     if (!v.cpf || !v.criadoEm) continue;
@@ -668,6 +735,7 @@ export function pendentesCadastro(s, agora, { completo = false } = {}) {
     ts.sort((a, b) => a.envio.localeCompare(b.envio) || (a.idTarefa || 0) - (b.idTarefa || 0));
     const ult = ts[ts.length - 1];
     if (ult.envio < limite || ult.situacao === 'Reprovado') continue;
+    if (!noEscopo(ult.vendedor)) continue;
     // 1º envio do ciclo: volta enquanto o envio anterior está a até 7 dias do seguinte
     // — e para se houve venda entre os dois envios: o pedido anterior já virou venda, este é outro
     const vendasCpf = vendasPorCpf.get(cpf) || [];
@@ -717,7 +785,17 @@ const PENDENTES_VAZIO = { total: 0, emAnalise: 0, aprovados: 0, fora: 0, foraEmA
  * leva todas as linhas — antes o botão exportava o mesmo topo que a tela recebia.
  */
 export function painelSlaBko(flt, agora = agoraLocal(), { completo = false } = {}) {
-  const s = estado;
+  // com escopo, tudo o que a tela conta parte só das vendas, envios e ciclos dos
+  // vendedores das equipes da pessoa (ver "escopo" acima)
+  const noEscopo = vendedorNoEscopo(flt);
+  const s = flt.equipes?.length
+    ? {
+      ...estado,
+      vendas: estado.vendas.filter((v) => noEscopo(v.vendedor)),
+      tarefas: estado.tarefas.filter((t) => noEscopo(t.vendedor)),
+      ciclos: estado.ciclos.filter((c) => noEscopo(c.vendedor)),
+    }
+    : estado;
   const corte = (lista, n) => (completo ? lista : lista.slice(0, n));
   // uMov (triagem, ciclos, fila) só existe para a venda externa
   const querExterno = !flt.canal || flt.canal === 'Externo';
@@ -771,7 +849,8 @@ export function painelSlaBko(flt, agora = agoraLocal(), { completo = false } = {
   const cadastro = {
     ...estatistica(externas.map((v) => v.slaCadastro), METAS.cadastro),
     // pedidos do uMov (em análise ou aprovados) ainda sem venda no Elleven — agora, não segue o período
-    pendentes: querExterno ? pendentesCadastro(s, agora, { completo }) : PENDENTES_VAZIO,
+    // estado INTEIRO, não o recortado: as vendas são consulta (ver pendentesCadastro)
+    pendentes: querExterno ? pendentesCadastro(estado, agora, { completo, noEscopo }) : PENDENTES_VAZIO,
     serie: serie(externas.filter((v) => v.slaCadastro !== null), (v) => v.criadoEm, (v) => v.slaCadastro, flt.g, METAS.cadastro),
   };
 
@@ -850,7 +929,9 @@ export function painelSlaBko(flt, agora = agoraLocal(), { completo = false } = {
     umovMaisAntigas: pendUmov.length - filaUmov.length,
     // o envio mais recente que chegou do Data Hub: diz se a fila está "parada"
     // porque ninguém enviou ou porque o dado não chegou
-    umovUltimoEnvio: s.tarefas.reduce((m, t) => (t.envio > m ? t.envio : m), '') || null,
+    // frescor da FONTE, não do recorte: um supervisor sem envio recente não pode
+    // ler isso como "o Data Hub parou"
+    umovUltimoEnvio: estado.tarefas.reduce((m, t) => (t.envio > m ? t.envio : m), '') || null,
     elleven: corte(filaElleven, LIMITE_LINHAS),
     ellevenTotal: filaElleven.length,
     ellevenEstouradas: filaElleven.filter((v) => v.estourado).length,
@@ -883,6 +964,7 @@ export function painelSlaBko(flt, agora = agoraLocal(), { completo = false } = {
     fuso: s.diagFuso || null,
     fontes: s.fontes,
     construidoEm: s.construidoEm,
+    vendedoresSemEquipe: semEquipeNoPeriodo(flt),
   };
 
   return {
@@ -899,9 +981,9 @@ export function painelSlaBko(flt, agora = agoraLocal(), { completo = false } = {
  * cliente), situação e "só fora da meta". A tela recebe no máximo `limite`
  * linhas; o CSV leva todas.
  */
-export function parseFiltrosDetalhe(q = {}) {
+export function parseFiltrosDetalhe(q = {}, escopo = null) {
   return {
-    ...parseFiltrosSla(q),
+    ...parseFiltrosSla(q, escopo),
     busca: String(q.busca || '').trim().toLowerCase().slice(0, 80),
     situacao: String(q.situacao || '').trim() || null,
     fora: q.fora === '1' || q.fora === 'true',
@@ -910,9 +992,11 @@ export function parseFiltrosDetalhe(q = {}) {
 }
 
 export function detalheSlaBko(flt, agora = agoraLocal()) {
+  const noEscopo = vendedorNoEscopo(flt);
   const linhas = [];
   for (const v of estado.vendas) {
     if (!naJanela(v.criadoEm, flt)) continue;
+    if (!noEscopo(v.vendedor)) continue;
     if (!casaCanal(v, flt)) continue;
     if (flt.situacao && v.situacao !== flt.situacao) continue;
     if (flt.busca) {

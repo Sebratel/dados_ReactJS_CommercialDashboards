@@ -129,9 +129,9 @@ export async function gerarInsights(analise) {
  * receberiam um recorte vazio e a IA leria a base inteira achando que estava
  * lendo a tela — leitura errada com cara de autoridade.
  */
-export async function gerarInsightsVisual(id, query) {
+export async function gerarInsightsVisual(id, query, equipesPermitidas = null) {
   const ativo = exigirProvedor();
-  const { titulo, oQueE, dados, tela, periodo, recortes } = recortarVisual(id, query);
+  const { titulo, oQueE, dados, tela, periodo, recortes } = recortarVisual(id, query, equipesPermitidas);
 
   const texto = await ativo.provedor.conversar(
     SISTEMA_VISUAL,
