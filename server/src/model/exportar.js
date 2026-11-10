@@ -7,13 +7,24 @@
 import { getState } from './store.js';
 import { parseFilters, premiacoes, rampagem, rows } from './measures.js';
 import { diffDays, today } from './dates.js';
-import { linhasCondominios, parseFiltrosCondominios, splittersCondominios } from './condominios.js';
 import {
-  duracaoTexto, linhasLeads, linhasNegociacoes, parseFiltrosLeads,
-  parseFiltrosNegociacoes,
+  condominiosPronto, linhasCondominios, linhasPorCondominio, parseFiltrosCondominios,
+  splittersCondominios,
+} from './condominios.js';
+import {
+  duracaoTexto, linhasLeads, linhasNegociacoes, negociacoesPronto, painelDesempenho,
+  parseFiltrosDesempenho, parseFiltrosLeads, parseFiltrosNegociacoes,
 } from './leads.js';
 import { parseFiltrosCampanhas } from './campanhas.js';
 import { linhasAtendimentosCampanhas, linhasCampanhasAnuncio } from './paineis-campanhas.js';
+import { planosMaisVendidos } from './paineis.js';
+import {
+  cestaGeral, contratosGeral, filaGeral, parseFiltrosGeral, parseFiltrosPesquisa,
+  protocolosPesquisa, relatoriosPronto,
+} from './relatorios.js';
+import {
+  METAS, dataHoraCsv, horasCsv, painelSlaBko, parseFiltrosSla, slaPronto,
+} from './slaBko.js';
 
 const BOM = '﻿';
 
@@ -31,6 +42,8 @@ const dataHoraBR = (iso) => {
 };
 const numBR = (v, casas = 2) => (v === null || v === undefined || v === '' ? '' : Number(v).toFixed(casas).replace('.', ','));
 const inteiro = (v) => (v === null || v === undefined || v === '' ? '' : String(Math.round(Number(v))));
+/** Fração (0,35) como percentual (35,00) — a coluna leva "(%)" no título. */
+const pctBR = (v) => (v === null || v === undefined || v === '' ? '' : numBR(Number(v) * 100));
 
 function celula(valor) {
   const s = valor === null || valor === undefined ? '' : String(valor);
@@ -42,6 +55,20 @@ export function paraCSV(colunas, linhas) {
   const corpo = linhas.map((l) => colunas.map((c) => celula(c.valor(l))).join(';'));
   return BOM + [cabecalho, ...corpo].join('\r\n') + '\r\n';
 }
+
+/** Campos comuns dos conjuntos da tela SLA BKO, que lêem os filtros dela. */
+const sla = (titulo, arquivo) => ({
+  titulo,
+  descricao: `${titulo} (tela SLA BKO).`,
+  tela: 'sla-bko',
+  arquivo,
+  escopo: 'sla',
+  soNaTela: true,
+  pronto: slaPronto,
+});
+const painelSla = (flt) => painelSlaBko(flt, undefined, { completo: true });
+/** Fila e pendentes são retrato de agora: o período não recorta, e o nome não leva datas. */
+const RETRATO_DO_AGORA = () => [];
 
 /** Campos comuns do contrato, reaproveitados pelos três conjuntos principais. */
 const contrato = (extras = []) => [
@@ -437,6 +464,258 @@ export const CONJUNTOS = {
     ],
     linhas: (flt) => linhasCampanhasAnuncio(flt),
   },
+
+  // ------------------------------------------- tabelas com amostra na tela
+  /*
+   * Os conjuntos abaixo são o "CSV completo" de tabelas que a tela corta para não
+   * pesar o navegador (400 contratos, 300 condomínios, 200 vendedores…). Até
+   * 10/11/2026 os botões delas montavam o CSV no navegador a partir da amostra, e o
+   * arquivo saía com as mesmas 400 linhas da tela — num filtro de 1.300 contratos.
+   *
+   * As colunas repetem as da tabela da tela, na mesma ordem e com o mesmo título: o
+   * arquivo é aquela tabela, inteira. Por isso também `soNaTela`: cada um lê os
+   * filtros da SUA tela, e a tela de Exportações não tem esses filtros para mandar.
+   */
+  'relatorios-contratos': {
+    titulo: 'Relatórios — contratos',
+    descricao: 'Contratos da aba Geral dos Relatórios Comercial, do mais recente para o mais antigo.',
+    tela: 'relatorios',
+    arquivo: 'contratos',
+    escopo: 'relatorios-geral',
+    soNaTela: true,
+    pronto: relatoriosPronto,
+    colunas: () => [
+      { titulo: 'CRIAÇÃO', valor: (f) => dataBR(f.dtVenda) },
+      { titulo: 'HORA', valor: (f) => f.horaVenda },
+      { titulo: 'CONTRATO', valor: (f) => f.contrato },
+      { titulo: 'CLIENTE', valor: (f) => f.cliente },
+      { titulo: 'CIDADE', valor: (f) => f.cidade },
+      { titulo: 'BAIRRO', valor: (f) => f.bairro },
+      { titulo: 'VENDEDOR', valor: (f) => f.vendedor },
+      { titulo: 'SITUAÇÃO', valor: (f) => f.situacao },
+      { titulo: 'STATUS', valor: (f) => f.statusContrato },
+      { titulo: 'CANCELADO', valor: (f) => dataBR(f.dtCancelado) },
+      { titulo: 'MOTIVO', valor: (f) => f.statusCancelamento },
+      { titulo: 'ATIVAÇÃO', valor: (f) => dataBR(f.dtAtiv) },
+      { titulo: 'VALOR', valor: (f) => numBR(f.valor) },
+      { titulo: 'TEC.', valor: (f) => f.tecnologia },
+      // a ponte histórica não tem contrato, protocolo nem bairro: sem esta coluna a
+      // célula vazia pareceria defeito de carga (mesmo rótulo da tela)
+      { titulo: 'ORIGEM', valor: (f) => (f.origem === 'ponte' ? 'Histórico' : 'Voalle') },
+    ],
+    linhas: (flt) => contratosGeral(flt),
+  },
+  'relatorios-cesta': {
+    titulo: 'Relatórios — cesta de produtos',
+    descricao: 'Itens da cesta de produtos dos contratos da aba Geral dos Relatórios Comercial.',
+    tela: 'relatorios',
+    arquivo: 'cesta-de-produtos',
+    escopo: 'relatorios-geral',
+    soNaTela: true,
+    pronto: relatoriosPronto,
+    colunas: () => [
+      { titulo: 'CONTRATO', valor: (c) => c.contrato },
+      { titulo: 'TIPO', valor: (c) => c.tipoContrato },
+      { titulo: 'VALOR DO PLANO', valor: (c) => numBR(c.valorPlano) },
+      { titulo: 'STATUS', valor: (c) => c.statusContrato },
+      { titulo: 'ETIQUETA', valor: (c) => c.etiqueta },
+      { titulo: 'CÓD.', valor: (c) => c.codigoServico },
+      { titulo: 'SERVIÇO PRINCIPAL', valor: (c) => c.servico },
+      { titulo: 'UN.', valor: (c) => inteiro(c.unidades) },
+      { titulo: 'VALOR', valor: (c) => numBR(c.valor) },
+      { titulo: 'ADICIONADO', valor: (c) => dataBR(c.adicionadoEm) },
+      { titulo: 'SITUAÇÃO', valor: (c) => c.situacaoItem },
+    ],
+    linhas: (flt) => cestaGeral(flt),
+  },
+  'relatorios-fila': {
+    titulo: 'Relatórios — fila de instalação',
+    descricao: 'Instalações em aberto da aba Geral dos Relatórios Comercial (sem recorte de data).',
+    tela: 'relatorios',
+    arquivo: 'fila-de-instalacao',
+    escopo: 'relatorios-geral',
+    soNaTela: true,
+    pronto: relatoriosPronto,
+    colunas: () => [
+      { titulo: 'PROTOCOLO', valor: (f) => f.protocolo },
+      { titulo: 'STATUS', valor: (f) => f.status },
+      { titulo: 'CONTRATO', valor: (f) => f.contrato },
+      { titulo: 'STATUS DO CONTRATO', valor: (f) => f.statusContrato },
+      { titulo: 'CLIENTE', valor: (f) => f.cliente },
+      { titulo: 'CIDADE', valor: (f) => f.cidade },
+      { titulo: 'BAIRRO', valor: (f) => f.bairro },
+      { titulo: 'CANAL', valor: (f) => f.canal },
+      { titulo: 'EQUIPE', valor: (f) => f.equipe },
+      { titulo: 'VENDEDOR', valor: (f) => f.vendedor },
+    ],
+    linhas: (flt) => filaGeral(flt),
+  },
+  'relatorios-pesquisas': {
+    titulo: 'Relatórios — pesquisas de cancelamento',
+    descricao: 'Um protocolo de pesquisa de cancelamento por linha, do mais recente para o mais antigo.',
+    tela: 'relatorios',
+    arquivo: 'pesquisas-de-cancelamento',
+    escopo: 'relatorios-pesquisa',
+    soNaTela: true,
+    pronto: relatoriosPronto,
+    colunas: () => [
+      { titulo: 'PROTOCOLO', valor: (p) => p.numeroProtocolo },
+      // a fonte só traz a data (sem hora) da abertura
+      { titulo: 'ABERTURA', valor: (p) => dataBR(p.criado) },
+      { titulo: 'CLIENTE', valor: (p) => p.cliente },
+      { titulo: 'CONTRATO', valor: (p) => p.contrato },
+      { titulo: 'ETIQUETA', valor: (p) => p.etiqueta },
+      { titulo: 'STATUS', valor: (p) => p.status },
+      { titulo: 'CIDADE', valor: (p) => p.cidade },
+      { titulo: 'BAIRRO', valor: (p) => p.bairro },
+      { titulo: 'RUA', valor: (p) => p.rua },
+      { titulo: 'Nº', valor: (p) => p.numero },
+      { titulo: 'ENCERRADO POR', valor: (p) => p.encerradoPor },
+      { titulo: 'CANCELAMENTO', valor: (p) => dataBR(p.dataCancelamento) },
+      { titulo: 'MOTIVO', valor: (p) => p.motivoCancelamento },
+    ],
+    linhas: (flt) => protocolosPesquisa(flt),
+  },
+  'condominios-por-condominio': {
+    titulo: 'Condomínios — por condomínio',
+    descricao: 'Uma linha por condomínio: splitters, clientes, capacidade, portas ocupadas, ocupação e faixa.',
+    tela: 'condominios',
+    arquivo: 'condominios-por-condominio',
+    escopo: 'condominios',
+    soNaTela: true,
+    pronto: condominiosPronto,
+    colunas: () => [
+      { titulo: 'CONDOMÍNIO', valor: (c) => c.key },
+      { titulo: 'SPLITTERS', valor: (c) => inteiro(c.splitters) },
+      { titulo: 'CLIENTES', valor: (c) => inteiro(c.clientes) },
+      { titulo: 'CAPACIDADE', valor: (c) => inteiro(c.capacidade) },
+      { titulo: 'PORTAS OCUPADAS', valor: (c) => inteiro(c.ocupadas) },
+      { titulo: 'OCUPAÇÃO (%)', valor: (c) => pctBR(c.percentual) },
+      { titulo: 'FAIXA', valor: (c) => c.classificacao },
+    ],
+    linhas: (flt) => linhasPorCondominio(flt),
+  },
+  'desempenho-produtividade': {
+    titulo: 'Desempenho — produtividade',
+    descricao: 'Leads cadastrados, negociações conduzidas e as taxas de conversão por vendedor ou por cidade.',
+    tela: 'leads',
+    arquivo: (flt) => `desempenho-por-${flt.por}`,
+    escopo: 'desempenho',
+    soNaTela: true,
+    pronto: negociacoesPronto,
+    periodo: (flt) => [flt.leadDe, flt.leadAte],
+    colunas: (flt) => [
+      { titulo: flt?.por === 'cidade' ? 'CIDADE' : 'VENDEDOR', valor: (l) => l.key },
+      { titulo: 'LEADS CADASTRADOS', valor: (l) => inteiro(l.cadastrados) },
+      { titulo: 'CADASTRADOS E GANHOS', valor: (l) => inteiro(l.ganhosLead) },
+      { titulo: 'CONVERSÃO DE CADASTRO (%)', valor: (l) => pctBR(l.taxaCadastro) },
+      { titulo: 'NEGOCIAÇÕES CONDUZIDAS', valor: (l) => inteiro(l.conduzidas) },
+      { titulo: 'CONDUZIDAS GANHAS', valor: (l) => inteiro(l.ganhasNeg) },
+      { titulo: 'CONVERSÃO DE NEGOCIAÇÃO (%)', valor: (l) => pctBR(l.taxaNegociacao) },
+      { titulo: 'VENDAS SOBRE CADASTRO (%)', valor: (l) => pctBR(l.taxaVendas) },
+    ],
+    linhas: (flt) => painelDesempenho(flt, flt.por, { completo: true }).produtividade,
+  },
+  'planos-mais-vendidos': {
+    titulo: 'Primeiro pagamento — planos mais vendidos',
+    descricao: 'Primeiros pagamentos do período agrupados por plano e valor.',
+    tela: 'primeiro-pagamento',
+    arquivo: 'planos-mais-vendidos',
+    soNaTela: true,
+    colunas: () => [
+      { titulo: 'PLANO', valor: (p) => p.plano },
+      { titulo: 'VALOR PADRÃO', valor: (p) => numBR(p.valorPadrao) },
+      { titulo: 'QUANTIDADE', valor: (p) => inteiro(p.qtd) },
+      { titulo: 'VALOR TOTAL', valor: (p) => numBR(p.valorTotal) },
+    ],
+    linhas: (flt) => planosMaisVendidos(flt),
+  },
+
+  // ------------------------------------------------------------- SLA BKO
+  // Rankings cortados em 40/60 nomes, pendentes em 300 e filas em 3.000 na tela.
+  // Horas no formato do CSV de detalhamento desta tela (hh:mm:ss úteis).
+  'sla-bko-analistas': {
+    ...sla('Analistas do BKO — triagem no uMov', 'sla-bko-analistas'),
+    colunas: () => [
+      { titulo: 'ANALISTA', valor: (l) => l.nome },
+      { titulo: 'ANÁLISES', valor: (l) => inteiro(l.n) },
+      { titulo: 'APROVADAS', valor: (l) => inteiro(l.aprovadas) },
+      { titulo: 'REPROVADAS', valor: (l) => inteiro(l.reprovadas) },
+      { titulo: 'MEDIANA (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.mediana) },
+      { titulo: 'MÉDIA (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.media) },
+    ],
+    linhas: (flt) => painelSla(flt).triagem.porAnalista,
+  },
+  'sla-bko-atendentes': {
+    ...sla('Atendentes — agendamento no Elleven', 'sla-bko-atendentes'),
+    colunas: () => [
+      { titulo: 'ATENDENTE (AGENDAMENTO)', valor: (l) => l.nome },
+      { titulo: 'AGENDAMENTOS', valor: (l) => inteiro(l.n) },
+      { titulo: 'MEDIANA (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.mediana) },
+      { titulo: 'MÉDIA (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.media) },
+      { titulo: `% EM ${METAS.agendamento} H`, valor: (l) => pctBR(l.pctNoPrazo) },
+    ],
+    linhas: (flt) => painelSla(flt).agendamento.porAtendente,
+  },
+  'sla-bko-vendedores': {
+    ...sla('Vendedores externos — envios no uMov', 'sla-bko-vendedores'),
+    // a tela mostra média OU mediana (escolha local, que não vai na consulta);
+    // o arquivo leva as duas
+    colunas: () => [
+      { titulo: 'VENDEDOR', valor: (l) => l.nome },
+      { titulo: 'ENVIOS', valor: (l) => inteiro(l.n) },
+      { titulo: 'REPROVADOS', valor: (l) => inteiro(l.reprovadas) },
+      { titulo: '% REPROVAÇÃO', valor: (l) => pctBR(l.pctReprovacao) },
+      { titulo: 'MÉDIA ATÉ ANÁLISE (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.media) },
+      { titulo: 'MEDIANA ATÉ ANÁLISE (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.mediana) },
+    ],
+    linhas: (flt) => painelSla(flt).triagem.porVendedor,
+  },
+  'sla-bko-pendentes-cadastro': {
+    ...sla('Pendentes de cadastro — enviados no uMov, sem cadastro no Elleven', 'sla-bko-pendentes-cadastro'),
+    periodo: RETRATO_DO_AGORA,
+    colunas: () => [
+      { titulo: 'ETAPA', valor: (l) => l.etapa },
+      { titulo: 'ESPERANDO (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.esperaHoras) },
+      { titulo: `FORA DO PRAZO (${METAS.cadastro} H)`, valor: (l) => (l.fora ? 'sim' : 'não') },
+      { titulo: 'ÚLTIMO ENVIO (A1)', valor: (l) => dataHoraCsv(l.envio) },
+      { titulo: 'APROVADO EM', valor: (l) => dataHoraCsv(l.aprovadoEm) },
+      { titulo: 'ENVIOS', valor: (l) => inteiro(l.envios) },
+      { titulo: 'VENDEDOR', valor: (l) => l.vendedor },
+      { titulo: 'ANALISTA', valor: (l) => l.analista },
+      { titulo: 'CLIENTE', valor: (l) => l.cliente },
+      { titulo: 'TAREFA UMOV', valor: (l) => l.idTarefa },
+    ],
+    linhas: (flt) => painelSla(flt).cadastro.pendentes.lista,
+  },
+  'sla-bko-fila-umov': {
+    ...sla('Fila no uMov — aguardando análise do BKO', 'sla-bko-fila-umov'),
+    periodo: RETRATO_DO_AGORA,
+    colunas: () => [
+      { titulo: 'TAREFA', valor: (l) => l.idTarefa },
+      { titulo: 'ESPERANDO (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.esperaHoras) },
+      { titulo: 'ENVIADA EM', valor: (l) => dataHoraCsv(l.envio) },
+      { titulo: 'ENVIOS', valor: (l) => inteiro(l.qtdEnvios) },
+      { titulo: 'VENDEDOR', valor: (l) => l.vendedor },
+      { titulo: 'CLIENTE', valor: (l) => l.cliente },
+    ],
+    linhas: (flt) => painelSla(flt).fila.umov,
+  },
+  'sla-bko-fila-elleven': {
+    ...sla('Fila no Elleven — cadastradas sem agendamento', 'sla-bko-fila-elleven'),
+    periodo: RETRATO_DO_AGORA,
+    colunas: () => [
+      { titulo: 'PROTOCOLO', valor: (l) => l.protocolo },
+      { titulo: 'SEM AGENDAR HÁ (HH:MM:SS ÚTEIS)', valor: (l) => horasCsv(l.esperaHoras) },
+      { titulo: 'CANAL', valor: (l) => l.canal },
+      { titulo: 'CADASTRO', valor: (l) => dataHoraCsv(l.criadoEm) },
+      { titulo: '1º CONTATO', valor: (l) => dataHoraCsv(l.contatoEm) },
+      { titulo: 'EQUIPE ATUAL', valor: (l) => l.equipe },
+      { titulo: 'STATUS', valor: (l) => l.statusProtocolo },
+      { titulo: 'CLIENTE', valor: (l) => l.cliente },
+    ],
+    linhas: (flt) => painelSla(flt).fila.elleven,
+  },
 };
 
 /**
@@ -450,15 +729,37 @@ export function filtrosDoConjunto(conjunto, query = {}) {
   if (conjunto?.escopo === 'leads') return parseFiltrosLeads(query);
   if (conjunto?.escopo === 'negociacoes') return parseFiltrosNegociacoes(query);
   if (conjunto?.escopo === 'campanhas') return parseFiltrosCampanhas(query);
+  if (conjunto?.escopo === 'relatorios-geral') return parseFiltrosGeral(query);
+  if (conjunto?.escopo === 'relatorios-pesquisa') return parseFiltrosPesquisa(query);
+  if (conjunto?.escopo === 'sla') return parseFiltrosSla(query);
+  if (conjunto?.escopo === 'desempenho') {
+    // a mesma leitura da rota /desempenho: o que não for "cidade" é vendedor
+    return { ...parseFiltrosDesempenho(query), por: query.por === 'cidade' ? 'cidade' : 'vendedor' };
+  }
   return parseFilters(query);
+}
+
+/**
+ * Se o modelo do conjunto já carregou. Sem esta checagem, exportar antes da carga
+ * baixava um CSV só com o cabeçalho — que se lê como "não há registro", não como
+ * "o dado ainda não chegou".
+ */
+export const conjuntoPronto = (conjunto) => !conjunto?.pronto || conjunto.pronto();
+
+/** `<arquivo>_<periodo>`, a forma dos nomes que a tela também usa (ver `baixarCSV`). */
+function nomeDoArquivo(conjunto, flt) {
+  const arquivo = typeof conjunto.arquivo === 'function' ? conjunto.arquivo(flt) : conjunto.arquivo;
+  const datas = conjunto.periodo ? conjunto.periodo(flt) : [flt.de, flt.ate];
+  const periodo = datas.filter(Boolean).join('_a_') || 'completo';
+  return `${arquivo}_${periodo}.csv`;
 }
 
 export function listarConjuntos(usuarioPodeVer, query) {
   return Object.entries(CONJUNTOS)
-    .filter(([, c]) => usuarioPodeVer(c.tela))
+    .filter(([, c]) => !c.soNaTela && usuarioPodeVer(c.tela))
     .map(([id, c]) => {
       const flt = filtrosDoConjunto(c, query);
-      const colunas = c.colunas();
+      const colunas = c.colunas(flt);
       // a contagem já sai aqui: o usuário precisa saber o tamanho antes de baixar
       let linhas = null;
       try {
@@ -481,7 +782,7 @@ export function gerarAmostra(id, flt, limite = 8) {
   const conjunto = CONJUNTOS[id];
   if (!conjunto) throw new Error(`Conjunto desconhecido: ${id}`);
   const lim = Math.min(Math.max(Number(limite) || 8, 1), 50);
-  const colunas = conjunto.colunas();
+  const colunas = conjunto.colunas(flt);
   const todas = conjunto.linhas(flt);
   return {
     colunas: colunas.map((c) => c.titulo),
@@ -494,11 +795,11 @@ export function gerarAmostra(id, flt, limite = 8) {
 export function gerarCSV(id, flt) {
   const conjunto = CONJUNTOS[id];
   if (!conjunto) throw new Error(`Conjunto desconhecido: ${id}`);
-  const colunas = conjunto.colunas();
+  const colunas = conjunto.colunas(flt);
   const linhas = conjunto.linhas(flt);
   return {
     csv: paraCSV(colunas, linhas),
     linhas: linhas.length,
-    arquivo: conjunto.arquivo,
+    nome: nomeDoArquivo(conjunto, flt),
   };
 }

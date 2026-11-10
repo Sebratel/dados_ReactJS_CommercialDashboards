@@ -640,7 +640,8 @@ function construirVendasAssistidas(brutos) {
  * movimento visto).
  */
 const DIAS_ENTRE_ENVIOS_DO_CICLO = 7;
-export function pendentesCadastro(s, agora) {
+/** `completo` tira o corte de 300 linhas da lista (é o caminho do CSV). */
+export function pendentesCadastro(s, agora, { completo = false } = {}) {
   const vendasPorCpf = new Map();
   for (const v of s.vendas) {
     if (!v.cpf || !v.criadoEm) continue;
@@ -704,14 +705,20 @@ export function pendentesCadastro(s, agora) {
     foraAprovados: conta((x) => x.fora && !emAnalise(x)),
     mais24h: conta((x) => x.corridas > 24),
     umovAte,
-    lista: lista.slice(0, 300).map(({ corridas, ...x }) => x),
+    lista: (completo ? lista : lista.slice(0, 300)).map(({ corridas, ...x }) => x),
   };
 }
 
 const PENDENTES_VAZIO = { total: 0, emAnalise: 0, aprovados: 0, fora: 0, foraEmAnalise: 0, foraAprovados: 0, mais24h: 0, umovAte: null, lista: [] };
 
-export function painelSlaBko(flt, agora = agoraLocal()) {
+/**
+ * `completo` tira os cortes de tela (rankings de 40 e 60 nomes, pendentes de 300,
+ * filas de `LIMITE_LINHAS`). É o caminho do CSV: a tabela mostra o topo, o arquivo
+ * leva todas as linhas — antes o botão exportava o mesmo topo que a tela recebia.
+ */
+export function painelSlaBko(flt, agora = agoraLocal(), { completo = false } = {}) {
   const s = estado;
+  const corte = (lista, n) => (completo ? lista : lista.slice(0, n));
   // uMov (triagem, ciclos, fila) só existe para a venda externa
   const querExterno = !flt.canal || flt.canal === 'Externo';
   const vendas = s.vendas.filter((v) => naJanela(v.criadoEm, flt) && entraNoCalculo(v, flt));
@@ -740,7 +747,7 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
     situacoes,
     porCanal: ranking(agendadas, grupoCanal, (v) => v.slaAgendamento, METAS.agendamento),
     serie: serie(agendadas, (v) => v.criadoEm, (v) => v.slaAgendamento, flt.g, METAS.agendamento),
-    porAtendente: ranking(agendadas, (v) => v.atendenteAgendamento, (v) => v.slaAgendamento, METAS.agendamento).slice(0, 40),
+    porAtendente: corte(ranking(agendadas, (v) => v.atendenteAgendamento, (v) => v.slaAgendamento, METAS.agendamento), 40),
   };
 
   // ---- 1º contato ----
@@ -752,8 +759,8 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
     comContato: vendas.filter((v) => v.contatoEm).length,
     vendasSemRelato: vendas.filter((v) => !v.contatoEm).length,
     contatoAteAgendamento: estatistica(vendas.map((v) => v.slaContatoAgendamento)),
-    porAtendente: ranking(vendas.filter((v) => v.contatoEm), (v) => v.atendenteContato,
-      (v) => v.sla1Contato).slice(0, 40),
+    porAtendente: corte(ranking(vendas.filter((v) => v.contatoEm), (v) => v.atendenteContato,
+      (v) => v.sla1Contato), 40),
   };
 
   // ---- total externa (A4−A1) ----
@@ -764,7 +771,7 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
   const cadastro = {
     ...estatistica(externas.map((v) => v.slaCadastro), METAS.cadastro),
     // pedidos do uMov (em análise ou aprovados) ainda sem venda no Elleven — agora, não segue o período
-    pendentes: querExterno ? pendentesCadastro(s, agora) : PENDENTES_VAZIO,
+    pendentes: querExterno ? pendentesCadastro(s, agora, { completo }) : PENDENTES_VAZIO,
     serie: serie(externas.filter((v) => v.slaCadastro !== null), (v) => v.criadoEm, (v) => v.slaCadastro, flt.g, METAS.cadastro),
   };
 
@@ -778,15 +785,15 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
     reprovadas: tarefas.filter((t) => t.situacao === 'Reprovado').length,
     pendentes: tarefas.filter((t) => t.situacao === 'Pendente').length,
     serie: serie(analisadas, (t) => t.envio, (t) => t.horas, flt.g),
-    porAnalista: ranking(analisadas, (t) => t.analista, (t) => t.horas, null, (l) => ({
+    porAnalista: corte(ranking(analisadas, (t) => t.analista, (t) => t.horas, null, (l) => ({
       aprovadas: l.filter((t) => t.situacao === 'Aprovado').length,
       reprovadas: l.filter((t) => t.situacao === 'Reprovado').length,
-    })).slice(0, 40),
-    porVendedor: ranking(tarefas, (t) => t.vendedor, (t) => t.horas, null, (l) => ({
+    })), 40),
+    porVendedor: corte(ranking(tarefas, (t) => t.vendedor, (t) => t.horas, null, (l) => ({
       reprovadas: l.filter((t) => t.situacao === 'Reprovado').length,
       pctReprovacao: redondo(l.filter((t) => t.situacao === 'Reprovado').length
         / Math.max(1, l.filter((t) => t.analise).length), 4),
-    })).slice(0, 60),
+    })), 60),
     motivosReprovacao: contarTextos(tarefas.map((t) => t.motivo)),
     // DEVOLUÇÕES DO BKO (13/10/2026): conta simples, sem vincular cliente — cada reenvio é
     // uma tarefa nova no uMov, então devolução = envio analisado e reprovado.
@@ -814,11 +821,11 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
     pedidosComRetrabalho: ciclos.filter((c) => c.cpf && c.retrabalho).length,
     pctRetrabalhoPedidos: ciclos.some((c) => c.cpf)
       ? redondo(ciclos.filter((c) => c.cpf && c.retrabalho).length / ciclos.filter((c) => c.cpf).length, 4) : null,
-    porVendedor: ranking(ciclos, (c) => c.vendedor, (c) => c.horasCiclo, null, (l) => ({
+    porVendedor: corte(ranking(ciclos, (c) => c.vendedor, (c) => c.horasCiclo, null, (l) => ({
       comRetrabalho: l.filter((c) => c.retrabalho).length,
       pctRetrabalho: redondo(l.filter((c) => c.retrabalho).length / l.length, 4),
       devolucoes: l.reduce((s2, c) => s2 + c.devolucoes, 0),
-    })).slice(0, 60),
+    })), 60),
   };
 
   // ---- fila pendente agora (não respeita o período: é retrato do agora) ----
@@ -838,13 +845,13 @@ export function painelSlaBko(flt, agora = agoraLocal()) {
     .sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || '')); // mais recente primeiro
   const fila = {
     janelaDias: JANELA_FILA_DIAS,
-    umov: filaUmov.slice(0, LIMITE_LINHAS),
+    umov: corte(filaUmov, LIMITE_LINHAS),
     umovTotal: filaUmov.length,
     umovMaisAntigas: pendUmov.length - filaUmov.length,
     // o envio mais recente que chegou do Data Hub: diz se a fila está "parada"
     // porque ninguém enviou ou porque o dado não chegou
     umovUltimoEnvio: s.tarefas.reduce((m, t) => (t.envio > m ? t.envio : m), '') || null,
-    elleven: filaElleven.slice(0, LIMITE_LINHAS),
+    elleven: corte(filaElleven, LIMITE_LINHAS),
     ellevenTotal: filaElleven.length,
     ellevenEstouradas: filaElleven.filter((v) => v.estourado).length,
     ellevenMaisAntigas: abertasTodas.length - filaElleven.length,
@@ -961,16 +968,21 @@ export function detalheSlaBko(flt, agora = agoraLocal()) {
   };
 }
 
+/** Data local "aaaa-mm-dd hh:mm:ss" como "dd/mm/aaaa hh:mm" — o formato dos CSVs desta tela. */
+export const dataHoraCsv = (t) => (t ? `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(0, 4)} ${t.slice(11, 16)}` : '');
+
+/** hh:mm:ss, com as horas passando de 24 quando precisa (62:14:24 = 62 h úteis). */
+export const horasCsv = (h) => {
+  if (h === null || h === undefined || !Number.isFinite(h)) return '';
+  const seg = Math.round(h * 3600);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${p2(Math.floor(seg / 3600))}:${p2(Math.floor((seg % 3600) / 60))}:${p2(seg % 60)}`;
+};
+
 /** CSV no padrão da casa: ';', BOM, decimal com vírgula, data dd/mm/aaaa hh:mm. */
 export function detalheParaCsv(linhas) {
-  const data = (t) => (t ? `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(0, 4)} ${t.slice(11, 16)}` : '');
-  // hh:mm:ss, com as horas passando de 24 quando precisa (62:14:24 = 62 h úteis)
-  const horas = (h) => {
-    if (h === null || h === undefined || !Number.isFinite(h)) return '';
-    const seg = Math.round(h * 3600);
-    const p2 = (n) => String(n).padStart(2, '0');
-    return `${p2(Math.floor(seg / 3600))}:${p2(Math.floor((seg % 3600) / 60))}:${p2(seg % 60)}`;
-  };
+  const data = dataHoraCsv;
+  const horas = horasCsv;
   const cel = (v) => {
     const t = v === null || v === undefined ? '' : String(v);
     return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;

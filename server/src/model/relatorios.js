@@ -629,6 +629,44 @@ export function filaFiltrada(fila, porProtocolo, flt) {
 }
 
 // ------------------------------------------------------------ aba GERAL
+/*
+ * As três listas da aba Geral saem de funções próprias porque têm DOIS leitores: a
+ * tela, que mostra as `AMOSTRA` primeiras, e o CSV do servidor, que leva todas. Até
+ * 10/11/2026 o botão de exportar gerava o arquivo a partir da amostra — a tabela
+ * dizia "o CSV traz tudo" e o arquivo vinha com 400 linhas de um filtro de 1.300.
+ * Com a mesma função nos dois caminhos, o arquivo não tem como recortar diferente
+ * da tela.
+ */
+
+/** Contratos do filtro, do mais recente para o mais antigo. */
+export function contratosGeral(flt, fatos = fatosFiltrados(flt)) {
+  return fatos.slice().sort((a, b) => String(b.dtVenda).localeCompare(String(a.dtVenda)));
+}
+
+/**
+ * Itens da cesta. Com algum filtro de contrato ativo, só os itens dos contratos que
+ * sobraram — a cesta se liga ao contrato.
+ */
+export function cestaGeral(flt, fatos = fatosFiltrados(flt)) {
+  const contratos = new Set(fatos.map((f) => f.contrato).filter(Boolean));
+  const filtrandoContrato = Boolean(
+    flt.de || flt.ate || flt.cidades.length || flt.bairros.length || flt.vendedores.length
+    || flt.equipes.length || flt.situacoes.length || flt.status.length
+    || flt.tecnologias.length || flt.busca,
+  );
+  return estado.cesta.filter((c) => (
+    combinaLista(c.servico, flt.servicos)
+    && combinaLista(c.etiqueta, flt.etiquetas)
+    && combinaLista(c.situacaoItem, flt.situacoesItem)
+    && (!filtrandoContrato || contratos.has(c.contrato))
+  ));
+}
+
+/** Fila de instalação em aberto, com os filtros de contrato (ver `filaFiltrada`). */
+export function filaGeral(flt) {
+  return filaFiltrada(estado.fila.filter((f) => f.noDetalhe), indicePorProtocolo(), flt);
+}
+
 /**
  * Três tabelas de consulta: contrato, cesta de produtos e fila de instalação.
  *
@@ -639,21 +677,8 @@ export function filaFiltrada(fila, porProtocolo, flt) {
  */
 export function painelGeral(flt) {
   const fatos = fatosFiltrados(flt);
-  const contratos = new Set(fatos.map((f) => f.contrato).filter(Boolean));
-  const filtrandoContrato = Boolean(
-    flt.de || flt.ate || flt.cidades.length || flt.bairros.length || flt.vendedores.length
-    || flt.equipes.length || flt.situacoes.length || flt.status.length
-    || flt.tecnologias.length || flt.busca,
-  );
-
-  const cesta = estado.cesta.filter((c) => (
-    combinaLista(c.servico, flt.servicos)
-    && combinaLista(c.etiqueta, flt.etiquetas)
-    && combinaLista(c.situacaoItem, flt.situacoesItem)
-    && (!filtrandoContrato || contratos.has(c.contrato))
-  ));
-
-  const fila = filaFiltrada(estado.fila.filter((f) => f.noDetalhe), indicePorProtocolo(), flt);
+  const cesta = cestaGeral(flt, fatos);
+  const fila = filaGeral(flt);
 
   return {
     cartoes: {
@@ -665,8 +690,7 @@ export function painelGeral(flt) {
     },
     contratos: {
       total: fatos.length,
-      amostra: fatos.slice()
-        .sort((a, b) => String(b.dtVenda).localeCompare(String(a.dtVenda)))
+      amostra: contratosGeral(flt, fatos)
         .slice(0, AMOSTRA)
         .map((f) => ({
           dtVenda: f.dtVenda,
@@ -1115,24 +1139,32 @@ export function painelBase(flt) {
  * Aqui cada resposta conta na sua coluna, e a coluna de vazios aparece ao lado, para
  * quem quiser conferir que a soma fecha com o total de protocolos.
  */
-export function painelPesquisa(flt) {
-  const itens = estado.pesquisa.filter((p) => (
-    dentro(p.criado, flt.de, flt.ate)
-    && combinaLista(p.cidade, flt.cidades)
-    && combinaLista(p.etiqueta, flt.etiquetas)
-    && combinaLista(p.status, flt.status)
-    && combinaLista(p.pergunta, flt.perguntas)
-    && combinaLista(p.resposta, flt.respostas)
-    && (!flt.busca || `${p.cliente} ${p.contrato} ${p.numeroProtocolo}`.toLowerCase().includes(flt.busca))
-  ));
+const itensPesquisa = (flt) => estado.pesquisa.filter((p) => (
+  dentro(p.criado, flt.de, flt.ate)
+  && combinaLista(p.cidade, flt.cidades)
+  && combinaLista(p.etiqueta, flt.etiquetas)
+  && combinaLista(p.status, flt.status)
+  && combinaLista(p.pergunta, flt.perguntas)
+  && combinaLista(p.resposta, flt.respostas)
+  && (!flt.busca || `${p.cliente} ${p.contrato} ${p.numeroProtocolo}`.toLowerCase().includes(flt.busca))
+));
 
-  // cabeçalho: um por protocolo
+/**
+ * Cabeçalho das pesquisas: um por protocolo, do mais recente para o mais antigo.
+ * Exportado porque o CSV leva todos, e a tela, só a amostra.
+ */
+export function protocolosPesquisa(flt, itens = itensPesquisa(flt)) {
   const porProtocolo = new Map();
   for (const p of itens) {
     if (!porProtocolo.has(p.numeroProtocolo)) porProtocolo.set(p.numeroProtocolo, p);
   }
-  const protocolos = [...porProtocolo.values()]
+  return [...porProtocolo.values()]
     .sort((a, b) => String(b.criado).localeCompare(String(a.criado)));
+}
+
+export function painelPesquisa(flt) {
+  const itens = itensPesquisa(flt);
+  const protocolos = protocolosPesquisa(flt, itens);
 
   // por pergunta: Sim / Não / Vazio, contando PROTOCOLO distinto
   const porPergunta = new Map();

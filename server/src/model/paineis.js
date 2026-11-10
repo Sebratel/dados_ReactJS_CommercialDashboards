@@ -176,6 +176,29 @@ export function painelAtivacoes(flt, g) {
   };
 }
 
+const nomePlano = (f) => f.plano || '(sem plano)';
+
+/** "Planos mais vendidos": agrupado pelo valor do plano, do mais vendido ao menos. */
+function agruparPlanos(lista) {
+  const planos = new Map();
+  for (const f of lista) {
+    const key = `${nomePlano(f)}|${(Number(f.valor) || 0).toFixed(2)}`;
+    const cur = planos.get(key) || { plano: nomePlano(f), valorPadrao: Number(f.valor) || 0, qtd: 0, valorTotal: 0 };
+    cur.qtd += 1;
+    cur.valorTotal += Number(f.valor) || 0;
+    planos.set(key, cur);
+  }
+  return [...planos.values()].sort((a, b) => b.qtd - a.qtd);
+}
+
+/**
+ * Todos os planos do filtro, sem o corte de 40 da tabela — o que o CSV dela leva.
+ * Mesma base da tela: SEM o filtro de plano (ver o cross-highlight abaixo).
+ */
+export function planosMaisVendidos(flt) {
+  return agruparPlanos(rows('pagantes', flt));
+}
+
 export function painelPrimeiroPagamento(flt, g, { limit = 1500 } = {}) {
   const doModelo = rows('pagantes', flt);
 
@@ -185,21 +208,10 @@ export function painelPrimeiroPagamento(flt, g, { limit = 1500 } = {}) {
    * tabela continua listando todos os planos, com o escolhido aceso, enquanto o
    * gráfico, os KPIs e o detalhamento recortam.
    */
-  const nomePlano = (f) => f.plano || '(sem plano)';
   const comPlano = (lista) => (
     flt.plano ? lista.filter((f) => flt.plano.includes(nomePlano(f))) : lista
   );
   const pagantes = comPlano(doModelo);
-
-  // "Planos mais vendidos": agrupado pelo valor do plano
-  const planos = new Map();
-  for (const f of doModelo) {
-    const key = `${nomePlano(f)}|${(Number(f.valor) || 0).toFixed(2)}`;
-    const cur = planos.get(key) || { plano: nomePlano(f), valorPadrao: Number(f.valor) || 0, qtd: 0, valorTotal: 0 };
-    cur.qtd += 1;
-    cur.valorTotal += Number(f.valor) || 0;
-    planos.set(key, cur);
-  }
 
   const detalhe = pagantes
     .slice()
@@ -231,7 +243,7 @@ export function painelPrimeiroPagamento(flt, g, { limit = 1500 } = {}) {
     serie: serie(comPlano(rowsExceto('pagantes', flt, 'zoom', doModelo)), 'dtPagto', g)
       .map((m) => ({ periodo: m.periodo, pagantes: m.qtd, valor: m.valor })),
     planos: comOsEscolhidos(
-      [...planos.values()].sort((a, b) => b.qtd - a.qtd),
+      agruparPlanos(doModelo),
       40,
       flt.plano,
       (l) => l.plano,

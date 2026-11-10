@@ -3,7 +3,7 @@ import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/
 import { BarrasHorizontais, CORES, escalaGradiente } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, pct } from '../format';
-import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarDoServidor } from '../exportar';
 
 /**
  * As duas sub-páginas de Desempenho — DO VENDEDOR e POR CIDADE.
@@ -175,11 +175,10 @@ export function PaginaDesempenho({ filtros, por }) {
         className="v-tabela-alta"
         ia={`desempenho:${por}`}
         actions={(
-          <BotaoExportar onExportar={() => baixarCSV(
-            `desempenho-por-${por}`,
-            tabelaParaCSV(colunasProdutividade, data?.produtividade || []),
-            sufixoPeriodo(filtros, ['desLeadDe', 'desLeadAte']),
-          )} />
+          <BotaoExportar
+            titulo="Baixar todas as linhas do filtro em CSV (não só as que a tabela mostra)"
+            onExportar={() => baixarDoServidor('desempenho-produtividade', { ...filtros, por })}
+          />
         )}
       >
         {tabela(colunasProdutividade, data?.produtividade, { key: 'cadastrados', dir: 'desc' })}

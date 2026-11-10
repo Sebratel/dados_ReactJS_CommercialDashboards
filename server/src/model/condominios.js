@@ -449,6 +449,19 @@ function agregar(fatos, chaveFn) {
   }));
 }
 
+/** Uma linha por condomínio, de quem tem mais clientes para quem tem menos. */
+const porCondominio = (fatos) => agregar(fatos, (f) => f.condominio)
+  .sort((a, b) => b.clientes - a.clientes || a.key.localeCompare(b.key, 'pt-BR'));
+
+/**
+ * Todos os condomínios do filtro, sem o corte de `AMOSTRA_CONDOMINIOS`. É o que o
+ * botão da tabela "Por condomínio" baixa: antes ele exportava as 300 linhas da
+ * amostra e mandava procurar o resto no CSV de splitters, que é outra tabela.
+ */
+export function linhasPorCondominio(flt) {
+  return porCondominio(linhasCondominios(flt));
+}
+
 export function painelCondominios(flt) {
   const fatos = linhasCondominios(flt);
   const idsVisiveis = new Set(fatos.map((f) => f.splitterId));
@@ -502,8 +515,7 @@ export function painelCondominios(flt) {
     }));
 
   // ---- tabelas y=1759 --------------------------------------------------
-  const porCondominioOrdenado = agregar(fatos, (f) => f.condominio)
-    .sort((a, b) => b.clientes - a.clientes || a.key.localeCompare(b.key, 'pt-BR'));
+  const porCondominioOrdenado = porCondominio(fatos);
 
   // "(sem cidade)" existe para o total da tabela fechar com o da tela: são os
   // splitters sem cidade cadastrada e sem nenhum cliente de onde deduzi-la.

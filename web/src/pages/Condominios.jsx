@@ -282,12 +282,8 @@ export default function Condominios() {
           className="v-meia"
           actions={(
             <BotaoExportar
-              titulo={`Baixar as ${int((data?.porCondominio || []).length)} linhas desta tabela. Para todos os ${int(data?.porCondominioTotal || 0)} condomínios do filtro, use o CSV completo de ocupação por splitter, no primeiro visual.`}
-              onExportar={() => baixarCSV(
-                'condominios-por-condominio',
-                tabelaParaCSV(colunasCondominio, data?.porCondominio || []),
-                sufixoPeriodo(filtros, ['criadoDe', 'criadoAte']),
-              )}
+              titulo={`Baixar todos os ${int(data?.porCondominioTotal || 0)} condomínios do filtro em CSV (não só os que a tabela mostra)`}
+              onExportar={() => baixarDoServidor('condominios-por-condominio', filtros)}
             />
           )}
         >

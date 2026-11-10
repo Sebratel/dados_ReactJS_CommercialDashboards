@@ -12,7 +12,7 @@ import { config } from '../config.js';
 import { exigirAuth } from '../auth/middleware.js';
 import { podeVerTela } from '../auth/access.js';
 import {
-  CONJUNTOS, filtrosDoConjunto, gerarAmostra, gerarCSV, listarConjuntos,
+  CONJUNTOS, conjuntoPronto, filtrosDoConjunto, gerarAmostra, gerarCSV, listarConjuntos,
 } from '../model/exportar.js';
 import { analisar } from '../model/preditivo.js';
 import { gerarInsights, gerarInsightsVisual, iaConfigurada } from '../ia/insights.js';
@@ -552,11 +552,13 @@ api.get('/exportar/:id', auth(), (req, res) => {
     return res.status(403).json({ error: 'Você não tem acesso a estes dados.' });
   }
 
+  if (!conjuntoPronto(conjunto)) {
+    return res.status(503).json({ error: 'Os dados desta tela ainda estão carregando. Tente de novo em instantes.', carregando: true });
+  }
+
   try {
     const flt = filtrosDoConjunto(conjunto, req.query);
-    const { csv, arquivo, linhas } = gerarCSV(req.params.id, flt);
-    const sufixo = [flt.de, flt.ate].filter(Boolean).join('_a_') || 'completo';
-    const nome = `${arquivo}_${sufixo}.csv`;
+    const { csv, nome, linhas } = gerarCSV(req.params.id, flt);
     console.log(`[export] ${req.usuario.email} baixou ${req.params.id}: ${linhas} linhas`);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);

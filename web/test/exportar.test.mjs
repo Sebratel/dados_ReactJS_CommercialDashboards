@@ -13,6 +13,7 @@
  * arquivo saia com a mesma cara.
  */
 import assert from 'node:assert/strict';
+import { readdir, readFile } from 'node:fs/promises';
 import test, { beforeEach } from 'node:test';
 
 /** O DOM mínimo que `baixar` usa, para o módulo rodar fora do navegador. */
@@ -90,4 +91,31 @@ test('o CSV em si continua abrindo no Excel em português', () => {
     linha, '"ANA; SOUZA";3,50',
     'ponto e vírgula no valor vai entre aspas; decimal é vírgula, com duas casas',
   );
+});
+
+/**
+ * `tabelaParaCSV` exporta o que a tela RECEBEU. Para tabela com amostra (as 400
+ * primeiras de 1.300, por exemplo), isso é um arquivo pela metade que parece completo
+ * — foi a reclamação de 10/11/2026. Tabela com amostra baixa pelo servidor
+ * (`baixarDoServidor`), que monta o arquivo com todas as linhas do filtro.
+ */
+test('nenhuma tela monta CSV a partir de uma amostra', async () => {
+  const pasta = new URL('../src/pages/', import.meta.url);
+  // a chamada inteira, aceitando um nível de parênteses dentro dos argumentos
+  const chamada = /tabelaParaCSV\((?:[^()]|\([^()]*\))*\)/g;
+  // e o atalho local: a tela de Relatórios passava a amostra por um `exportar(...)`
+  // próprio, e só a busca acima não via
+  const atalho = /\b(exportar\w*|baixarCSV)\(.*\b(amostra|detalhe)\b/;
+  let vistas = 0;
+  for (const arquivo of await readdir(pasta)) {
+    const fonte = await readFile(new URL(arquivo, pasta), 'utf8');
+    for (const c of fonte.match(chamada) || []) {
+      vistas += 1;
+      assert.doesNotMatch(c, /amostra|detalhe/, `${arquivo}: ${c.replace(/\s+/g, ' ')}`);
+    }
+    for (const linha of fonte.split('\n')) {
+      assert.doesNotMatch(linha, atalho, `${arquivo}: ${linha.trim()}`);
+    }
+  }
+  assert.ok(vistas > 10, 'a busca acha as chamadas (senão o teste passaria sem olhar nada)');
 });

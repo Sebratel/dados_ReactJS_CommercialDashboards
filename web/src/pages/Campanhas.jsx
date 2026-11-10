@@ -8,7 +8,9 @@ import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/
 import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, int, labelData, labelPeriodo, pct } from '../format';
-import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import {
+  baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV,
+} from '../exportar';
 
 /**
  * CAMPANHAS DE MARKETING — investimento em Google e Meta contra os leads que o
@@ -463,14 +465,14 @@ function PaginaLeads({ filtros }) {
 
       <Visual
         title="RELATÓRIO DETALHADO DOS LEADS"
-        sub={data ? `${int(data.total)} leads · a tabela mostra os ${int((data.detalhe || []).length)} mais recentes` : ''}
+        sub={data ? `${int(data.total)} leads · a tabela mostra os ${int((data.detalhe || []).length)} mais recentes; o CSV traz todos` : ''}
         flush
         className="v-tabela-alta"
         actions={(
-          <BotaoExportar onExportar={() => baixarCSV(
-            'campanhas-leads', tabelaParaCSV(colunas, data?.detalhe || []),
-            sufixoPeriodo(filtros, ['cde', 'cate']),
-          )} />
+          <BotaoExportar
+            titulo="Baixar todos os leads do filtro em CSV (não só os que a tabela mostra)"
+            onExportar={() => baixarDoServidor('campanhas-atendimentos', filtros)}
+          />
         )}
       >
         {vazio ? <Loading /> : <Tabela colunas={colunas} dados={data?.detalhe || []} />}

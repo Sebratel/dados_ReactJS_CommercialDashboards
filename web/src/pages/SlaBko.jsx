@@ -10,7 +10,7 @@ import {
 import { BarrasHorizontais, ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { haQuanto, int, labelDataHora, labelPeriodo, pct } from '../format';
-import { baixar, baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixar, baixarDoServidor, sufixoPeriodo } from '../exportar';
 import '../sla-bko.css';
 
 /**
@@ -57,15 +57,32 @@ const NOME_MEDIDA = { media: 'média', mediana: 'mediana' };
 
 const estouro = (limite) => (v) => (Number(v) > limite ? { color: '#A4262C', fontWeight: 700 } : undefined);
 
+/** O que vai na consulta ao servidor: os filtros locais menos o que é só de exibição. */
+const consultaSla = (filtros) => ({
+  de: filtros.de, ate: filtros.ate, g: filtros.g, canal: filtros.canal ? [filtros.canal] : [],
+});
+
+/**
+ * Botão de CSV das tabelas desta tela. Rankings, pendentes e filas chegam CORTADOS
+ * (40, 60, 300, 3.000 linhas), então o arquivo vem do servidor, com todas as linhas
+ * da mesma consulta — montado aqui, levaria só o topo que a tabela recebeu.
+ */
+function ExportarSla({ conjunto, filtros }) {
+  return (
+    <BotaoExportar
+      titulo="Baixar todas as linhas do filtro em CSV (não só as que a tabela mostra)"
+      onExportar={() => baixarDoServidor(conjunto, consultaSla(filtros))}
+    />
+  );
+}
+
 export default function SlaBko() {
   // padrão = últimos 30 dias (01/10/2026): "Este mês" ficava quase vazio nos primeiros dias
   const inicial = PRESETS.find((p) => p.id === '30d').calc();
   const [filtros, setFiltros] = useState({ de: inicial.de, ate: inicial.ate, preset: '30d', canal: '', g: 'mes', medida: 'media' });
   // vendedor clicado na tabela de envios: o gráfico de motivos ao lado passa a mostrar só ele
   const [vendedorSel, setVendedorSel] = useState(null);
-  const consulta = {
-    de: filtros.de, ate: filtros.ate, g: filtros.g, canal: filtros.canal ? [filtros.canal] : [],
-  };
+  const consulta = consultaSla(filtros);
   const { data, error, isLoading } = useDados('/sla-bko', consulta);
   const carregando = isLoading && !data;
   const metas = data?.metas || { cadastro: 1, agendamento: 12 };
@@ -178,11 +195,11 @@ export default function SlaBko() {
             </div>
           )}
 
-          {!somenteInterno && <PendentesCadastro data={data} metas={metas} />}
+          {!somenteInterno && <PendentesCadastro data={data} filtros={filtros} metas={metas} />}
 
           <div className="grid linha-dupla">
-            {!somenteInterno && <FilaUmov data={data} />}
-            <FilaElleven data={data} metas={metas} />
+            {!somenteInterno && <FilaUmov data={data} filtros={filtros} />}
+            <FilaElleven data={data} filtros={filtros} metas={metas} />
           </div>
 
           <Detalhamento consulta={consulta} metas={metas} filtros={filtros} />
@@ -368,7 +385,7 @@ function RankingAnalistas({ data, filtros }) {
       title="ANALISTAS DO BKO — TRIAGEM NO UMOV"
       sub="parte das análises fica no usuário genérico suporteumov, não num analista nomeado"
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-analistas', tabelaParaCSV(colunas, dados), sufixoPeriodo(filtros))} />}
+      actions={<ExportarSla conjunto="sla-bko-analistas" filtros={filtros} />}
     >
       {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'n', dir: 'desc' }} /> : <Vazio />}
     </Visual>
@@ -389,7 +406,7 @@ function RankingAtendentes({ data, filtros, metas }) {
       title="ATENDENTES — AGENDAMENTO NO ELLEVEN"
       sub="quem escreveu o relato de agendamento · tempo desde o cadastro"
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-atendentes', tabelaParaCSV(colunas, dados), sufixoPeriodo(filtros))} />}
+      actions={<ExportarSla conjunto="sla-bko-atendentes" filtros={filtros} />}
     >
       {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'n', dir: 'desc' }} /> : <Vazio />}
     </Visual>
@@ -410,7 +427,7 @@ function RankingVendedores({ data, filtros, medida, selecionado, onSelecionar })
       title="VENDEDORES EXTERNOS — ENVIOS NO UMOV"
       sub="clique no vendedor para ver os motivos de devolução dele ao lado · clique de novo para voltar a todos"
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-vendedores', tabelaParaCSV(colunas, dados), sufixoPeriodo(filtros))} />}
+      actions={<ExportarSla conjunto="sla-bko-vendedores" filtros={filtros} />}
     >
       {dados.length ? (
         <Tabela
@@ -444,7 +461,7 @@ function MotivosDevolucao({ data, vendedor, onLimpar }) {
   );
 }
 
-function PendentesCadastro({ data, metas }) {
+function PendentesCadastro({ data, filtros, metas }) {
   const p = data.cadastro.pendentes || { lista: [] };
   const colunas = [
     { key: 'etapa', titulo: 'ETAPA', align: 'left' },
@@ -467,14 +484,14 @@ function PendentesCadastro({ data, metas }) {
         + 'fora da conta: reprovados (voltaram ao vendedor), Venda Assistida cancelada e venda interna · '
         + 'base do Elleven só com instalação de fibra: venda de outro tipo ou com CPF diferente aparece aqui'}
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-pendentes-cadastro', tabelaParaCSV(colunas, dados))} />}
+      actions={<ExportarSla conjunto="sla-bko-pendentes-cadastro" filtros={filtros} />}
     >
       {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'esperaHoras', dir: 'desc' }} /> : <Vazio texto="Nenhum pedido pendente de cadastro" />}
     </Visual>
   );
 }
 
-function FilaUmov({ data }) {
+function FilaUmov({ data, filtros }) {
   const f = data.fila;
   const colunas = [
     { key: 'idTarefa', titulo: 'TAREFA', align: 'left', fmt: (v) => (v ? String(v) : '—') },
@@ -491,14 +508,14 @@ function FilaUmov({ data }) {
       sub={`agora, não segue o período · últimos ${f.janelaDias} dias: ${int(f.umovTotal)} · envio mais recente recebido do Data Hub: ${fmtData(f.umovUltimoEnvio)} · pedido com CPF e sem análise · a análise do BKO chega do uMov de hora em hora, então pedido analisado há menos de ~2 h ainda pode aparecer`
         + (f.umovMaisAntigas ? ` · ${int(f.umovMaisAntigas)} mais antigos fora da lista` : '')}
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-fila-umov', tabelaParaCSV(colunas, dados))} />}
+      actions={<ExportarSla conjunto="sla-bko-fila-umov" filtros={filtros} />}
     >
       {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'envio', dir: 'desc' }} /> : <Vazio texto="Nenhum envio aguardando análise" />}
     </Visual>
   );
 }
 
-function FilaElleven({ data, metas }) {
+function FilaElleven({ data, filtros, metas }) {
   const f = data.fila;
   const colunas = [
     { key: 'protocolo', titulo: 'PROTOCOLO', align: 'left' },
@@ -517,7 +534,7 @@ function FilaElleven({ data, metas }) {
       sub={`agora · cadastros dos últimos ${f.janelaDias} dias: ${int(f.ellevenTotal)}, ${int(f.ellevenEstouradas)} acima de ${metas.agendamento} h`
         + (f.ellevenMaisAntigas ? ` · ${int(f.ellevenMaisAntigas)} mais antigas fora da lista` : '')}
       flush className="v-tabela"
-      actions={<BotaoExportar onExportar={() => baixarCSV('sla-bko-fila-elleven', tabelaParaCSV(colunas, dados))} />}
+      actions={<ExportarSla conjunto="sla-bko-fila-elleven" filtros={filtros} />}
     >
       {dados.length ? <Tabela colunas={colunas} dados={dados} ordemInicial={{ key: 'criadoEm', dir: 'desc' }} /> : <Vazio texto="Nenhuma venda aguardando agendamento" />}
     </Visual>
