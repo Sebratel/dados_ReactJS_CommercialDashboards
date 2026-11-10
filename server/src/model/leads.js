@@ -1075,7 +1075,11 @@ const contarLeads = (ls) => new Set(ls.map((l) => l.leadId)).size;
  */
 const contarLinhasNeg = (ns) => contarDistintas(ns);
 
-export function painelDesempenho(flt, por = 'vendedor') {
+/**
+ * `completo` tira o corte de 200 linhas da produtividade. É o caminho do CSV: a
+ * tela mostra os 200 com mais leads, o arquivo leva todos.
+ */
+export function painelDesempenho(flt, por = 'vendedor', { completo = false } = {}) {
   const leads = leadsDoDesempenho(flt);
   const negs = negociacoesDoDesempenho(flt, leads, por);
 
@@ -1183,7 +1187,7 @@ export function painelDesempenho(flt, por = 'vendedor') {
       conduzidas: geral.conduzidas,
       ganhasNeg: geral.ganhasNeg,
     },
-    produtividade: produtividade.slice(0, 200),
+    produtividade: completo ? produtividade : produtividade.slice(0, 200),
     produtividadeTotal: produtividade.length,
     funilGanhos,
     funilDescartes,

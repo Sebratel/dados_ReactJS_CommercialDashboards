@@ -6,7 +6,7 @@ import { BotaoExportar, Erro, KpiStack, Legenda, Loading, Visual } from '../comp
 import { ComboChart, CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { brl, brl2, dec1, int, labelData, labelPeriodo } from '../format';
-import { baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarDoServidor } from '../exportar';
 
 export default function PrimeiroPagamento() {
   const { filtros, alternar, alternarUnico } = useFilters();
@@ -77,11 +77,10 @@ export default function PrimeiroPagamento() {
           ia="primeiro-pagamento:planos"
           flush
           actions={(
-            <BotaoExportar onExportar={() => baixarCSV(
-              'planos-mais-vendidos',
-              tabelaParaCSV(colunasPlanos, data?.planos || []),
-              sufixoPeriodo(filtros),
-            )} />
+            <BotaoExportar
+              titulo="Baixar todos os planos do filtro em CSV (a tabela mostra os 40 mais vendidos)"
+              onExportar={() => baixarDoServidor('planos-mais-vendidos', filtros)}
+            />
           )}
         >
           {isLoading && !data ? <Loading /> : (

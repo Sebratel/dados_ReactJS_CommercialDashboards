@@ -6,7 +6,7 @@ import { CORES } from '../components/charts';
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { brl, int, labelData, labelDataHora } from '../format';
-import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import { baixarDoServidor } from '../exportar';
 import { PaginaResumoVendas } from './PaginaResumoVendas';
 import { PaginaQuadroEquipes } from './PaginaQuadroEquipes';
 import { PaginaRelatorioDiario } from './PaginaRelatorioDiario';
@@ -144,11 +144,12 @@ function PaginaGeral({ filtros }) {
     { key: 'vendedor', titulo: 'VENDEDOR', align: 'left' },
   ];
 
-  // o período desta sub-página é a criação do contrato (`relDe`/`relAte`), e não o
-  // comercial da barra principal
-  const exportar = (colunas, dados, nome) => () => baixarCSV(
-    nome, tabelaParaCSV(colunas, dados), sufixoPeriodo(filtros, ['relDe', 'relAte']),
-  );
+  // As três tabelas mostram uma AMOSTRA (as 400 primeiras), então o CSV vem do
+  // servidor, com todas as linhas do filtro. Montado aqui a partir de `amostra`, o
+  // arquivo saía com 400 linhas de um recorte de 1.300 — e o subtítulo prometendo
+  // "o CSV traz tudo".
+  const exportar = (conjunto) => () => baixarDoServidor(conjunto, filtros);
+  const tituloExportar = 'Baixar todas as linhas do filtro em CSV (não só as que a tabela mostra)';
 
   if (error) return <Erro erro={error} />;
 
@@ -193,7 +194,7 @@ function PaginaGeral({ filtros }) {
           sub={vazio ? null : legendaAmostra(data.contratos, data.porOrigem)}
           className="v-tabela"
           actions={!vazio && (
-            <BotaoExportar onExportar={exportar(colunasContrato, data.contratos.amostra, 'contratos')} />
+            <BotaoExportar titulo={tituloExportar} onExportar={exportar('relatorios-contratos')} />
           )}
         >
           {vazio ? <Loading /> : data.contratos.amostra.length
@@ -210,10 +211,10 @@ function PaginaGeral({ filtros }) {
         <Visual
           title="CESTA DE PRODUTOS"
           sub={vazio ? null
-            : `${int(data.cesta.total)} itens · ${brl(data.cesta.valor)} somados${data.cesta.total > data.cesta.amostra.length ? ` · mostrando os ${data.cesta.amostra.length} primeiros` : ''}`}
+            : `${int(data.cesta.total)} itens · ${brl(data.cesta.valor)} somados${data.cesta.total > data.cesta.amostra.length ? ` · mostrando os ${data.cesta.amostra.length} primeiros — o CSV traz todos` : ''}`}
           className="v-tabela"
           actions={!vazio && (
-            <BotaoExportar onExportar={exportar(colunasCesta, data.cesta.amostra, 'cesta-de-produtos')} />
+            <BotaoExportar titulo={tituloExportar} onExportar={exportar('relatorios-cesta')} />
           )}
         >
           {vazio ? <Loading /> : data.cesta.amostra.length
@@ -232,7 +233,7 @@ function PaginaGeral({ filtros }) {
           sub={vazio ? null : legendaFila(data)}
           className="v-tabela"
           actions={!vazio && (
-            <BotaoExportar onExportar={exportar(colunasFila, data.fila.amostra, 'fila-de-instalacao')} />
+            <BotaoExportar titulo={tituloExportar} onExportar={exportar('relatorios-fila')} />
           )}
         >
           {vazio ? <Loading /> : data.fila.amostra.length
@@ -277,7 +278,10 @@ function legendaAmostra(tabela, origem) {
  * mesma página enxergam. Então a tela diz o número.
  */
 function legendaFila(data) {
-  const base = `${int(data.fila.total)} instalações em aberto · sem recorte de data, segue os demais filtros`;
+  const amostra = data.fila.total > data.fila.amostra.length
+    ? ` · mostrando as ${int(data.fila.amostra.length)} primeiras — o CSV traz todas`
+    : '';
+  const base = `${int(data.fila.total)} instalações em aberto · sem recorte de data, segue os demais filtros${amostra}`;
   if (!data.filaOculta) return base;
   return `${base} · ${int(data.filaOculta)} da equipe Field Service ficam fora desta tabela, como no relatório de origem`;
 }

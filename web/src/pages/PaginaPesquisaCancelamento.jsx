@@ -4,7 +4,9 @@ import { BarrasHorizontais, CORES, escalaGradiente } from '../components/charts'
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { int, labelData, labelDataHora, pct } from '../format';
-import { baixarCSV, sufixoPeriodo, tabelaParaCSV } from '../exportar';
+import {
+  baixarCSV, baixarDoServidor, sufixoPeriodo, tabelaParaCSV,
+} from '../exportar';
 
 /**
  * Aba PESQUISA CANCELAMENTO — o questionário aplicado no encerramento do
@@ -117,11 +119,9 @@ export function PaginaPesquisaCancelamento({ filtros }) {
           sub={vazio ? null : legendaProtocolos(data)}
           className="v-tabela"
           actions={!vazio && (
-            <BotaoExportar onExportar={() => baixarCSV(
-              'pesquisas-de-cancelamento',
-              tabelaParaCSV(colunasProtocolos, data.protocolos.amostra),
-              sufixoPeriodo(filtros, ['pesqDe', 'pesqAte']),
-            )}
+            <BotaoExportar
+              titulo="Baixar todos os protocolos do filtro em CSV (não só os que a tabela mostra)"
+              onExportar={() => baixarDoServidor('relatorios-pesquisas', filtros)}
             />
           )}
         >
