@@ -130,8 +130,20 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
 // ------------------------------------------- rastreamento de posts (Matrix)
 /**
  * Importa o CSV do "Relatório analítico de rastreamento de posts" do Matrix, que
- * é a base de leads da tela de Campanhas. Só admin: o arquivo traz telefone e, às
- * vezes, CPF dentro da mensagem.
+ * é a base de leads da tela de Campanhas.
+ *
+ * QUEM PODE: quem tem acesso à tela de Campanhas, não só admin. Até 17/11/2026 era
+ * `minPapel: 'admin'`, porque o arquivo traz telefone e, às vezes, CPF dentro da
+ * mensagem — mas esse argumento não se sustentava: quem importa já baixou o CSV do
+ * Matrix (que tem login próprio) e já enxerga esses mesmos leads, com telefone, na
+ * tela. O portão não protegia o dado; só obrigava o marketing a pedir a um admin
+ * para subir um arquivo que ele mesmo tinha em mãos.
+ *
+ * O que o portão de tela ainda protege é a ESCRITA: a base é compartilhada, e quem
+ * importa troca o que todo mundo vê. Por isso continua valendo o acesso à tela
+ * (`access.js`, lista de e-mails por tela) e o registro de autoria — `importado_por`
+ * vai para a tabela e aparece no banner da tela, e a linha de log abaixo guarda
+ * quem subiu o quê.
  *
  * O corpo é o ARQUIVO CRU (`application/octet-stream`), não JSON: a decodificação
  * precisa dos bytes para decidir entre UTF-8 e Windows-1252 (ver
@@ -142,7 +154,7 @@ admin.put('/access/screens/:id', exigirAuth({ minPapel: 'admin' }), (req, res) =
  */
 admin.post(
   '/campanhas/rastreamento',
-  exigirAuth({ minPapel: 'admin' }),
+  exigirAuth({ tela: 'campanhas' }),
   express.raw({ type: () => true, limit: '30mb' }),
   async (req, res) => {
     try {

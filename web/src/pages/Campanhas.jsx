@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiUpload, useDados } from '../api';
-import { useSession } from '../auth/session.jsx';
 import { useFilters } from '../filters';
 import { SlicerBarCampanhas } from '../components/SlicerBarCampanhas';
 import { BotaoExportar, Erro, Kpi, Loading, Vazio, Visual } from '../components/ui';
@@ -47,15 +46,16 @@ const URL_RELATORIO_MATRIX = 'https://sebratel.matrixdobrasil.ai/relatorio-atend
 const dataHoraBR = (v) => (v ? `${labelData(v.slice(0, 10))} ${v.slice(11, 16)}` : '—');
 
 /**
- * De onde vêm os leads e quando foi a última importação — com o botão de
- * importar para quem é admin.
+ * De onde vêm os leads e quando foi a última importação — com o botão de importar
+ * para quem tem acesso a esta tela (antes era só admin; o servidor afrouxou junto,
+ * ver routes/admin.js). Quem importa troca a base que todo mundo vê, por isso o
+ * banner sempre mostra quem fez a última importação.
  *
  * O arquivo vai cru para o servidor, que decide a codificação e grava. A resposta
  * só volta com o modelo já reconstruído, então invalidar o cache em seguida basta
  * para a tela mostrar os leads novos.
  */
 function Importacao({ frescor }) {
-  const { ehAdmin } = useSession();
   const qc = useQueryClient();
   const input = useRef(null);
   const [estado, setEstado] = useState({ enviando: false, resultado: null, erro: null });
@@ -91,40 +91,35 @@ function Importacao({ frescor }) {
             <>
               <b>Nenhum rastreamento importado ainda.</b> Os leads desta tela vêm do “Relatório analítico de
               {' '}rastreamento de posts” do Matrix: exporte o CSV na tela de relatórios do Matrix e importe aqui.
-              {!ehAdmin && ' A importação é feita por um administrador.'}
             </>
           )}
         </div>
-        {ehAdmin && (
-          <>
-            <a
-              className="botao-enquadrar"
-              href={URL_RELATORIO_MATRIX}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Abre o Relatório analítico de rastreamento de posts no Matrix, de onde se exporta o CSV."
-            >
-              Abrir relatório no Matrix ↗
-            </a>
-            <input
-              ref={input}
-              id="importar-rastreamento"
-              type="file"
-              accept=".csv,text/csv"
-              hidden
-              onChange={(e) => enviar(e.target.files?.[0])}
-            />
-            <button
-              type="button"
-              className="botao-enquadrar"
-              disabled={estado.enviando}
-              onClick={() => input.current?.click()}
-              title="Importar o CSV do Relatório analítico de rastreamento de posts. Reimportar um período atualiza, não duplica."
-            >
-              {estado.enviando ? 'Importando…' : 'Importar CSV do Matrix'}
-            </button>
-          </>
-        )}
+        <a
+          className="botao-enquadrar"
+          href={URL_RELATORIO_MATRIX}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Abre o Relatório analítico de rastreamento de posts no Matrix, de onde se exporta o CSV."
+        >
+          Abrir relatório no Matrix ↗
+        </a>
+        <input
+          ref={input}
+          id="importar-rastreamento"
+          type="file"
+          accept=".csv,text/csv"
+          hidden
+          onChange={(e) => enviar(e.target.files?.[0])}
+        />
+        <button
+          type="button"
+          className="botao-enquadrar"
+          disabled={estado.enviando}
+          onClick={() => input.current?.click()}
+          title="Importar o CSV do Relatório analítico de rastreamento de posts. Reimportar um período atualiza, não duplica."
+        >
+          {estado.enviando ? 'Importando…' : 'Importar CSV do Matrix'}
+        </button>
       </div>
       {r && (
         <div className="banner">
